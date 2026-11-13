@@ -17,7 +17,6 @@
   // (oyun kurallari ve parca ureteci js/tempoCekirdek.js AYAR'indadir)
   // ---------------------------------------------------------------
   var AYAR = {
-    ipucuFiyat: 60,            // jeton
     rekorOdul: 200,            // yeni rekorda verilen jeton
     renkler: ['#5CC8FF', '#B58CFF', '#FFCF5C', '#4FE39A', '#FF7F92', '#FF9F4D', '#7C8FFF', '#52DDC6'],
     surukle: {
@@ -30,19 +29,17 @@
       dalgaGecikme: 26,        // patlama dalgasinda hucre basina gecikme (ms)
       parcacikTavan: 64,       // tek hamlede en fazla parcacik
       parcacikMesafe: [26, 70],// parcacigin ucacagi mesafe araligi (px), komboyla buyur
-      kutlamaAdet: 90,         // tam temizlikte ekrani dolduran konfeti sayisi
-      ipucuSure: 4500          // ipucunun ekranda kalma suresi (ms)
+      kutlamaAdet: 90          // tam temizlikte ekrani dolduran konfeti sayisi
     },
     ovgu: ['', '', 'Harika!', 'Muhteşem!', 'İnanılmaz!', 'Efsane!', 'Efsane!']
   };
-  var IPUCU_FIYAT = AYAR.ipucuFiyat, REKOR_ODUL = AYAR.rekorOdul, RENKLER = AYAR.renkler;
+  var REKOR_ODUL = AYAR.rekorOdul, RENKLER = AYAR.renkler;
 
   function q(id) { return document.getElementById(id); }
   var ekran = q('screen-tempo'), tahtaEl = q('tpBoard'), tepsiEl = q('tpTray');
   var skorEl = q('tpScore'), rekorEl = q('tpBest'), bittiEl = q('tpOver');
   var bittiBaslik = q('tpOverBig'), bittiAlt = q('tpOverSub');
   var tempoEl = q('tpTempo'), sarmal = q('tpBoardWrap');
-  var ipucuBtn = q('tpHintBtn');
 
   var oyun = null;
   var renk = new Int8Array(N * N);   // hücre -> palet sırası, -1 boş
@@ -428,7 +425,6 @@
     bittiAlt.innerHTML = alt;
     bittiEl.classList.add('show');
     ekran.classList.remove('tempo-on');
-    ipucuTemizle();
     oyunKaydet();
     if (rekorKirildi) dizi([[523, .15, .13, 0], [659, .15, .13, 90], [784, .15, .13, 180], [1047, .3, .15, 270]], 'triangle');
     else dizi([[440, .16, .13, 0], [349, .16, .13, 170], [262, .5, .15, 340]], 'sine');
@@ -544,7 +540,6 @@
     var i = Number(yuva.dataset.i), p = oyun.tepsi[i], pe = yuva.querySelector('.tp-piece');
     if (!p || p.kullanildi || !pe) return;
     e.preventDefault();
-    ipucuTemizle();
     hayaletleriSil();
 
     var m = olcu(), s = SEKILLER[p.s], renkHex = hex(tepsiRenk[i]);
@@ -634,49 +629,6 @@
   tepsiEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   // ---------------------------------------------------------------
-  // İPUCU
-  // ---------------------------------------------------------------
-  var ipucuZaman = null, ipucuHucre = [];
-  function ipucuTemizle() {
-    clearTimeout(ipucuZaman);
-    var p = tepsiEl.querySelectorAll('.tp-piece.hint-on'), i;
-    for (i = 0; i < p.length; i++) p[i].classList.remove('hint-on');
-    for (i = 0; i < ipucuHucre.length; i++) hucreler[ipucuHucre[i]].classList.remove('tp-ipucu');
-    ipucuHucre = [];
-  }
-
-  function ipucuGoster() {
-    ipucuTemizle();
-    var plan = oyun.oneri(5);
-    if (!plan.length) return false;
-    var h = plan[0], s = SEKILLER[oyun.tepsi[h.i].s], k, idx;
-    var pe = tepsiEl.querySelector('.tp-slot[data-i="' + h.i + '"] .tp-piece');
-    if (pe) pe.classList.add('hint-on');
-    for (k = 0; k < s.hucreler.length; k++) {
-      idx = (h.r + s.hucreler[k][0]) * N + (h.c + s.hucreler[k][1]);
-      hucreler[idx].classList.add('tp-ipucu');
-      ipucuHucre.push(idx);
-    }
-    ton(880, 1180, 0.16, 'triangle', 0.09);
-    ipucuZaman = setTimeout(ipucuTemizle, AYAR.efekt.ipucuSure);
-    return true;
-  }
-
-  var fiyatEl = ipucuBtn.querySelector('.f');
-  if (fiyatEl) fiyatEl.innerHTML = window.CoinSVG(true) + IPUCU_FIYAT;
-  ipucuBtn.addEventListener('click', function () {
-    if (!oyun || oyun.bitti || suruk) return;
-    if (!window.AppGold || window.AppGold.get() < IPUCU_FIYAT) {
-      titre(28);
-      ipucuBtn.classList.add('yetersiz');
-      setTimeout(function () { ipucuBtn.classList.remove('yetersiz'); }, 700);
-      return;
-    }
-    // jeton yalnızca gerçekten bir öneri gösterilebildiyse düşer
-    if (ipucuGoster()) window.AppGold.harca(IPUCU_FIYAT);
-  });
-
-  // ---------------------------------------------------------------
   // OYUN AKIŞI
   // ---------------------------------------------------------------
   function ekranaYaz() {
@@ -692,7 +644,6 @@
   function yeniOyun() {
     surukIptal();
     hayaletleriSil();
-    ipucuTemizle();
     oyun = new C.Oyun().basla();
     for (var i = 0; i < N * N; i++) renk[i] = -1;
     yeniRenkler();

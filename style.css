@@ -254,18 +254,6 @@
   .tp-box.cur{background:rgba(255,255,255,.07); color:#DCE9F8; box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);}
   .tp-box.best{background:rgba(111,211,255,.13); color:#9EDBFF; box-shadow:inset 0 0 0 1px rgba(111,211,255,.3);}
 
-  /* --- ipucu butonu --- */
-  .tp-hint{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-    min-width:64px; min-height:44px; padding:6px 14px; border-radius:12px; cursor:pointer; border:none;
-    background:rgba(255,209,102,.12); box-shadow:inset 0 0 0 1px rgba(255,209,102,.35);
-    font-family:'Fredoka', sans-serif; transition:transform .15s ease;}
-  .tp-hint:active{transform:scale(.94);}
-  .tp-hint svg{width:22px; height:22px; color:#FFD166;}
-  .tp-hint .l{font-size:8.5px; letter-spacing:.08em; text-transform:uppercase; color:#FFD166; opacity:.8;}
-  .tp-hint .f{display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#FBE7AE;}
-  .tp-hint .f img{width:11px; height:11px; display:block;}
-  .tp-hint.yetersiz{box-shadow:inset 0 0 0 1px rgba(255,110,110,.8);}
-
   /* --- tempo gostergesi: ust uste hat patlattikca carpan buyur --- */
   .tp-tempo{display:flex; align-items:center; justify-content:center; gap:6px; height:24px; margin:0 0 6px;
     font-family:'Fredoka', sans-serif; color:#FFD166; opacity:0; transform:scale(.86);
@@ -319,11 +307,6 @@
     opacity:.3; animation:tpPatlar .5s ease-in-out infinite alternate; pointer-events:none;}
   .tp-cell.tp-oz.tp-patlar{opacity:.85;}
   @keyframes tpPatlar{from{opacity:.35;} to{opacity:.9;}}
-  /* ipucu */
-  .tp-cell.tp-ipucu{box-shadow:inset 0 0 0 2px rgba(255,225,150,.95); animation:tpIpucu .9s ease-in-out infinite;}
-  @keyframes tpIpucu{0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.55; transform:scale(.9);}}
-  .tp-piece.hint-on{animation:tpHintPulse .9s ease-in-out infinite;}
-  @keyframes tpHintPulse{0%,100%{transform:scale(1);} 50%{transform:scale(1.16);}}
 
   /* --- efekt katmani (hucrelerin ustunde, dokunmayi engellemez) --- */
   .tp-fx{position:absolute; inset:0; pointer-events:none; z-index:20; border-radius:inherit;}
@@ -418,8 +401,8 @@
     box-shadow:0 0 20px rgba(111,211,255,.5);}
 
   .phone.reduced-motion .tp-over.show, .phone.reduced-motion .tp-over.show .big,
-  .phone.reduced-motion #screen-tempo.tempo-on .tp-edge, .phone.reduced-motion .tp-piece.hint-on,
-  .phone.reduced-motion .tp-cell.tp-ipucu, .phone.reduced-motion .tp-cell.tp-patlar::after,
+  .phone.reduced-motion #screen-tempo.tempo-on .tp-edge,
+  .phone.reduced-motion .tp-cell.tp-patlar::after,
   .phone.reduced-motion .tp-cell.tp-otur, .phone.reduced-motion .tp-piece.tp-gir,
   .phone.reduced-motion .tp-combo, .phone.reduced-motion .tp-fullclear{animation:none;}
   .phone.reduced-motion .tp-patla, .phone.reduced-motion .tp-isik{animation-duration:.01s;}
