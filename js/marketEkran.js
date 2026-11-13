@@ -146,6 +146,7 @@ window.MarketEkran = (function () {
     var sahne = kutu('mo-sahne', ana);
     var tahta = kutu('ss-tahta mo-siseler', sahne);
     var KAT = 12, v = tema.sise || {};
+    tahta.style.setProperty('--ss-kat', KAT + 'px');   // siluetli sivi kirpmasi icin
     [[0, 1, 2], [1, 1, 1]].forEach(function (icerik, i) {
       var yuva = kutu('ss-yuva', tahta);
       yuva.style.height = (3 * KAT + 14) + 'px';

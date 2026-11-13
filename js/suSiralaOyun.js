@@ -286,6 +286,7 @@
     katmanYuksekligi = sise > 10 ? 24 : (sise > 8 ? 27 : 30);
     var genislik = sise > 10 ? 36 : (sise > 8 ? 40 : 44);
     tahta.style.setProperty('--ss-tup-w', genislik + 'px');
+    tahta.style.setProperty('--ss-kat', katmanYuksekligi + 'px');   /* siluetli sivi kirpmasi icin */
     if (global.AppMarket && global.AppMarket.siseTemasiUygula) global.AppMarket.siseTemasiUygula(tahta);
 
     for (var i = 0; i < d.tupler.length; i++) {

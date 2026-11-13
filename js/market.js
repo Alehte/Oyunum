@@ -567,18 +567,34 @@ window.AppMarket = (function () {
     kumSaati: { agiz: [5, 95],  yol: 'M5 2V14C5 34 28 40 28 50C28 60 3 66 3 84C3 94 12 98.5 26 98.5H74C88 98.5 97 94 97 84C97 66 72 60 72 50C72 40 95 34 95 14V2Z' }
   };
 
-  // Siluetin uc katmani (CSS degiskeni olarak yazilir):
-  //   maske : sisenin gorunen alani (sivilar + cam bununla kesilir)
+  // Siluetin katmanlari (CSS degiskeni olarak yazilir). HEPSI ayni `yol`dan
+  // ve ayni kutudan (sisenin kendi kutusu, 100x100'e esnetilmis) uretilir:
+  //   maske : sisenin dis siniri (yol + camin dis yarisi)  -> sise bununla kesilir
   //   dolgu : cam tonu, sivilarin ARKASINDA
-  //   cizgi : cam kenari + agiz dudagi, sivilarin USTUNDE
-  function siluetKatmani(sl, dolgu, cizgi) {
-    var dudak = '<rect x="' + (sl.agiz[0] - 5) + '" y="0.6" width="' + (sl.agiz[1] - sl.agiz[0] + 10) +
-                '" height="4.6" rx="2" vector-effect="non-scaling-stroke" ';
+  //   cizgi : cam kenari (yolun uzerinde 2px), sivilarin USTUNDE
+  //   ic    : camin IC siniri (yol eksi 1px cam bandi)       -> sivilar bununla kesilir
+  // Yalnizca agiz dudagi kendi kutusunda (sise + 2px tasma) durur; kapak onu sarar.
+  var CAM_KALINLIK = 2;   // px, ekranda sabit (non-scaling-stroke)
+  function svgUrl(govde) {
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">' +
-      '<path d="' + sl.yol + '" fill="' + dolgu + '" stroke="' + cizgi + '" stroke-width="2" ' +
-      'stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      (cizgi === 'none' ? '' : dudak + 'fill="' + cizgi + '"/>') + '</svg>';
+              govde + '</svg>';
     return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+  }
+  function yolCiz(sl, dolgu, cizgi) {
+    return '<path d="' + sl.yol + '" fill="' + dolgu + '" stroke="' + cizgi + '" stroke-width="' + CAM_KALINLIK + '" ' +
+           'stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
+  }
+  function siluetKatmanlari(sl, cam, kenar) {
+    return {
+      maske: svgUrl(yolCiz(sl, '#000', '#000')),
+      dolgu: svgUrl(yolCiz(sl, cam, 'none')),
+      cizgi: svgUrl(yolCiz(sl, 'none', kenar)),
+      // ic: yolun dolgusundan cam bandi (ayni kalinlikta) oyulur
+      ic: svgUrl('<mask id="i" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120">' +
+                 yolCiz(sl, '#fff', '#000') + '</mask><rect x="0" y="0" width="100" height="100" fill="#000" mask="url(#i)"/>'),
+      dudak: svgUrl('<rect x="' + (sl.agiz[0] - 5) + '" y="0.6" width="' + (sl.agiz[1] - sl.agiz[0] + 10) +
+                    '" height="4.6" rx="2" fill="' + kenar + '"/>')
+    };
   }
 
   function kapakSvgUret(sekil, renk) {
@@ -605,6 +621,8 @@ window.AppMarket = (function () {
       el.style.removeProperty('--sise-maske');
       el.style.removeProperty('--sise-dolgu');
       el.style.removeProperty('--sise-cizgi');
+      el.style.removeProperty('--sise-ic');
+      el.style.removeProperty('--sise-dudak');
       el.style.removeProperty('--agiz');
       el.style.removeProperty('--cam-ton');
       el.style.removeProperty('--cam-kenar');
@@ -621,10 +639,13 @@ window.AppMarket = (function () {
     el.style.setProperty('--kapak-renk', v.kapakRenk || '#D93A3A');
     var sl = SILUETLER[v.siluet];
     if (sl) {
+      var kat = siluetKatmanlari(sl, v.cam || 'rgba(226,236,255,.10)', v.kenar || 'rgba(226,236,255,.42)');
       el.setAttribute('data-siluet', v.siluet);
-      el.style.setProperty('--sise-maske', siluetKatmani(sl, '#000', '#000'));
-      el.style.setProperty('--sise-dolgu', siluetKatmani(sl, v.cam || 'rgba(226,236,255,.10)', 'none'));
-      el.style.setProperty('--sise-cizgi', siluetKatmani(sl, 'none', v.kenar || 'rgba(226,236,255,.42)'));
+      el.style.setProperty('--sise-maske', kat.maske);
+      el.style.setProperty('--sise-dolgu', kat.dolgu);
+      el.style.setProperty('--sise-cizgi', kat.cizgi);
+      el.style.setProperty('--sise-ic', kat.ic);
+      el.style.setProperty('--sise-dudak', kat.dudak);
       // agiz dudaginin genisligi (sise kutusu + 4px'in orani): kapak bunu sarar
       el.style.setProperty('--agiz', ((sl.agiz[1] - sl.agiz[0] + 10) / 100).toFixed(3));
     } else {
@@ -632,6 +653,8 @@ window.AppMarket = (function () {
       el.style.removeProperty('--sise-maske');
       el.style.removeProperty('--sise-dolgu');
       el.style.removeProperty('--sise-cizgi');
+      el.style.removeProperty('--sise-ic');
+      el.style.removeProperty('--sise-dudak');
       el.style.removeProperty('--agiz');
     }
     animYaz(el, v.animasyon);

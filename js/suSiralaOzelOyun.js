@@ -351,6 +351,7 @@
     katmanY = n > 12 ? 21 : (n > 9 ? 24 : 28);
     var genislik = n > 12 ? 30 : (n > 9 ? 34 : 40);
     siseKutu.style.setProperty('--ss-tup-w', genislik + 'px');
+    siseKutu.style.setProperty('--ss-kat', katmanY + 'px');   /* siluetli sivi kirpmasi icin */
     if (global.AppMarket && global.AppMarket.siseTemasiUygula) global.AppMarket.siseTemasiUygula(siseKutu);
 
     var enBuyuk = 1;

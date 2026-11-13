@@ -1080,11 +1080,15 @@
   display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-end;
   gap:14px 12px; max-width:100%; position:relative;}
 .ss-yuva{display:flex; align-items:flex-end;}
+/* Duz tup: camin bicimi iki degiskenden gelir; sivi ayni degiskenlerden
+   turetilir ve camin ic kenarina sifir boslukla oturur.
+     --cam-r : dis taban yaricapi    --cam-k : cam kalinligi (kenarlik) */
 .ss-tup{position:relative; width:var(--ss-tup-w); display:flex; flex-direction:column-reverse;
-  justify-content:flex-start; padding:3px; cursor:pointer;
+  --cam-r:21px; --cam-k:2px;
+  justify-content:flex-start; padding:0; cursor:pointer;
   background:rgba(226,236,255,.10);
-  border:2px solid rgba(226,236,255,.42); border-top:none;
-  border-radius:5px 5px 21px 21px;
+  border:var(--cam-k) solid rgba(226,236,255,.42); border-top:none;
+  border-radius:5px 5px var(--cam-r) var(--cam-r);
   box-shadow:inset 0 0 12px rgba(255,255,255,.10), 0 6px 14px -8px rgba(0,0,0,.8);
   transition:transform .16s ease, box-shadow .16s ease;}
 .ss-tup.ss-secili{transform:translateY(-14px); box-shadow:0 0 0 2px #7FD8E6, 0 10px 20px -8px rgba(0,0,0,.8);}
@@ -1095,9 +1099,10 @@
 .ss-tup.ss-acildi{animation:ssAcildi .5s ease;}
 @keyframes ssAcildi{0%{box-shadow:0 0 0 3px rgba(127,216,230,.9);} 100%{box-shadow:none;}}
 
-.ss-sivi{border-radius:2px; background:var(--ss-renk);
+.ss-sivi{border-radius:0; background:var(--ss-renk);
   box-shadow:inset 0 -4px 8px rgba(0,0,0,.24), inset 0 3px 6px rgba(255,255,255,.26);}
-.ss-tup .ss-sivi:first-child{border-radius:2px 2px 17px 17px;}
+/* taban katmani camin ic tabanini izler: ic yaricap = dis yaricap - kalinlik */
+.ss-tup .ss-sivi:first-child{border-radius:0 0 calc(var(--cam-r) - var(--cam-k)) calc(var(--cam-r) - var(--cam-k));}
 .ss-sivi.ss-perde{background:#221E3E; color:#8A97BF; display:flex; align-items:center; justify-content:center;
   font:700 15px/1 'Fredoka', sans-serif; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
 .ss-sivi.ss-dolan{animation:ssDolum .26s cubic-bezier(.2,1.5,.4,1); transform-origin:50% 100%;}
@@ -1254,18 +1259,48 @@
 [data-sise-tema] .sso-cam{stroke:var(--cam-kenar);}
 [data-sise-tema] .sso-parlama{stroke:#fff; opacity:var(--cam-parlama, .3);}
 
-/* --- SILUET: govde bicimi (market.js SILUETLER). Sise kutusunun boyutu ve
-   icindeki sivi katmanlari AYNI kalir; siluet yalnizca maskeyle keser.
-   Uc katman: dolgu (cam tonu, sivinin arkasinda) -> sivilar -> cizgi (cam
-   kenari + agiz dudagi, sivinin ustunde). --- */
+/* --- SILUET: govde bicimi (market.js SILUETLER). Her bicimin TEK yolu var;
+   market.js o yoldan, sisenin KENDI kutusunda (kenarlik/dolgu yok, W x H)
+   bes katman uretir ve hepsi ayni yere oturur:
+     --sise-maske : dis sinir; sise (cam + sivilar + cizgi) bununla kesilir
+     --sise-dolgu : cam tonu, sivilarin arkasinda
+     --sise-cizgi : cam kenari (2px), sivilarin ustunde (::after)
+     --sise-ic    : camin ic siniri; HER sivi katmani bununla kesilir
+     --sise-dudak : agiz dudagi; tek istisna, sise kutusundan --dudak-tasma
+                    kadar tasan kutuda durur (kapak bu dudagi sarar)
+   Sivi katmanlari dikdortgen kalir (kapasite / dokme ayni); iceride gorunen
+   bicim yalnizca --sise-ic kirpmasidir. Kirpma her katmana, katmanin sise
+   icindeki yerine gore konumlanir: sise bir boyut kabidir (container), katman
+   sirasi --ss-k (alttan, 0'dan), katman boyu --ss-kat (oyun JS'i yazar). --- */
 [data-sise-tema][data-siluet] .ss-tup{
-  border-color:transparent; box-shadow:none;
+  --dudak-tasma:2px; --sivi-alt:3px;
+  border:0; padding:0 0 var(--sivi-alt); box-shadow:none;
+  border-radius:0;   /* maske kutunun yuvarlak kosesine gore kesmesin: bicimi yalniz yol verir */
+  container-type:size;
   background:var(--sise-dolgu) center / 100% 100% no-repeat;
   -webkit-mask:var(--sise-maske) center / 100% 100% no-repeat;
           mask:var(--sise-maske) center / 100% 100% no-repeat;}
 [data-sise-tema][data-siluet] .ss-tup::after{
-  inset:-2px; left:-2px; right:-2px; top:-2px; height:auto; border-radius:0; box-shadow:none;
-  background:var(--sise-cizgi) center / 100% 100% no-repeat;}
+  inset:calc(-1 * var(--dudak-tasma)); height:auto; border-radius:0; box-shadow:none;
+  background:
+    var(--sise-cizgi) var(--dudak-tasma) var(--dudak-tasma) / calc(100% - 2 * var(--dudak-tasma)) calc(100% - 2 * var(--dudak-tasma)) no-repeat,
+    var(--sise-dudak) center / 100% 100% no-repeat;}
+[data-sise-tema][data-siluet] .ss-sivi{
+  border-radius:0;
+  -webkit-mask:var(--sise-ic) no-repeat;
+          mask:var(--sise-ic) no-repeat;
+  -webkit-mask-size:100cqw calc(100cqh + var(--sivi-alt));
+          mask-size:100cqw calc(100cqh + var(--sivi-alt));
+  -webkit-mask-position:0 calc((var(--ss-k, 0) + 1) * var(--ss-kat, 30px) - 100cqh);
+          mask-position:0 calc((var(--ss-k, 0) + 1) * var(--ss-kat, 30px) - 100cqh);}
+/* en alt katman sisenin dibine kadar uzar (kirpma tabani bicimlendirir);
+   akistaki yeri degismez, yalniz gorunen kutusu asagi genisler */
+[data-sise-tema][data-siluet] .ss-sivi:first-child{
+  box-sizing:content-box; padding-bottom:var(--sivi-alt); margin-bottom:calc(-1 * var(--sivi-alt));}
+.ss-sivi:nth-child(2){--ss-k:1;}  .ss-sivi:nth-child(3){--ss-k:2;}  .ss-sivi:nth-child(4){--ss-k:3;}
+.ss-sivi:nth-child(5){--ss-k:4;}  .ss-sivi:nth-child(6){--ss-k:5;}  .ss-sivi:nth-child(7){--ss-k:6;}
+.ss-sivi:nth-child(8){--ss-k:7;}  .ss-sivi:nth-child(9){--ss-k:8;}  .ss-sivi:nth-child(10){--ss-k:9;}
+.ss-sivi:nth-child(11){--ss-k:10;} .ss-sivi:nth-child(12){--ss-k:11;}
 [data-sise-tema][data-siluet] .ss-tup::before{top:26%; left:22%; bottom:20%;}
 [data-sise-tema][data-siluet] .ss-tup.ss-tamam{border-color:transparent;}
 /* maske secim halkasini (box-shadow) keser: siluetli siselerde secim, siseyi
@@ -1731,10 +1766,10 @@
     gap:3px; padding:4px; border-radius:10px; background:rgba(8,12,22,.55);}
   .mo-bloklar .tp-cell{border-radius:4px;}
   .ss-tahta.mo-siseler{--ss-tup-w:21px; gap:0 10px; flex-wrap:nowrap;}
-  .mo-siseler .ss-tup{padding:2px; border-width:1.5px; cursor:default; transition:none;}
+  .mo-siseler .ss-tup{--cam-k:1.5px; --cam-r:10.5px; cursor:default; transition:none;}
   .mo-siseler .ss-tup::after{left:-3px; right:-3px; top:-2px; height:4px;}
   .mo-siseler .ss-tup::before{top:6px;}
-  [data-sise-tema][data-siluet].mo-siseler .ss-tup::after{inset:-1.5px;}
+  [data-sise-tema][data-siluet].mo-siseler .ss-tup{--dudak-tasma:1.5px; --sivi-alt:2px;}
   .mo-siseler .ss-kapak{transition:none;}
 
   /* efsanevi kartlarda onizlemenin ustunden gecen parilti (transform ile) */
