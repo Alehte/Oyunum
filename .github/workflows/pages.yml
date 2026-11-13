@@ -1,0 +1,60 @@
+# GitHub Pages yayini — derleme adimi yok, dosyalar oldugu gibi yayinlanir.
+# Yalnizca oyunun calismasi icin gereken dosyalar yayina girer; tools/ ve
+# depo dosyalari (README, .github, .git) disarida kalir.
+#
+# Ilk kurulum: Settings -> Pages -> "Build and deployment" -> Source: GitHub Actions
+name: Pages yayini
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  yayinla:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Yayin klasorunu hazirla
+        run: |
+          mkdir _site
+          cp index.html style.css manifest.json sw.js _site/
+          cp launchericon-*.png _site/
+          cp -r js img fonts _site/
+          cp -r .well-known _site/
+          touch _site/.nojekyll
+          # dosya adlari buyuk/kucuk harf duyarli: index.html ve sw.js'in andigi her dosya var mi?
+          eksik=0
+          for f in $(grep -o 'src="[^"]*"\|href="[^"]*"' index.html | sed 's/.*="//;s/"//' | grep -v '^#\|^http'); do
+            [ -f "_site/$f" ] || { echo "EKSIK: $f"; eksik=1; }
+          done
+          for f in $(grep -o "'[a-zA-Z0-9_./-]*\.\(js\|css\|json\|webp\|png\|woff2\|html\)'" sw.js js/core.js | sed "s/.*:'//;s/'//g"); do
+            [ -f "_site/$f" ] || { echo "EKSIK: $f"; eksik=1; }
+          done
+          exit $eksik
+
+      - name: Pages ayari
+        uses: actions/configure-pages@v5
+
+      - name: Paketi yukle
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Yayinla
+        id: deployment
+        uses: actions/deploy-pages@v4
