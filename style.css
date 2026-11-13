@@ -396,6 +396,16 @@
   .tp-over-eski{font-size:12.5px; opacity:.8;}
   .tp-over-odul{margin-top:6px; display:flex; align-items:center; justify-content:center; gap:6px;
     color:#FBE7AE; font-size:19px; font-family:'Fredoka', sans-serif; font-weight:600;}
+  /* oyun sonu kazanc dokumu: kalem satirlari + altta toplam */
+  .tp-over-kazanc{margin:10px auto 0; min-width:190px; display:flex; flex-direction:column; gap:3px;}
+  .tp-kz-satir{display:flex; align-items:center; justify-content:space-between; gap:16px;
+    font-size:13px; color:#C9D7E8;}
+  .tp-kz-satir b, .tp-over-kazanc .tp-over-odul b{display:flex; align-items:center; gap:4px;
+    font-family:'Fredoka', sans-serif; font-weight:600; color:#FBE7AE;}
+  .tp-kz-satir b img{width:13px; height:13px;}
+  .tp-over-kazanc .tp-over-odul{justify-content:space-between; gap:16px; margin-top:4px; padding-top:6px;
+    border-top:1px solid rgba(251,231,174,.22);}
+  .tp-over-kazanc .tp-over-odul span{font-size:14px; font-weight:500; color:#FBE7AE;}
   .tp-over button{font-family:'Fredoka', sans-serif; font-weight:600; font-size:15px; padding:13px 28px;
     border-radius:13px; border:none; cursor:pointer; background:#6FD3FF; color:#052033;
     box-shadow:0 0 20px rgba(111,211,255,.5);}

@@ -18,6 +18,7 @@
   // ---------------------------------------------------------------
   var AYAR = {
     rekorOdul: 200,            // yeni rekorda verilen jeton
+    temizlikOdul: 25,          // her tam temizlikte biriken jeton (oyun sonunda odenir)
     renkler: ['#5CC8FF', '#B58CFF', '#FFCF5C', '#4FE39A', '#FF7F92', '#FF9F4D', '#7C8FFF', '#52DDC6'],
     surukle: {
       kazanc: 1.08,            // parca parmaktan %8 hizli ilerler (1 = birebir takip)
@@ -33,7 +34,7 @@
     },
     ovgu: ['', '', 'Harika!', 'Muhteşem!', 'İnanılmaz!', 'Efsane!', 'Efsane!']
   };
-  var REKOR_ODUL = AYAR.rekorOdul, RENKLER = AYAR.renkler;
+  var REKOR_ODUL = AYAR.rekorOdul, TEMIZLIK_ODUL = AYAR.temizlikOdul, RENKLER = AYAR.renkler;
 
   function q(id) { return document.getElementById(id); }
   var ekran = q('screen-tempo'), tahtaEl = q('tpBoard'), tepsiEl = q('tpTray');
@@ -45,6 +46,10 @@
   var renk = new Int8Array(N * N);   // hücre -> palet sırası, -1 boş
   var tepsiRenk = [];                // tepsi yuvası -> palet sırası
   var rekor = 0, rekorBasta = 0;
+  // Bu oyunda tam temizliklerden biriken, HENUZ ODENMEMIS jeton. Yarim oyunla
+  // birlikte kaydedilir (tempoOyun.tb); oyun bitince bir kez odenip sifirlanir.
+  var temizlikBirikim = 0;
+  var sonKazanc = null;              // oyun sonunda odenen kazanc (bitis ekrani icin)
   var hucreler = [], fxEl = null;
   var sonBoya = new Array(N * N);
   var suruk = null;                  // devam eden sürükleme
@@ -82,7 +87,7 @@
   function oyunKaydet() {
     if (!window.AppSaveProgress) return;
     if (!oyun || oyun.bitti || oyun.hamle === 0) { window.AppSaveProgress({ tempoOyun: null }); return; }
-    window.AppSaveProgress({ tempoOyun: { k: oyun.kayit(), r: Array.prototype.slice.call(renk), t: tepsiRenk.slice(), rb: rekorBasta } });
+    window.AppSaveProgress({ tempoOyun: { k: oyun.kayit(), r: Array.prototype.slice.call(renk), t: tepsiRenk.slice(), rb: rekorBasta, tb: temizlikBirikim } });
   }
 
   function oyunYukle() {
@@ -98,6 +103,8 @@
     tepsiRenk = (kayit.t instanceof Array) ? kayit.t.slice(0, 3) : [];
     while (tepsiRenk.length < 3) tepsiRenk.push(tepsiRenk.length);
     if (typeof kayit.rb === 'number') rekorBasta = kayit.rb;   // rekor ödülü oyun başındaki rekora göre
+    // biriken temizlik ödülü (bu özellikten önceki kayıtlarda yok: 0)
+    temizlikBirikim = (typeof kayit.tb === 'number' && kayit.tb > 0) ? kayit.tb : 0;
     return true;
   }
 
@@ -403,24 +410,49 @@
       if (yuva) yuva.innerHTML = '';
       sigmazIsaretle();
     }
+    // tam temizlik = cekirdegin tanimi (hamle sonunda tahta tamamen bos)
+    if (e.tam) temizlikBirikim += TEMIZLIK_ODUL;
+    // Kazanc, oyunun bittigi kayitla AYNI anda odenir: arada uygulama kapanirsa
+    // ne kaybolur ne de (yarim oyun kaydi silindigi icin) ikinci kez odenir.
+    if (e.bitti) kazanciOde();
     oyunKaydet();
     if (e.bitti) setTimeout(oyunBitti, e.hat ? 760 : 520);
     return true;
   }
 
-  function oyunBitti() {
-    if (!oyun || !oyun.bitti) return;
+  function kazanciOde() {
     var rekorKirildi = oyun.skor > rekorBasta;
+    sonKazanc = {
+      rekorKirildi: rekorKirildi, eskiRekor: rekorBasta,
+      rekor: rekorKirildi ? REKOR_ODUL : 0,
+      temizlik: temizlikBirikim, adet: TEMIZLIK_ODUL ? Math.round(temizlikBirikim / TEMIZLIK_ODUL) : 0
+    };
+    sonKazanc.toplam = sonKazanc.rekor + sonKazanc.temizlik;
+    if (sonKazanc.toplam > 0 && window.AppGold) window.AppGold.add(sonKazanc.toplam);
+    if (rekorKirildi) rekorBasta = oyun.skor;
+    temizlikBirikim = 0;
+  }
+
+  function kazancSatiri(ad, miktar, sinif) {
+    return '<div class="' + sinif + '"><span>' + ad + '</span><b>' + window.CoinSVG(true) + '+' + yaz(miktar) + '</b></div>';
+  }
+
+  function oyunBitti() {
+    if (!oyun || !oyun.bitti || !sonKazanc) return;
+    var kz = sonKazanc, rekorKirildi = kz.rekorKirildi;
     bittiBaslik.innerHTML = rekorKirildi
       ? '<span style="color:#FFE08A">Yeni</span> <span style="color:#8FF0B4">Rekor!</span>'
       : '<span style="color:#FF9A8A">Yer</span> <span style="color:#FFC97A">Kalmadı</span>';
     var alt = 'Skorun: ' + yaz(oyun.skor);
     if (oyun.tamSayisi) alt += '  ·  Tam temizlik: ' + oyun.tamSayisi;
-    if (rekorKirildi) {
-      alt += '<div class="tp-over-eski">Önceki rekor: ' + yaz(rekorBasta) + '</div>' +
-             '<div class="tp-over-odul">' + window.CoinSVG(true) + '+' + REKOR_ODUL + '</div>';
-      if (window.AppGold) window.AppGold.add(REKOR_ODUL);
-      rekorBasta = oyun.skor;
+    if (rekorKirildi) alt += '<div class="tp-over-eski">Önceki rekor: ' + yaz(kz.eskiRekor) + '</div>';
+    // kazanc dokumu (odeme kazanciOde'de yapildi; burada yalnizca gosterilir)
+    if (kz.toplam > 0) {
+      alt += '<div class="tp-over-kazanc">' +
+        (kz.rekor ? kazancSatiri('Rekor ödülü', kz.rekor, 'tp-kz-satir') : '') +
+        (kz.temizlik ? kazancSatiri('Tam temizlik ×' + kz.adet, kz.temizlik, 'tp-kz-satir') : '') +
+        kazancSatiri('Toplam', kz.toplam, 'tp-over-odul') +
+        '</div>';
     }
     bittiAlt.innerHTML = alt;
     bittiEl.classList.add('show');
@@ -648,6 +680,7 @@
     for (var i = 0; i < N * N; i++) renk[i] = -1;
     yeniRenkler();
     rekor = rekorOku(); rekorBasta = rekor;
+    temizlikBirikim = 0; sonKazanc = null;
     bittiEl.classList.remove('show');
     if (fxEl) fxEl.innerHTML = '';
     ekranaYaz();
