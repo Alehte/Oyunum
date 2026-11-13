@@ -86,6 +86,7 @@
     tup.classList.remove('ss-tamamlandi');
     void tup.offsetWidth;
     tup.classList.add('ss-tamamlandi');
+    kapakIndir(tup);
     ses('tamam');
   }
 
@@ -336,7 +337,24 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       var bitti = d.tupler[i].length > 0 && d.gizli[i] === 0 &&
                   global.SuSirala.renkTamamlandiMi(d, i);
       t.classList.toggle('ss-tamam', bitti);
+      kapakYerinde(t, bitti, !!dolan[i]);
     }
+  }
+
+  /* Kapak: sise doluyken gorunmez (dokum bitince tamamlanmaKontrol indirir);
+     dolu ve sakin siseye animasyonsuz oturur; bozulan siseden kalkar. */
+  function kapakYerinde(tup, bitti, doluyor) {
+    var k = tup.nextElementSibling;
+    if (!k || !k.classList.contains('ss-kapak')) return;
+    if (!bitti) { k.classList.remove('oturdu', 'iniyor'); return; }
+    if (!doluyor && !k.classList.contains('iniyor')) k.classList.add('oturdu');
+  }
+  function kapakIndir(tup) {
+    var k = tup.nextElementSibling;
+    if (!k || !k.classList.contains('ss-kapak')) return;
+    k.classList.remove('oturdu', 'iniyor');
+    void k.offsetWidth;
+    k.classList.add('iniyor');
   }
 
   /* ---------- Ust bar ve jokerler ---------- */

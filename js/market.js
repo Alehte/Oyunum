@@ -461,29 +461,92 @@ window.AppMarket = (function () {
   // Sivi renkleri HER ZAMAN oyunun kendi paletinden gelir; sise boyu,
   // kapasitesi, dokme animasyonu ve tiklama alani degismez.
   // ---------------------------------------------------------------
+  // KAPAKLAR — hepsi 48x20'lik bir kutuda cizilir ve kutunun TAM genisligini
+  // kullanir. CSS kapagi sisenin agiz dudagindan 1'er px tasacak genislikte
+  // yerlestirir (style.css .ss-kapak --kapak-gen), boylece kapak dudagi sarar.
+  //   duz / halka : alt etek (y 8.5-19.5) dudagin uzerine gecer
+  //   mantar      : tac (y 0-8.2) dudagin ustunde durur, govde agzin icine girer
+  // Isik soldan gelir: silindir golgesi yatay, tepe isigi dikey gradyanla.
+  function renkKoyu(hex, oran) {
+    if (typeof hex !== 'string' || hex.charAt(0) !== '#' || hex.length !== 7) return '#000000';
+    function k(i) { return Math.round(parseInt(hex.substr(i, 2), 16) * (1 - oran)); }
+    return 'rgb(' + k(1) + ',' + k(3) + ',' + k(5) + ')';
+  }
+  var kapakSayac = 0;   // her SVG'nin gradyan kimligi benzersiz olsun (ayni sayfada farkli renkler)
+  function silindirGrad(id, r) {
+    return '<linearGradient id="' + id + '" x1="0" x2="1" y1="0" y2="0">' +
+      '<stop offset="0" stop-color="' + renkKoyu(r, .38) + '"/>' +
+      '<stop offset=".16" stop-color="' + renkAc(r, .38) + '"/>' +
+      '<stop offset=".42" stop-color="' + r + '"/>' +
+      '<stop offset=".82" stop-color="' + renkKoyu(r, .22) + '"/>' +
+      '<stop offset="1" stop-color="' + renkKoyu(r, .45) + '"/></linearGradient>';
+  }
+  function tepeGrad(id, r) {
+    return '<linearGradient id="' + id + '" x1="0" x2="0" y1="0" y2="1">' +
+      '<stop offset="0" stop-color="' + renkAc(r, .45) + '"/>' +
+      '<stop offset=".55" stop-color="' + r + '"/>' +
+      '<stop offset="1" stop-color="' + renkKoyu(r, .2) + '"/></linearGradient>';
+  }
+  var METAL_GRAD = '<stop offset="0" stop-color="#7D8696"/><stop offset=".18" stop-color="#F2F5FA"/>' +
+    '<stop offset=".45" stop-color="#C3CAD6"/><stop offset=".8" stop-color="#8C95A5"/><stop offset="1" stop-color="#5F6878"/>';
+
   var KAPAK_SEKILLER = {
-    // duz vidali kapak
-    duz: function (r) {
-      return '<rect x="2" y="3" width="20" height="11" rx="2.6" fill="' + r + '"/>' +
-             '<rect x="2" y="3" width="20" height="11" rx="2.6" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="1"/>' +
-             '<rect x="4" y="4.6" width="16" height="1.8" rx=".9" fill="#fff" opacity=".4"/>' +
-             '<path d="M6 8.4v4M9 8.4v4M12 8.4v4M15 8.4v4M18 8.4v4" stroke="rgba(0,0,0,.2)" stroke-width="1" stroke-linecap="round"/>';
+    // vidali kapak: tirtikli etek dudagi sarar, ustte yuvarlak omuzlu tepe
+    duz: function (r, n) {
+      var y = 'ky' + n, t = 'kt' + n, cizgi = '', i;
+      for (i = 3.5; i < 45; i += 3) {
+        cizgi += 'M' + i + ' 10.4V17.6';
+      }
+      return '<defs>' + silindirGrad(y, r) + tepeGrad(t, r) + '</defs>' +
+        // etek
+        '<rect x=".4" y="8.5" width="47.2" height="11" rx="2.4" fill="url(#' + y + ')"/>' +
+        '<path d="' + cizgi + '" stroke="rgba(0,0,0,.26)" stroke-width="1.1" stroke-linecap="round"/>' +
+        '<path d="' + cizgi.replace(/M(\d+(\.\d+)?)/g, function (m, x) { return 'M' + (+x + 1); }) +
+          '" stroke="rgba(255,255,255,.16)" stroke-width=".6" stroke-linecap="round"/>' +
+        '<rect x=".4" y="17.9" width="47.2" height="1.6" rx=".8" fill="rgba(0,0,0,.22)"/>' +
+        // tepe
+        '<path d="M1.6 9.2V6.4C1.6 3.6 3.6 2 7 2H41C44.4 2 46.4 3.6 46.4 6.4V9.2Z" fill="url(#' + t + ')"/>' +
+        '<path d="M1.6 9.2H46.4" stroke="rgba(0,0,0,.3)" stroke-width=".9"/>' +
+        '<rect x="7" y="3.3" width="22" height="1.5" rx=".75" fill="#fff" opacity=".5"/>' +
+        // dis hat
+        '<path d="M.4 10.9V17.1C.4 18.4 1.5 19.5 2.8 19.5H45.2C46.5 19.5 47.6 18.4 47.6 17.1V10.9C47.6 9.6 46.9 9.2 46.4 9.2V6.4C46.4 3.6 44.4 2 41 2H7C3.6 2 1.6 3.6 1.6 6.4V9.2C1.1 9.2 .4 9.6 .4 10.9Z" ' +
+          'fill="none" stroke="rgba(0,0,0,.38)" stroke-width=".8"/>';
     },
-    // mantar tipa
-    mantar: function (r) {
-      return '<path d="M5.4 2.6c0-1.3 2.2-1.9 6.6-1.9s6.6.6 6.6 1.9l-1 10.2c-.2 1.2-2.4 2-5.6 2s-5.4-.8-5.6-2z" fill="' + r + '"/>' +
-             '<path d="M5.4 2.6c0-1.3 2.2-1.9 6.6-1.9s6.6.6 6.6 1.9l-1 10.2c-.2 1.2-2.4 2-5.6 2s-5.4-.8-5.6-2z" fill="none" stroke="rgba(0,0,0,.25)" stroke-width=".9"/>' +
-             '<ellipse cx="12" cy="2.7" rx="6" ry="1.5" fill="#fff" opacity=".28"/>' +
-             '<path d="M8 6.2h.01M13 5.4h.01M16 8h.01M10 9.6h.01M14 11h.01" stroke="rgba(0,0,0,.28)" stroke-width="1.5" stroke-linecap="round"/>';
+    // mantar tipa: genis tac dudagin ustunde, daralan govde agzin icinde
+    mantar: function (r, n) {
+      var y = 'ky' + n, t = 'kt' + n;
+      return '<defs>' + silindirGrad(y, r) + tepeGrad(t, r) + '</defs>' +
+        // govde (agzin icine giren kisim)
+        '<path d="M6.5 7.6H41.5L39.6 18.2C39.4 19.1 38.6 19.6 37.7 19.6H10.3C9.4 19.6 8.6 19.1 8.4 18.2Z" fill="url(#' + y + ')"/>' +
+        '<path d="M14 11.2h.01M22 13.6h.01M31 10.8h.01M35 15.6h.01M17 16.8h.01M27 17.4h.01" ' +
+          'stroke="' + renkKoyu(r, .42) + '" stroke-width="1.6" stroke-linecap="round"/>' +
+        // tac
+        '<path d="M1 8.2C1 4.2 6.5 1 24 1S47 4.2 47 8.2C47 8.9 46.4 9.4 45.6 9.4H2.4C1.6 9.4 1 8.9 1 8.2Z" fill="url(#' + t + ')"/>' +
+        '<path d="M2.2 9.4H45.8" stroke="rgba(0,0,0,.28)" stroke-width=".9"/>' +
+        '<path d="M9 5.6h.01M18 3.6h.01M30 4.2h.01M38 6.2h.01" stroke="' + renkKoyu(r, .35) + '" stroke-width="1.4" stroke-linecap="round"/>' +
+        '<ellipse cx="17" cy="3.3" rx="9" ry="1.1" fill="#fff" opacity=".42"/>' +
+        '<path d="M1 8.2C1 4.2 6.5 1 24 1S47 4.2 47 8.2C47 8.9 46.4 9.4 45.6 9.4H41.3L39.6 18.2C39.4 19.1 38.6 19.6 37.7 19.6H10.3C9.4 19.6 8.6 19.1 8.4 18.2L6.7 9.4H2.4C1.6 9.4 1 8.9 1 8.2Z" ' +
+          'fill="none" stroke="rgba(0,0,0,.34)" stroke-width=".8"/>';
     },
-    // metal halkali kapak
-    halka: function (r) {
-      return '<circle cx="12" cy="3.6" r="2.3" fill="none" stroke="#D9DEE6" stroke-width="1.5"/>' +
-             '<path d="M4 8.2c0-2 3.4-3 8-3s8 1 8 3v3.6H4z" fill="' + r + '"/>' +
-             '<path d="M4 8.2c0-2 3.4-3 8-3s8 1 8 3" fill="none" stroke="#fff" stroke-width="1" opacity=".35"/>' +
-             '<rect x="2.6" y="10.6" width="18.8" height="4" rx="1.6" fill="#C9CFD9"/>' +
-             '<rect x="2.6" y="10.6" width="18.8" height="4" rx="1.6" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".8"/>' +
-             '<rect x="4.4" y="11.4" width="15.2" height="1.1" rx=".55" fill="#fff" opacity=".65"/>';
+    // halkali kapak: renkli kubbe, dudagi saran kivrik metal bilezik, tepede cekme halkasi
+    halka: function (r, n) {
+      var t = 'kt' + n, m = 'km' + n, kivrim = '', i;
+      for (i = 4; i < 46; i += 4) kivrim += 'M' + i + ' 12.2V17.8';
+      return '<defs>' + tepeGrad(t, r) +
+        '<linearGradient id="' + m + '" x1="0" x2="1" y1="0" y2="0">' + METAL_GRAD + '</linearGradient></defs>' +
+        // cekme halkasi
+        '<ellipse cx="24" cy="3.4" rx="4.2" ry="2.5" fill="none" stroke="url(#' + m + ')" stroke-width="1.5"/>' +
+        '<ellipse cx="24" cy="3.4" rx="4.2" ry="2.5" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".4"/>' +
+        // kubbe
+        '<path d="M3 11.2V9.6C3 6.6 6.4 5 12 5H36C41.6 5 45 6.6 45 9.6V11.2Z" fill="url(#' + t + ')"/>' +
+        '<rect x="9" y="6.1" width="18" height="1.3" rx=".65" fill="#fff" opacity=".5"/>' +
+        '<path d="M3 9.6C3 6.6 6.4 5 12 5H36C41.6 5 45 6.6 45 9.6V11.2H3Z" fill="none" stroke="rgba(0,0,0,.32)" stroke-width=".8"/>' +
+        // metal bilezik
+        '<rect x=".4" y="10.4" width="47.2" height="9.1" rx="2" fill="url(#' + m + ')"/>' +
+        '<path d="' + kivrim + '" stroke="rgba(40,48,60,.35)" stroke-width="1.3" stroke-linecap="round"/>' +
+        '<rect x="1.6" y="11.1" width="44.8" height="1" rx=".5" fill="#fff" opacity=".55"/>' +
+        '<rect x=".4" y="17.9" width="47.2" height="1.6" rx=".8" fill="rgba(0,0,0,.2)"/>' +
+        '<rect x=".4" y="10.4" width="47.2" height="9.1" rx="2" fill="none" stroke="rgba(0,0,0,.38)" stroke-width=".8"/>';
     }
   };
 
@@ -520,8 +583,8 @@ window.AppMarket = (function () {
 
   function kapakSvgUret(sekil, renk) {
     var f = KAPAK_SEKILLER[sekil] || KAPAK_SEKILLER.duz;
-    return '<svg class="ss-kapak-kapak" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">' +
-           f(renk || '#D93A3A') + '</svg>';
+    return '<svg class="ss-kapak-kapak" viewBox="0 0 48 20" xmlns="http://www.w3.org/2000/svg">' +
+           f(renk || '#D93A3A', ++kapakSayac) + '</svg>';
   }
 
   // Aktif sise temasinin kapak SVG'si. Varsayilan temada kapak zaten
@@ -562,7 +625,8 @@ window.AppMarket = (function () {
       el.style.setProperty('--sise-maske', siluetKatmani(sl, '#000', '#000'));
       el.style.setProperty('--sise-dolgu', siluetKatmani(sl, v.cam || 'rgba(226,236,255,.10)', 'none'));
       el.style.setProperty('--sise-cizgi', siluetKatmani(sl, 'none', v.kenar || 'rgba(226,236,255,.42)'));
-      el.style.setProperty('--agiz', ((sl.agiz[1] - sl.agiz[0]) / 100 + 0.16).toFixed(2));   // kapak genisligi
+      // agiz dudaginin genisligi (sise kutusu + 4px'in orani): kapak bunu sarar
+      el.style.setProperty('--agiz', ((sl.agiz[1] - sl.agiz[0] + 10) / 100).toFixed(3));
     } else {
       el.removeAttribute('data-siluet');
       el.style.removeProperty('--sise-maske');

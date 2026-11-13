@@ -1273,27 +1273,53 @@
 [data-sise-tema][data-siluet] .ss-tup.ss-secili{box-shadow:none;}
 [data-sise-tema][data-siluet] .ss-yuva:has(> .ss-tup.ss-secili:not(.ss-dokuyor)){
   filter:drop-shadow(0 0 2px #7FD8E6) drop-shadow(0 0 5px rgba(127,216,230,.8));}
-[data-sise-tema][data-siluet] .ss-kapak{width:calc(var(--ss-tup-w, 44px) * var(--agiz, .98));}
-
 /* --- kapak: dolan sisenin agzina ustten inip oturur. Bicimi (duz /
-   mantar / halka) ve rengi market.js'te SVG olarak uretilir. --- */
-.ss-kapak{position:absolute; left:50%; width:calc(var(--ss-tup-w, 44px) * .98);
-  transform:translate(-50%,-14px); opacity:0; pointer-events:none; z-index:5; display:none;
-  transition:transform .22s cubic-bezier(.3,.6,.35,1), opacity .18s ease;}
+   mantar / halka) ve rengi market.js'te SVG olarak uretilir (48x20 kutu,
+   tam genislik). Kapagin gorunurlugu JS'in verdigi iki siniftan gelir:
+     .oturdu : kapak yerinde, animasyonsuz (tahta yeniden kurulunca, market onizlemesi)
+     .iniyor : sise doldu -> kapak yukaridan iner, agza oturur, hafif yaylanir
+   Sise dolarken (sivi akarken) kapak gorunmez; dokum bitince iner.
+   GENISLIK: agiz dudagi (duz tupte sise + 4px) her yandan 1px tasar.
+   OTURMA (--kapak-otur): kapagin alt kenari sise agzinin bu kadar altinda.
+     duz / halka : etek dudagin 1px altina iner (dudak -3px..+3px)
+     mantar      : tacin alt kenari (y 9.4/20) dudagin ustune (-3px) oturur, govde icerde:
+                   otur = (20 - 9.4) / 48 * genislik - 3px --- */
+.ss-kapak{position:absolute; left:50%;
+  --kapak-gen:calc(var(--ss-tup-w, 44px) + 6px);
+  --kapak-otur:4px;
+  width:var(--kapak-gen);
+  transform:translate(-50%, calc(var(--kapak-otur) - 24px)); transform-origin:50% 100%;
+  opacity:0; pointer-events:none; z-index:5; display:none;
+  transition:opacity .16s ease;}
 [data-sise-tema] .ss-kapak{display:block;}
+[data-sise-tema][data-siluet] .ss-kapak{--kapak-gen:calc((var(--ss-tup-w, 44px) + 4px) * var(--agiz, 1) + 2px);}
 .ss-kapak-kapak{display:block; margin:0 auto; width:100%; height:auto;
-  filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));}
-.ss-tup.ss-tamam + .ss-kapak{opacity:1; transform:translate(-50%, var(--kapak-otur, 5px));}
-/* mantar tipa agzin ICINE girer: halkanin arkasinda kalir, daha derine oturur */
-[data-kapak="mantar"]{--kapak-otur:11px;}
-[data-kapak="mantar"] .ss-kapak{z-index:3;}
-.ss-tup.ss-tamam.ss-tamamlandi + .ss-kapak{animation:ssKapakDus .42s cubic-bezier(.25,.85,.35,1.1) forwards;}
-@keyframes ssKapakDus{
-  0%{opacity:0; transform:translate(-50%,-16px);}
-  60%{opacity:1; transform:translate(-50%, calc(var(--kapak-otur, 5px) + 2px));}
-  100%{opacity:1; transform:translate(-50%, var(--kapak-otur, 5px));}}
-.phone.reduced-motion .ss-kapak{transition:opacity .1s ease;}
-.phone.reduced-motion .ss-tup.ss-tamamlandi + .ss-kapak{animation:none;}
+  filter:drop-shadow(0 1.5px 1.5px rgba(0,0,0,.45));}
+/* mantar tipa agzin ICINE girer: dudagin arkasinda kalir, tac dudagin ustunde */
+[data-kapak="mantar"] .ss-kapak{z-index:3; --kapak-otur:calc(var(--kapak-gen) * .2208 - 3px);}
+.ss-kapak.oturdu, .ss-kapak.iniyor{opacity:1; transform:translate(-50%, var(--kapak-otur));}
+/* sise kendi "tamamlandi" ziplamasini yaparken kapak yukarida bekler,
+   sise durulurken iner; carpinca basilip yaylanarak oturur */
+.ss-kapak.iniyor{animation:ssKapakIn .72s linear both;}
+@keyframes ssKapakIn{
+  0%{opacity:0; transform:translate(-50%, calc(var(--kapak-otur) - 26px)) scale(1, 1);}
+  34%{opacity:0; transform:translate(-50%, calc(var(--kapak-otur) - 26px)) scale(1, 1);
+      animation-timing-function:cubic-bezier(.5, 0, .9, .5);}
+  40%{opacity:1;}
+  60%{transform:translate(-50%, calc(var(--kapak-otur) - 3px)) scale(.96, 1.05);
+      animation-timing-function:linear;}
+  66%{transform:translate(-50%, calc(var(--kapak-otur) + 1px)) scale(1.12, .74);
+      animation-timing-function:cubic-bezier(.2, .7, .4, 1);}
+  80%{transform:translate(-50%, calc(var(--kapak-otur) - 2.5px)) scale(.95, 1.07);
+      animation-timing-function:ease-in-out;}
+  91%{transform:translate(-50%, var(--kapak-otur)) scale(1.04, .95);}
+  100%{opacity:1; transform:translate(-50%, var(--kapak-otur)) scale(1, 1);}}
+/* animasyonlari azalt: inis yok, kapak yerinde kisaca belirir */
+.phone.reduced-motion .ss-kapak{transition:none;}
+.phone.reduced-motion .ss-kapak.iniyor{animation:ssKapakSolar .16s ease both;}
+@keyframes ssKapakSolar{
+  from{opacity:0; transform:translate(-50%, var(--kapak-otur));}
+  to{opacity:1; transform:translate(-50%, var(--kapak-otur));}}
 
 /* --- haritada yeni acilan bolum --- */
 .ss-node-yeni{animation:ssYeniNode 1.1s cubic-bezier(.34,1.5,.5,1) .3s backwards; z-index:6;}

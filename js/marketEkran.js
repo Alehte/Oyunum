@@ -156,7 +156,7 @@ window.MarketEkran = (function () {
         s.style.height = KAT + 'px';
         s.style.setProperty('--ss-renk', OZ.sivi[renkSira]);
       });
-      var kapak = kutu('ss-kapak', yuva);
+      var kapak = kutu('ss-kapak' + (i === 1 ? ' oturdu' : ''), yuva);
       kapak.style.bottom = (3 * KAT + 6) + 'px';
       kapak.innerHTML = v.yerlesik ? '' : M.kapakSvgUret(v.kapak, v.kapakRenk);
     });

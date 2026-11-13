@@ -794,7 +794,9 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       e.classList.toggle('sso-secili', i === secili && d.kapMi[i]);
       if (!d.kapMi[i]) {
         var saf = d.tupler[i].length > 0 && tekRenk(d.tupler[i]);
-        e.classList.toggle('ss-tamam', saf && d.tupler[i].length === d.kaplar[i]);
+        var dolu = saf && d.tupler[i].length === d.kaplar[i];
+        e.classList.toggle('ss-tamam', dolu);
+        kapakYerinde(e, dolu, !!dolan[i]);
       }
     }
     karistirButonlariYenile();
@@ -1023,7 +1025,24 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     tup.classList.remove('ss-tamamlandi');
     void tup.offsetWidth;
     tup.classList.add('ss-tamamlandi');
+    kapakIndir(tup);
     ses('tamam');
+  }
+
+  /* Kapak: sise doluyken gorunmez (dokum bitince tamamlanmaKontrol indirir);
+     dolu ve sakin siseye animasyonsuz oturur; bozulan siseden kalkar. */
+  function kapakYerinde(tup, bitti, doluyor) {
+    var k = tup.nextElementSibling;
+    if (!k || !k.classList.contains('ss-kapak')) return;
+    if (!bitti) { k.classList.remove('oturdu', 'iniyor'); return; }
+    if (!doluyor && !k.classList.contains('iniyor')) k.classList.add('oturdu');
+  }
+  function kapakIndir(tup) {
+    var k = tup.nextElementSibling;
+    if (!k || !k.classList.contains('ss-kapak')) return;
+    k.classList.remove('oturdu', 'iniyor');
+    void k.offsetWidth;
+    k.classList.add('iniyor');
   }
 
   function animasyonBitti(a, b) {
