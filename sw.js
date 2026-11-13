@@ -20,7 +20,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '4';
+var SURUM = '5';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [

@@ -148,7 +148,10 @@ window.AppMarket = (function () {
     window.AppReklam = {
       gercek: false,
       odulluIzle: function (bitti) {
-        // gercek reklam altyapisi yok: kisa bir beklemeden sonra odul verilir
+        // gercek reklam altyapisi yok. Yalnizca gelistirme ayari acikken
+        // (core.js AppGelistirme) kisa bir beklemeden sonra odul verilir;
+        // yayinda reklam "tamamlanmadi" sayilir, bedava odul cikmaz.
+        if (!window.AppGelistirme) { setTimeout(function () { bitti(false); }, 0); return; }
         setTimeout(function () { bitti(true); }, 1200);
       }
     };

@@ -278,6 +278,15 @@
   })();
   window.AppStore = Store;   // market.js NO ADS kaydini burada tutar
 
+  // GELISTIRME AYARI: varsayilan KAPALI. Acikken taslak reklam her zaman odul
+  // verir (market.js AppReklam). Acmak:  adrese ?gelistirme=1 ekle  (kalici kaydedilir)
+  // Kapatmak:                            adrese ?gelistirme=0 ekle
+  (function(){
+    const m = /[?&]gelistirme=([01])\b/.exec(location.search);
+    if(m){ if(m[1] === '1') Store.set('ait_gelistirme', true); else Store.del('ait_gelistirme'); }
+    window.AppGelistirme = Store.get('ait_gelistirme', false) === true;
+  })();
+
   const DEFAULTS = { sfx:70, music:45, haptics:true, reducedMotion:false, lang:'tr' };
   let settings = Object.assign({}, DEFAULTS, Store.get('ait_settings', {}));
   function saveSettings(){ Store.set('ait_settings', settings); }

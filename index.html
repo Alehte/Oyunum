@@ -77,8 +77,9 @@
           <div class="set-block">
             <div class="set-block-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Ses</div>
             <div class="volume-row"><span class="txt" style="font-size:12.5px;color:var(--ink-on-navy);min-width:56px;">Efektler</span><input type="range" id="sfxSlider" min="0" max="100" value="70" aria-label="Efekt sesi"><span class="volume-val" id="sfxVal">70%</span></div>
-            <div class="volume-row" style="margin-top:10px;"><span class="txt" style="font-size:12.5px;color:var(--ink-on-navy);min-width:56px;">Müzik</span><input type="range" id="musicSlider" min="0" max="100" value="45" aria-label="Müzik sesi"><span class="volume-val" id="musicVal">45%</span></div>
-            <div class="sheet-note">Müzik parçaları henüz eklenmedi; ayar şimdiden kayıtlı tutuluyor.</div>
+            <!-- muzik henuz yok: muzik eklenince bu iki satirdaki hidden kaldirilir -->
+            <div class="volume-row" style="margin-top:10px;" hidden><span class="txt" style="font-size:12.5px;color:var(--ink-on-navy);min-width:56px;">Müzik</span><input type="range" id="musicSlider" min="0" max="100" value="45" aria-label="Müzik sesi"><span class="volume-val" id="musicVal">45%</span></div>
+            <div class="sheet-note" hidden>Müzik parçaları henüz eklenmedi; ayar şimdiden kayıtlı tutuluyor.</div>
           </div>
 
           <div class="set-block">
@@ -103,7 +104,8 @@
             <div class="sheet-note">Açılan bölümleri, yıldızları, rekorları, yarım kalan oyunları, altını, açılan 2048 tahtalarını, temaları ve jokerleri siler.</div>
           </div>
 
-          <div class="set-block">
+          <!-- tek dil var: ikinci dil eklenince hidden kaldirilir -->
+          <div class="set-block" hidden>
             <div class="set-block-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z"/></svg>Dil</div>
             <button class="lang-btn" id="langBtn"><span class="flag">🇹🇷</span><span class="lbl">Türkçe</span><span class="chev">›</span></button>
             <div class="sheet-note">Diğer diller sonraki sürümde eklenecek.</div>
@@ -297,7 +299,8 @@
           <div class="kc-big-text" id="kcFailText"></div>
           <div class="kc-fail-btns">
             <button class="kc-btn-retry" id="kcRetryBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 18 17"/><path d="M20 5v6h-6"/></svg>Tekrar Dene</button>
-            <button class="kc-btn-ad" id="kcAdBtn">▶  Reklam İzle ve Devam Et</button>
+            <!-- reklam altyapisi gelince hidden kaldirilir (kacis.js kcAdBtn) -->
+            <button class="kc-btn-ad" id="kcAdBtn" hidden>▶  Reklam İzle ve Devam Et</button>
             <button class="kc-btn-back" id="kcBackToMapBtn">Bölümlere Dön</button>
           </div>
           <div class="kc-ad-note" id="kcAdNote"></div>
@@ -483,7 +486,8 @@
         <div class="mk-govde" id="mkGovde">
 
           <div id="mkMagaza">
-            <div class="mk-noads" id="mkNoAds"></div>
+            <!-- odeme altyapisi gelince hidden kaldirilir (marketEkran.js noAdsCiz) -->
+            <div class="mk-noads" id="mkNoAds" hidden></div>
             <div class="mk-hediye" id="mkHediye"></div>
 
             <div class="mk-bolum-basligi"><span>Kutular</span></div>
