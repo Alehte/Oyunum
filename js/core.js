@@ -16,7 +16,8 @@
     ssoOyun: document.getElementById('screen-susirala-ozeloyun'),
     market: document.getElementById('screen-market'),
   };
-  let navBusy = false, pendingPop = null, settleTimer = null;
+  let navBusy = false, pendingPop = null, settleTimer = null, settleDone = null;
+  let aktifEkran = 'home';   // sahnedeki (ya da su an sahneye giren) ekranin anahtari
   // baslangicta home disindaki her ekran sahne disi: DevTools'ta Elements
   // panelinden herhangi bir ekranin ".offstage" class'i var mi diye bakip
   // gorunur/tiklanabilir mi anlayabilirsin.
@@ -26,6 +27,8 @@
     from.style.willChange = 'transform'; to.style.willChange = 'transform';
     if(settleTimer) clearTimeout(settleTimer);
     const done = () => {
+      if(settleDone !== done) return;          // bu gecis zaten bitirildi
+      settleDone = null;
       from.removeEventListener('transitionend', done);
       clearTimeout(settleTimer);
       from.classList.add('offstage');
@@ -33,11 +36,25 @@
       navBusy = false;
       if(pendingPop){ const p = pendingPop; pendingPop = null; p(); }
     };
+    settleDone = done;
     from.addEventListener('transitionend', done, { once:true });
     settleTimer = setTimeout(done, settings.reducedMotion ? 20 : 380);
   }
+  // Bir ekrana GERI donulurken o ekranin icerigi tazelenir (acilan bolum,
+  // sayaclar, kilitler). Ekrandaki geri dugmesi de telefonun geri tusu da
+  // buradan gecer.
+  const EKRAN_YENILE = {
+    boards2048:  () => { if(window.Boards2048) window.Boards2048.open(); },
+    kacisMode:   () => { if(window.KacisMod) window.KacisMod.yenile(); },
+    kacisLevels: () => { if(window.Kacis && window.Kacis.haritaYenile) window.Kacis.haritaYenile(); },
+    kacisOzel:   () => { if(window.Kacis && window.Kacis.haritaYenile) window.Kacis.haritaYenile(); },
+    ssMod:       () => { if(window.SuSiralaOyun) window.SuSiralaOyun.modYenile(); },
+    ssHarita:    () => { if(window.SuSiralaOyun) window.SuSiralaOyun.haritaCiz(); },
+    ssoHarita:   () => { if(window.SuSiralaOzelOyun) window.SuSiralaOzelOyun.haritaCiz(); }
+  };
   function slideForward(fromKey, toKey){
     const from = screens[fromKey], to = screens[toKey];
+    aktifEkran = toKey;
     to.classList.remove('offstage');
     to.style.transition = 'none'; to.style.transform = 'translateX(100%)'; void to.offsetWidth; to.style.transition = '';
     requestAnimationFrame(() => { from.style.transform = 'translateX(-100%)'; to.style.transform = 'translateX(0)'; });
@@ -45,6 +62,8 @@
   }
   function slideBack(fromKey, toKey){
     const from = screens[fromKey], to = screens[toKey];
+    aktifEkran = toKey;
+    if(EKRAN_YENILE[toKey]){ try{ EKRAN_YENILE[toKey](); }catch(e){ console.error(e); } }
     to.classList.remove('offstage');
     to.style.transition = 'none'; to.style.transform = 'translateX(-100%)'; void to.offsetWidth; to.style.transition = '';
     requestAnimationFrame(() => { from.style.transform = 'translateX(100%)'; to.style.transform = 'translateX(0)'; });
@@ -146,50 +165,61 @@
 
   document.getElementById('cardHedef2048').addEventListener('click', () => oyunAc('h2048', () => { slideForward('home','boards2048'); window.Boards2048.open(); }));
   document.getElementById('boardsBackBtn').addEventListener('click', () => slideBack('boards2048','home'));
-  document.getElementById('backBtn2048').addEventListener('click', () => { slideBack('game2048','boards2048'); if(window.Boards2048) window.Boards2048.open(); });
+  document.getElementById('backBtn2048').addEventListener('click', () => slideBack('game2048','boards2048'));
   document.getElementById('cardTempo').addEventListener('click', () => oyunAc('tempo', () => { slideForward('home','tempo'); window.TempoKup.start(); if(window.AppGold) window.AppGold.render(); }));
   document.getElementById('tempoBackBtn').addEventListener('click', () => slideBack('tempo','home'));
   document.getElementById('cardKacis').addEventListener('click', () => oyunAc('kacis', () => { window.KacisMod.yenile(); slideForward('home','kacisMode'); }));
   document.getElementById('kacisModeBackBtn').addEventListener('click', () => slideBack('kacisMode','home'));
-  document.getElementById('kacisLevelsBackBtn').addEventListener('click', () => { if(window.KacisMod) window.KacisMod.yenile(); slideBack('kacisLevels','kacisMode'); });
+  document.getElementById('kacisLevelsBackBtn').addEventListener('click', () => slideBack('kacisLevels','kacisMode'));
   document.getElementById('kc1BackBtn').addEventListener('click', () => slideBack('kacisLevel1', window.Kacis ? window.Kacis.haritaAnahtari() : 'kacisLevels'));
-  document.getElementById('kacisOzelBackBtn').addEventListener('click', () => { if(window.KacisMod) window.KacisMod.yenile(); slideBack('kacisOzel','kacisMode'); });
+  document.getElementById('kacisOzelBackBtn').addEventListener('click', () => slideBack('kacisOzel','kacisMode'));
   document.getElementById('cardSuSirala').addEventListener('click', () => oyunAc('susirala', () => {
     window.SuSiralaOyun.modYenile();
     slideForward('home','ssMod');
   }));
   document.getElementById('ssModeBackBtn').addEventListener('click', () => slideBack('ssMod','home'));
-  document.getElementById('ssHaritaBackBtn').addEventListener('click', () => {
-    if(window.SuSiralaOyun) window.SuSiralaOyun.modYenile();
-    slideBack('ssHarita','ssMod');
-  });
-  document.getElementById('ssOyunBackBtn').addEventListener('click', () => {
-    if(window.SuSiralaOyun) window.SuSiralaOyun.haritaCiz();
-    slideBack('ssOyun','ssHarita');
-  });
-  document.getElementById('ssoHaritaBackBtn').addEventListener('click', () => {
-    if(window.SuSiralaOyun) window.SuSiralaOyun.modYenile();
-    slideBack('ssoHarita','ssMod');
-  });
-  document.getElementById('ssoOyunBackBtn').addEventListener('click', () => {
-    if(window.SuSiralaOzelOyun) window.SuSiralaOzelOyun.haritaCiz();
-    slideBack('ssoOyun','ssoHarita');
-  });
+  // ekran tazeleme EKRAN_YENILE tablosunda: geri donuste slideBack kendisi cagirir
+  document.getElementById('ssHaritaBackBtn').addEventListener('click', () => slideBack('ssHarita','ssMod'));
+  document.getElementById('ssOyunBackBtn').addEventListener('click', () => slideBack('ssOyun','ssHarita'));
+  document.getElementById('ssoHaritaBackBtn').addEventListener('click', () => slideBack('ssoHarita','ssMod'));
+  document.getElementById('ssoOyunBackBtn').addEventListener('click', () => slideBack('ssoOyun','ssoHarita'));
   // --- telefonun kendi geri tusu ile senkron ---
+  // Her ileri gecis tarayici gecmisine bir kayit ekler. Ekrandaki geri dugmesi
+  // de bu kaydi geri sarar (history.go); boylece gecmiste olu kayit birikmez
+  // ve telefonun geri tusu her basista bir ekran geri gider.
   let navStack = [];
+  let gecmisSariliyor = false;   // kendi history.go cagrimizin dogurdugu popstate yok sayilir
   const _fwd = slideForward, _back = slideBack;
+  // Gecis istegi gecerli mi? Kaynak ekran sahnedeki ekran degilse (cift dokunma,
+  // eski istek) yok sayilir. Onceki gecis hala suruyorsa hemen bitirilir; boylece
+  // cagiranin hazirladigi oyun durumu ile ekran birbirinden kopmaz.
+  function gecisHazirla(fromKey){
+    if(fromKey !== aktifEkran) return false;
+    if(navBusy && settleDone) settleDone();
+    return fromKey === aktifEkran && !navBusy;
+  }
   slideForward = function(from, to){
-    if(navBusy) return;
+    if(!gecisHazirla(from)) return false;
     navStack.push([from, to]); _fwd(from, to); history.pushState({s:to}, '');
+    return true;
   };
   slideBack = function(from, to){
-    if(navBusy) return;
-    navStack = navStack.filter(p => p[1] !== from); _back(from, to);
+    if(!gecisHazirla(from)) return false;
+    let i = navStack.length - 1;
+    while(i >= 0 && navStack[i][1] !== from) i--;
+    if(i >= 0){
+      const adim = navStack.length - i;
+      navStack.length = i;
+      gecmisSariliyor = true;
+      history.go(-adim);
+    }
+    _back(from, to);
+    return true;
   };
   history.replaceState({s:'home'}, '');
   function handlePopstate(){
     // once ekran ici bir secim aciksa onu kapat
-    if(window.Boards2048 && screens.boards2048.style.transform === 'translateX(0)' && window.Boards2048.handleBack()){
+    if(window.Boards2048 && aktifEkran === 'boards2048' && window.Boards2048.handleBack()){
       history.pushState({s:'boards2048'}, '');
       return;
     }
@@ -197,6 +227,7 @@
     if(last){ _back(last[1], last[0]); }
   }
   window.addEventListener('popstate', () => {
+    if(gecmisSariliyor){ gecmisSariliyor = false; return; }
     if(navBusy){ pendingPop = handlePopstate; return; }
     handlePopstate();
   });
@@ -232,14 +263,17 @@
   const Store = (function(){
     let mem = {}, ok = true;
     try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); } catch(e){ ok = false; }
+    // Yazma hata verirse (or. kota doldu) deger bellekte tutulur ve OKUMA da
+    // once bellege bakar; yoksa diskteki eski deger geri donerdi.
     return {
       persistent: ok,
-      get(k, d){ try{ if(ok){ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } }catch(e){}
-                 return (k in mem) ? mem[k] : d; },
-      set(k, v){ try{ if(ok){ localStorage.setItem(k, JSON.stringify(v)); return; } }catch(e){}
+      get(k, d){ if(k in mem) return mem[k];
+                 try{ if(ok){ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } }catch(e){}
+                 return d; },
+      set(k, v){ try{ if(ok){ localStorage.setItem(k, JSON.stringify(v)); delete mem[k]; return; } }catch(e){}
                  mem[k] = v; },
-      del(k){ try{ if(ok){ localStorage.removeItem(k); return; } }catch(e){}
-              delete mem[k]; }
+      del(k){ delete mem[k];
+              try{ if(ok) localStorage.removeItem(k); }catch(e){} }
     };
   })();
   window.AppStore = Store;   // market.js NO ADS kaydini burada tutar
@@ -350,7 +384,7 @@
     clearTimeout(resetTimer);
     resetArmed = false;
     Store.del('ait_progress');
-    window.AppProgress = { unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {} };
+    window.AppProgress = varsayilanIlerleme();
     if(window.AppGold) window.AppGold.render();
     window.AppReset.forEach(fn => { try{ fn(); }catch(e){} });
     resetBtn.classList.remove('confirm');
@@ -359,7 +393,11 @@
   });
 
   // --- ilerleme kaydi (oyun scriptleri bunu okur) ---
-  window.AppProgress = Store.get('ait_progress', { unlocked: 1, best: 0, gold: 0, kacisHearts: {} });
+  // Acilista ve "Ilerlemeyi Sifirla"da AYNI baslangic nesnesi kullanilir.
+  function varsayilanIlerleme(){
+    return { unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {} };
+  }
+  window.AppProgress = Store.get('ait_progress', varsayilanIlerleme());
   if(typeof window.AppProgress.gold !== 'number') window.AppProgress.gold = 0;
   if(!window.AppProgress.kacisHearts) window.AppProgress.kacisHearts = {};
 
@@ -465,8 +503,9 @@
     }
   }, { passive: false });
 
-  // Sağ / sol ok tuşları
+  // Sağ / sol ok tuşları — yalnızca ana ekran sahnedeyken ve ayarlar kapalıyken
   document.addEventListener('keydown', (e) => {
+    if (aktifEkran !== 'home' || sheet.classList.contains('show')) return;
     if (e.key === 'ArrowRight') kaydir.scrollBy({ left:  adim(), behavior: 'smooth' });
     if (e.key === 'ArrowLeft')  kaydir.scrollBy({ left: -adim(), behavior: 'smooth' });
   });

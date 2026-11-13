@@ -20,7 +20,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '3';
+var SURUM = '4';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
@@ -87,10 +87,11 @@ self.addEventListener('activate', function (olay) {
   );
 });
 
-// Oyun dosyalarini arka planda onbellege al (zaten olanlara dokunmaz)
+// Cekirdek + oyun dosyalarini arka planda onbellege al (zaten olanlara dokunmaz).
+// Cekirdek de listede: sayfa degisip onbellek bosaldiysa o da yeniden dolsun.
 function isit() {
   return caches.open(ONBELLEK).then(function (kasa) {
-    return OYUNLAR.reduce(function (zincir, yol) {
+    return CEKIRDEK.concat(OYUNLAR).reduce(function (zincir, yol) {
       return zincir.then(function () {
         return kasa.match(yol).then(function (var_) {
           if (var_) return;
@@ -111,38 +112,48 @@ self.addEventListener('message', function (olay) {
 
 // --- index.html: once ag ---
 // Sayfa degismisse onbellekteki eski js/css ile karismasin diye onbellek
-// bosaltilir; dosyalar agdan yeniden gelir ve yeniden yazilir.
-function sayfayiYenile(istek) {
-  return fetch(istek).then(function (yanit) {
-    if (!yanit || !yanit.ok) throw new Error('sayfa alinamadi');
-    var kopya = yanit.clone();
-    return caches.open(ONBELLEK).then(function (kasa) {
-      return Promise.all([kasa.match('index.html'), kopya.clone().text()]).then(function (ikili) {
-        var eski = ikili[0], yeniMetin = ikili[1];
-        var eskiMetin = eski ? eski.text() : Promise.resolve(null);
-        return eskiMetin.then(function (metin) {
-          if (metin === null || metin === yeniMetin) return;
-          return kasa.keys().then(function (anahtarlar) {
-            return Promise.all(anahtarlar.map(function (k) { return kasa.delete(k); }));
-          });
-        }).then(function () { return kasa.put('index.html', kopya); });
+// bosaltilir; dosyalar agdan yeniden gelir ve yeniden yazilir. Bu YALNIZCA
+// yeni sayfa gercekten acilacaksa yapilir: onbellekteki eski sayfa acildiysa
+// ona dokunulmaz, yoksa eski sayfa sonradan yeni oyun dosyalarini cekerdi.
+function sayfayiYaz(yanit) {
+  var kopya = yanit.clone();
+  return caches.open(ONBELLEK).then(function (kasa) {
+    return Promise.all([kasa.match('index.html'), kopya.clone().text()]).then(function (ikili) {
+      var eski = ikili[0], yeniMetin = ikili[1];
+      var eskiMetin = eski ? eski.text() : Promise.resolve(null);
+      return eskiMetin.then(function (metin) {
+        if (metin === null || metin === yeniMetin) return false;
+        return kasa.keys().then(function (anahtarlar) {
+          return Promise.all(anahtarlar.map(function (k) { return kasa.delete(k); }));
+        }).then(function () { return true; });
+      }).then(function (bosaldi) {
+        return kasa.put('index.html', kopya).then(function () { return bosaldi; });
       });
-    }).then(function () { return yanit; });
+    });
   });
 }
 
 function gezinme(olay) {
-  var agdan = sayfayiYenile(olay.request);
+  var agdan = fetch(olay.request).then(function (yanit) {
+    if (!yanit || !yanit.ok) throw new Error('sayfa alinamadi');
+    return yanit;
+  });
   var onbellekten = function () {
     return caches.open(ONBELLEK).then(function (kasa) { return kasa.match('index.html'); });
   };
+  // yeni sayfa acilacak: onbellegi ona gore yaz; bosaldiysa dosyalari arkada yeniden doldur
+  var yeniSayfa = function (yanit) {
+    return sayfayiYaz(yanit).then(function (bosaldi) {
+      if (bosaldi) { try { olay.waitUntil(isit()); } catch (e) { isit(); } }
+      return yanit;
+    }, function () { return yanit; });
+  };
   var sabir = new Promise(function (coz) { setTimeout(coz, GEZINME_SABRI, null); });
-  // ag yavassa onbellekteki sayfayi ac; ag istegi arkada surup onbellegi gunceller
-  olay.waitUntil(agdan.catch(function () {}));
   return Promise.race([agdan.catch(function () { return null; }), sabir]).then(function (yanit) {
-    if (yanit) return yanit;
+    if (yanit) return yeniSayfa(yanit);
+    // ag yavas ya da yok: onbellekteki sayfa onbellekteki dosyalarla tutarli acilir
     return onbellekten().then(function (yedek) {
-      return yedek || agdan;      // onbellek de yoksa agi beklemekten baska care yok
+      return yedek || agdan.then(yeniSayfa);   // onbellek de yoksa agi beklemekten baska care yok
     });
   });
 }

@@ -21,8 +21,7 @@
       return new Set(o);
     }
     function buy(size, price){
-      if(!window.AppGold || window.AppGold.get() < price) return false;
-      window.AppGold.add(-price);
+      if(!window.AppGold || !window.AppGold.harca(price)) return false;
       const list = Array.from(owned()); list.push(size);
       window.AppProgress.boards = list;
       window.AppSaveProgress({boards: list});
@@ -325,18 +324,12 @@
       liveSession = snapshot();
     }
 
-    function undo(){
-      if(animating || !undoStack.length) return;
-      restoreState(undoStack.pop());
-      saveState();
-    }
-
     // Yeni oyun DISKE YAZILMAZ: kayit yalnizca ilk hamleyle olusur. Eskiden dosya
     // her yuklendiginde bos bir oyun kaydedilip yarim kalan oyunun ustune
     // yaziliyordu; "kaldigin yerden devam" hic cikmiyordu.
     function newGame(){
       gamesStarted++; tiles = []; milestonesHit = new Set(); domTiles.forEach(el => el.remove()); domTiles.clear();
-      score = 0; recordBroken = false; undoStack = [];
+      score = 0; recordBroken = false;
       scoreBoxEl.classList.remove('record'); scoreBoxEl.classList.add('normal');
       rozetGizle();
       overlayEl.classList.remove('show'); placeWalls(); spawnTile(); spawnTile(); render();
@@ -380,10 +373,8 @@
       return lines;
     }
     let queuedDir = null;
-    let undoStack = [];
     function move(dir){
       if(animating){ queuedDir = dir; return; }
-      const prevSnap = snapshot();
       const grid = {}; tiles.forEach(t => { grid[t.r+'_'+t.c] = t; });
       const lines = lineOrder(dir); let movedAny = false, scoreGain = 0; const removeIds = new Set();
 
@@ -430,7 +421,6 @@
       if(removeIds.size > 0) movedAny = true;
 
       if(!movedAny){ tiles.forEach(t => { t.pendingValue = null; }); return; }
-      undoStack.push(prevSnap); if(undoStack.length > 5) undoStack.shift();
       score += scoreGain; animating = true;
       render();
       setTimeout(() => {

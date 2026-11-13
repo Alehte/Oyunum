@@ -2,9 +2,9 @@
    SIRALA DUR — ÖZEL BÖLÜMLER, OYUN KATMANI
    js/suSiralaOzelOyun.js
 
-   Yükleme sırası:
-     suSirala.js -> suSiralaOzel.js -> suSiralaOzelBolumler.js
-     -> suSiralaOyun.js -> suSiralaOzelOyun.js
+   Yükleme sırası (core.js OYUN_DOSYALARI.susirala):
+     suSirala.js -> suSiralaBolumler.js -> suSiralaOzel.js
+     -> suSiralaJoker.js -> suSiralaOyun.js -> suSiralaOzelOyun.js
 
    Ana moddaki suSiralaOyun.js'e DOKUNMAZ. Renkler
    SuSiralaOzel.RENK_HEX'ten gelir (indeksler anlamlı).

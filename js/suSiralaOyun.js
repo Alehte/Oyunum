@@ -711,9 +711,8 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
         void ozel.offsetWidth;
         ozel.classList.add('ss-shake');
         ses('hata');
-        return;
       }
-      mesajGoster('Özel bölümler yakında');
+      /* acik kartta gecisi suSiralaOzelOyun.js yapar */
     });
 
     var bastan = $('ssBastanBtn');

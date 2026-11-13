@@ -1,5 +1,6 @@
-// kacis.js — Kacis? yilan bulmacasi: 20 bolum, ipucu, kalpler
-// ============ KAÇIŞ? — GAME LOGIC (5 BÖLÜM) ============
+// kacis.js — Kacis? yilan bulmacasi: normal bolumler (js/bolumler.js) +
+// ozel sekil bolumleri (js/ozel_bolumler.js), ipucu, kalpler
+// ============ KAÇIŞ? — GAME LOGIC ============
   // Zorluk hedefi (minimum gereken yılan hareketi): Bölüm1=5, sonra her bölümde +2
   // Bölüm1=5, Bölüm2=7, Bölüm3=9, Bölüm4=11, Bölüm5=13
   (function(){
@@ -1010,9 +1011,10 @@
       if(n === 10) kcShowTip('Basılı tut ve yolunu gör', 1500);
       startHeroAttention(n);
       if(n === 1){
-        kcIntroTitle.innerHTML = twoTone(kcMode === 'ozel' ? 'Özel 1' : 'Bölüm 1', '#7FDB98', '#3FA65C');
+        // ozel mod yukarida dondugu icin burasi yalnizca normal 1. bolum
+        kcIntroTitle.innerHTML = twoTone('Bölüm 1', '#7FDB98', '#3FA65C');
         const introGoal = document.querySelector('.kc-intro-goal');
-        if(introGoal) introGoal.textContent = kcMode === 'ozel' ? '!Tüm Yılanları Çıkar!' : '!Yeşil Yılanı Kurtar!';
+        if(introGoal) introGoal.textContent = '!Yeşil Yılanı Kurtar!';
         kcIntroSplash.classList.add('show');
         setTimeout(() => kcIntroSplash.classList.remove('show'), 2000);
       }
@@ -1212,12 +1214,9 @@
       kalp:   function(n){ return ozelBest(n); },
       oyna:   function(n){
         if(!this.acikMi()) return;
-        this.test(n);
-      },
-      test:   function(n){                    // kilidi yok sayar, sadece gelistirme icin
         kcMode = 'ozel';
         loadLevel(n || 1);
-        slideForward('kacisLevels','kacisLevel1');
+        slideForward('kacisOzel','kacisLevel1');
       }
     };
 
@@ -1270,7 +1269,7 @@
     // Iki modun harita ekrani farkli: normalde patika, ozelde sekil izgarasi.
     function kcMapKey(){ return kcMode === 'ozel' ? 'kacisOzel' : 'kacisLevels'; }
     function kcRenderMap(){ if(kcMode === 'ozel') renderOzelGrid(); else renderLevelNodes(); }
-    window.Kacis = { haritaAnahtari: kcMapKey };
+    window.Kacis = { haritaAnahtari: kcMapKey, haritaYenile: kcRenderMap };
 
     // ---- MOD SECIM EKRANI (Bolumler / Ozel Bolumler) ----
     function kcOzelAcik(){ return bestHeartsFor(KC_OZEL_UNLOCK) > 0; }
