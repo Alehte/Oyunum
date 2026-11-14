@@ -2,7 +2,7 @@
   "name": "All in Together",
   "short_name": "All in Together",
   "description": "Dört bulmaca oyunu tek uygulamada: Hedef 2048, Kaçış?, Tempo Küp ve Sırala Dur.",
-  "id": "all-in-together",
+  "id": "/Oyunum/",
   "start_url": "./index.html",
   "scope": "./",
   "lang": "tr",
@@ -50,6 +50,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "launchericon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "launchericon-maskable-512x512.png",

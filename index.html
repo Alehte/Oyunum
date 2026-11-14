@@ -113,7 +113,7 @@
 
           <div class="set-block" style="margin-bottom:4px;">
             <div class="set-block-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5"/><path d="M12 8h.01"/></svg>Hakkında</div>
-            <div class="about-row"><span>Sürüm</span><b>1.1.2</b></div>
+            <div class="about-row"><span>Sürüm</span><b>1.1.3</b></div>
             <div class="about-row"><span>Gizlilik Politikası</span><a class="about-link" id="privacyBtn" href="gizlilik.html">Görüntüle</a></div>
           </div>
         </div>
@@ -526,7 +526,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function () {
     var denetleyiciVardi = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').then(function (kayit) {
-      // sayfa bosta kalinca oyun dosyalarini da onbellege al (cevrimdisi icin)
+      // sayfa bosta kalinca onbellegi onar (eksilen dosya varsa ayni surumden tamamlanir)
       navigator.serviceWorker.ready.then(function (hazir) {
         setTimeout(function () { if (hazir.active) hazir.active.postMessage({ tur: 'isit' }); }, 2500);
       });
