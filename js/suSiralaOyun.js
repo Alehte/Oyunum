@@ -660,23 +660,24 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
      5) BOLUM SONU
      ============================================================ */
 
+  /* yildiz sayisina gore toplam altin (0..3 yildiz) */
+  var YILDIZ_ODUL = [0, 10, 20, 30];
+
   function bolumBitti() {
     var p = ilerleme();
     var no = oyun.bolum.bolumNo;
     var yildiz = oyun.yildiz();
-    var oncekiYildiz = p.ssYildiz[no] || 0;
-    var ilkKez = oncekiYildiz === 0;
+    var oncekiYildiz = Math.max(0, Math.min(3, p.ssYildiz[no] || 0));
 
     if (yildiz > oncekiYildiz) p.ssYildiz[no] = yildiz;
     if (no + 1 > (p.ssAcik || 1)) p.ssAcik = Math.min(TOPLAM_BOLUM, no + 1);
     ilerlemeKaydet({ ssAcik: p.ssAcik, ssYildiz: p.ssYildiz });
 
-    /* Altin odulu: sadece ilk tamamlamada, yildiza gore */
-    var odul = 0;
-    if (ilkKez) {
-      odul = yildiz === 3 ? 30 : (yildiz === 2 ? 20 : 10);
-      if (global.AppGold) global.AppGold.add(odul);
-    }
+    /* Altin odulu: yildiz artinca aradaki fark odenir (ilk gecis = 0'dan fark).
+       Ayni ya da daha az yildizla tekrar oynamak 0 verir. */
+    var odul = YILDIZ_ODUL[yildiz] - YILDIZ_ODUL[oncekiYildiz];
+    if (odul > 0) { if (global.AppGold) global.AppGold.add(odul); }
+    else odul = 0;
 
     ses('kazan');
 

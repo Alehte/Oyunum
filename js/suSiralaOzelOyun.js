@@ -1202,22 +1202,24 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     }
   }
 
+  /* yildiz sayisina gore toplam altin (0..3 yildiz) */
+  var YILDIZ_ODUL = [0, 15, 30, 45];
+
   function bolumBitti() {
     var p = ilerleme();
     var no = oyun.bolum.bolumNo;
     var yildiz = oyun.yildiz();
-    var oncekiYildiz = p.ssoYildiz[no] || 0;
-    var ilkKez = oncekiYildiz === 0;
+    var oncekiYildiz = Math.max(0, Math.min(3, p.ssoYildiz[no] || 0));
 
     if (yildiz > oncekiYildiz) p.ssoYildiz[no] = yildiz;
     if (no + 1 > (p.ssoAcik || 1)) p.ssoAcik = Math.min(TOPLAM_OZEL, no + 1);
     ilerlemeKaydet({ ssoAcik: p.ssoAcik, ssoYildiz: p.ssoYildiz });
 
-    var odul = 0;
-    if (ilkKez) {
-      odul = yildiz === 3 ? 45 : (yildiz === 2 ? 30 : 15);
-      if (global.AppGold) global.AppGold.add(odul);
-    }
+    /* Altin odulu: yildiz artinca aradaki fark odenir (ilk gecis = 0'dan fark).
+       Ayni ya da daha az yildizla tekrar oynamak 0 verir. */
+    var odul = YILDIZ_ODUL[yildiz] - YILDIZ_ODUL[oncekiYildiz];
+    if (odul > 0) { if (global.AppGold) global.AppGold.add(odul); }
+    else odul = 0;
 
     ses('kazan');
 

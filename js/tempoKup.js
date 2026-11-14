@@ -17,7 +17,12 @@
   // (oyun kurallari ve parca ureteci js/tempoCekirdek.js AYAR'indadir)
   // ---------------------------------------------------------------
   var AYAR = {
-    rekorOdul: 200,            // yeni rekorda verilen jeton
+    // Rekor esikleri: oyun sonunda (oyun basindaki rekor, bu skor] araligina
+    // dusen HER esik bir kez odenir. Esik k = esikTaban * 2^k. Rekorun
+    // altindaki esikler gecilmis sayilir (ayri kayit gerekmez).
+    esikTaban: 5000,
+    esikOdul: [25, 50, 75, 100, 150, 200, 300, 400, 500, 600],   // sonrasi her esikte +esikArtis
+    esikArtis: 100,
     temizlikOdul: 25,          // her tam temizlikte biriken jeton (oyun sonunda odenir)
     renkler: ['#5CC8FF', '#B58CFF', '#FFCF5C', '#4FE39A', '#FF7F92', '#FF9F4D', '#7C8FFF', '#52DDC6'],
     surukle: {
@@ -34,7 +39,19 @@
     },
     ovgu: ['', '', 'Harika!', 'Muhteşem!', 'İnanılmaz!', 'Efsane!', 'Efsane!']
   };
-  var REKOR_ODUL = AYAR.rekorOdul, TEMIZLIK_ODUL = AYAR.temizlikOdul, RENKLER = AYAR.renkler;
+  // ESIK-BASI (tools/tempoEsikTest.js bu blogu ayri calistirir)
+  function esikOdulu(eskiRekor, skor, ayar) {
+    var toplam = 0, adet = 0, k, esik, o;
+    for (k = 0, esik = ayar.esikTaban; esik <= skor && k < 60; k++, esik *= 2) {
+      if (esik <= eskiRekor) continue;
+      o = k < ayar.esikOdul.length ? ayar.esikOdul[k]
+        : ayar.esikOdul[ayar.esikOdul.length - 1] + (k - ayar.esikOdul.length + 1) * ayar.esikArtis;
+      toplam += o; adet++;
+    }
+    return { jeton: toplam, adet: adet };
+  }
+  // ESIK-SONU
+  var TEMIZLIK_ODUL = AYAR.temizlikOdul, RENKLER = AYAR.renkler;
 
   function q(id) { return document.getElementById(id); }
   var ekran = q('screen-tempo'), tahtaEl = q('tpBoard'), tepsiEl = q('tpTray');
@@ -422,9 +439,10 @@
 
   function kazanciOde() {
     var rekorKirildi = oyun.skor > rekorBasta;
+    var esik = esikOdulu(rekorBasta, oyun.skor, AYAR);
     sonKazanc = {
       rekorKirildi: rekorKirildi, eskiRekor: rekorBasta,
-      rekor: rekorKirildi ? REKOR_ODUL : 0,
+      rekor: esik.jeton, esikAdet: esik.adet,
       temizlik: temizlikBirikim, adet: TEMIZLIK_ODUL ? Math.round(temizlikBirikim / TEMIZLIK_ODUL) : 0
     };
     sonKazanc.toplam = sonKazanc.rekor + sonKazanc.temizlik;
@@ -449,7 +467,7 @@
     // kazanc dokumu (odeme kazanciOde'de yapildi; burada yalnizca gosterilir)
     if (kz.toplam > 0) {
       alt += '<div class="tp-over-kazanc">' +
-        (kz.rekor ? kazancSatiri('Rekor ödülü', kz.rekor, 'tp-kz-satir') : '') +
+        (kz.rekor ? kazancSatiri('Rekor eşiği' + (kz.esikAdet > 1 ? ' ×' + kz.esikAdet : ''), kz.rekor, 'tp-kz-satir') : '') +
         (kz.temizlik ? kazancSatiri('Tam temizlik ×' + kz.adet, kz.temizlik, 'tp-kz-satir') : '') +
         kazancSatiri('Toplam', kz.toplam, 'tp-over-odul') +
         '</div>';
