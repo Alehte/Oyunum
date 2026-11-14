@@ -20,11 +20,12 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '7';
+var SURUM = '8';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
   'index.html',
+  'gizlilik.html',
   'style.css',
   'manifest.json',
   'js/core.js',
@@ -158,6 +159,31 @@ function gezinme(olay) {
   });
 }
 
+// --- uygulama disi sayfalar (gizlilik.html): once ag, yoksa onbellek ---
+// index.html'in yolundan (gezinme) GECMEZ: o yol gelen yaniti 'index.html'
+// olarak onbellege yazar ve sayfa degisti sanip onbellegi bosaltirdi.
+function digerSayfa(istek) {
+  return fetch(istek).then(function (yanit) {
+    if (yanit && yanit.ok && yanit.type === 'basic') {
+      var kopya = yanit.clone();
+      caches.open(ONBELLEK).then(function (kasa) { return kasa.put(istek, kopya); });
+    }
+    return yanit;
+  }).catch(function () {
+    return caches.open(ONBELLEK).then(function (kasa) {
+      return kasa.match(istek, { ignoreSearch: true }).then(function (b) { return b || kasa.match('index.html'); });
+    });
+  });
+}
+
+// Gezinme uygulamanin kendisine mi (kapsam koku ya da index.html)?
+function uygulamaMi(url) {
+  var kok = new URL(self.registration.scope).pathname;
+  if (url.pathname.indexOf(kok) !== 0) return false;
+  var goreli = url.pathname.slice(kok.length);
+  return goreli === '' || goreli === 'index.html';
+}
+
 // --- statik dosyalar: once onbellek ---
 function statik(istek) {
   return caches.open(ONBELLEK).then(function (kasa) {
@@ -177,6 +203,9 @@ self.addEventListener('fetch', function (olay) {
   var url = new URL(istek.url);
   if (url.origin !== self.location.origin) return;                 // baska kaynaklara karisma
   if (url.pathname.indexOf('/.well-known/') >= 0) return;          // assetlinks hep agdan
-  if (istek.mode === 'navigate') { olay.respondWith(gezinme(olay)); return; }
+  if (istek.mode === 'navigate') {
+    olay.respondWith(uygulamaMi(url) ? gezinme(olay) : digerSayfa(istek));
+    return;
+  }
   olay.respondWith(statik(istek));
 });

@@ -251,6 +251,10 @@
     });
     gameCards.forEach(card => card.classList.toggle('active', card === closest));
   }
+  // role="button" kartlar klavyeyle de acilsin (Enter / Bosluk)
+  gameCards.forEach(card => card.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); card.click(); }
+  }));
   gamesScroll.addEventListener('scroll', () => window.requestAnimationFrame(updateActiveCard), {passive:true});
   updateActiveCard();
   function openSheet(){ sheet.classList.add('show'); sheetBackdrop.classList.add('show'); }
@@ -281,11 +285,26 @@
   // GELISTIRME AYARI: varsayilan KAPALI. Acikken taslak reklam her zaman odul
   // verir (market.js AppReklam). Acmak:  adrese ?gelistirme=1 ekle  (kalici kaydedilir)
   // Kapatmak:                            adrese ?gelistirme=0 ekle
+  // YALNIZCA yerelde calisir (localhost / 127.0.0.1 / file://). Yayindaki
+  // adreste bayrak ve eski kayitli deger yok sayilir.
   (function(){
+    const yerel = location.protocol === 'file:' ||
+                  /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    if(!yerel){ window.AppGelistirme = false; return; }
     const m = /[?&]gelistirme=([01])\b/.exec(location.search);
     if(m){ if(m[1] === '1') Store.set('ait_gelistirme', true); else Store.del('ait_gelistirme'); }
     window.AppGelistirme = Store.get('ait_gelistirme', false) === true;
   })();
+
+  // Tarayici yer acmak icin site verisini silmesin (TWA'da ilerleme burada).
+  // Izin verilmezse oyun yine calisir; yalnizca koruma olmaz.
+  try {
+    if(Store.persistent && navigator.storage && navigator.storage.persist){
+      navigator.storage.persisted().then(function(zaten){
+        if(!zaten) return navigator.storage.persist();
+      }).catch(function(){});
+    }
+  } catch(e){}
 
   const DEFAULTS = { sfx:70, music:45, haptics:true, reducedMotion:false, lang:'tr' };
   let settings = Object.assign({}, DEFAULTS, Store.get('ait_settings', {}));
@@ -403,12 +422,40 @@
 
   // --- ilerleme kaydi (oyun scriptleri bunu okur) ---
   // Acilista ve "Ilerlemeyi Sifirla"da AYNI baslangic nesnesi kullanilir.
+  // KAYIT SURUMU: ait_progress.surum. Kaydin bicimi degisirse KAYIT_SURUM bir
+  // artirilir ve gocEt() icine "s < N ise ..." adimi eklenir. Adimlar sirayla
+  // calisir; eski kayit hicbir zaman silinmez, yalnizca tamamlanir/cevrilir.
+  const KAYIT_SURUM = 1;
   function varsayilanIlerleme(){
-    return { unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {} };
+    return { surum: KAYIT_SURUM, unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {} };
   }
-  window.AppProgress = Store.get('ait_progress', varsayilanIlerleme());
-  if(typeof window.AppProgress.gold !== 'number') window.AppProgress.gold = 0;
-  if(!window.AppProgress.kacisHearts) window.AppProgress.kacisHearts = {};
+  // Donen: { p: kayit, degisti: diske yeniden yazilmali mi }
+  function gocEt(p){
+    if(!p || typeof p !== 'object' || Array.isArray(p)) return { p: varsayilanIlerleme(), degisti: true };
+    const s = (typeof p.surum === 'number' && p.surum >= 0) ? p.surum : 0;
+    // Daha yeni bir surumun kaydi (eski uygulamaya geri donulduyse): dokunma.
+    if(s > KAYIT_SURUM) return { p: p, degisti: false };
+    let degisti = false;
+    // 0 -> 1: surum alani yoktu. Eksik ya da bozuk alanlar varsayilanla
+    // tamamlanir; mevcut gecerli degerlere dokunulmaz.
+    if(s < 1){
+      const v = varsayilanIlerleme();
+      Object.keys(v).forEach(function(k){ if(p[k] === undefined) p[k] = v[k]; });
+      if(typeof p.gold !== 'number' || !isFinite(p.gold)) p.gold = 0;
+      if(!p.kacisHearts || typeof p.kacisHearts !== 'object') p.kacisHearts = {};
+      if(!p.ssYildiz || typeof p.ssYildiz !== 'object') p.ssYildiz = {};
+      if(!p.ssoYildiz || typeof p.ssoYildiz !== 'object') p.ssoYildiz = {};
+      p.surum = 1;
+      degisti = true;
+    }
+    return { p: p, degisti: degisti };
+  }
+  window.AppKayitGoc = { gocEt: gocEt, varsayilan: varsayilanIlerleme, surum: KAYIT_SURUM };
+  (function(){
+    const g = gocEt(Store.get('ait_progress', null));
+    window.AppProgress = g.p;
+    if(g.degisti) Store.set('ait_progress', window.AppProgress);
+  })();
 
   // --- ortak altin cuzdani (tum oyunlar ayni keseyi kullanir) ---
   window.CoinSVG = function(filled){
@@ -486,11 +533,6 @@
   };
   setTimeout(function(){ if(window.AppGold) window.AppGold.render(); }, 0);
 
-  // --- hakkinda ---
-  document.getElementById('privacyBtn').addEventListener('click', () => {
-    const n = document.getElementById('privacyNote');
-    n.style.display = n.style.display === 'none' ? 'block' : 'none';
-  });
 // --- GEÇİCİ: masaüstü kaydırma yardımcısı ---
 (() => {
   const kaydir = document.querySelector('.games-scroll');

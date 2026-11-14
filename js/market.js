@@ -144,9 +144,13 @@ window.AppMarket = (function () {
   // Gercek reklam SDK'si geldiginde SADECE window.AppReklam degisecek,
   // market kodu ayni kalacak.
   // ---------------------------------------------------------------
+  // Arayuz: hazirMi() -> su an izlenebilir reklam var mi. false ise reklamli
+  // butonlar HIC gosterilmez, gunluk hediye reklamsiz verilir.
   if (!window.AppReklam) {
     window.AppReklam = {
       gercek: false,
+      // taslak: yalnizca yerel gelistirme ayari acikken "var" sayilir
+      hazirMi: function () { return !!window.AppGelistirme; },
       odulluIzle: function (bitti) {
         // gercek reklam altyapisi yok. Yalnizca gelistirme ayari acikken
         // (core.js AppGelistirme) kisa bir beklemeden sonra odul verilir;
@@ -155,6 +159,11 @@ window.AppMarket = (function () {
         setTimeout(function () { bitti(true); }, 1200);
       }
     };
+  }
+
+  function reklamVarMi() {
+    var r = window.AppReklam;
+    return !!(r && typeof r.hazirMi === 'function' && r.hazirMi());
   }
 
   function reklamsizMi() {
@@ -191,7 +200,7 @@ window.AppMarket = (function () {
   // Reklam izleyerek bu temaya kalici indirim ac. Satin alinana kadar durur.
   function indirimAc(id, bitti) {
     bitti = bitti || function () {};
-    if (!TEMA[id] || sahipMi(id) || indirimliMi(id)) { bitti(false); return; }
+    if (!TEMA[id] || sahipMi(id) || indirimliMi(id) || !reklamVarMi()) { bitti(false); return; }
     window.AppReklam.odulluIzle(function (basarili) {
       if (!basarili) { bitti(false); return; }
       kayit.ri.push(id);
@@ -817,21 +826,27 @@ window.AppMarket = (function () {
   }
 
   // ---------------------------------------------------------------
-  // GUNLUK HEDIYE — reklam izleyerek gunde bir kez
+  // GUNLUK HEDIYE — gunde bir kez. Reklam altyapisi varsa reklamla,
+  // yoksa (ilk surum) dogrudan verilir.
   // ---------------------------------------------------------------
   function hediyeHazirMi() { return kayit.h !== bugun(); }
+
+  function hediyeVer() {
+    var j = HEDIYE_JETON[0] + Math.floor(Math.random() * (HEDIYE_JETON[1] - HEDIYE_JETON[0] + 1));
+    j = Math.round(j / 10) * 10;
+    window.AppGold.add(j);
+    kayit.h = bugun();
+    yaz();
+    return { jeton: j };
+  }
 
   function hediyeAl(bitti) {
     bitti = bitti || function () {};
     if (!hediyeHazirMi()) { bitti(null); return; }
+    if (!reklamVarMi()) { bitti(hediyeVer()); return; }
     window.AppReklam.odulluIzle(function (basarili) {
-      if (!basarili) { bitti(null); return; }
-      var j = HEDIYE_JETON[0] + Math.floor(Math.random() * (HEDIYE_JETON[1] - HEDIYE_JETON[0] + 1));
-      j = Math.round(j / 10) * 10;
-      window.AppGold.add(j);
-      kayit.h = bugun();
-      yaz();
-      bitti({ jeton: j });
+      if (!basarili || !hediyeHazirMi()) { bitti(null); return; }
+      bitti(hediyeVer());
     });
   }
 
@@ -886,6 +901,7 @@ window.AppMarket = (function () {
     hediyeHazirMi: hediyeHazirMi,
     hediyeAl: hediyeAl,
     hediyeKalanMs: hediyeKalanMs,
+    reklamVarMi: reklamVarMi,
     reklamsizMi: reklamsizMi,
     reklamsizYap: reklamsizYap,
 

@@ -425,7 +425,7 @@ window.MarketEkran = (function () {
            window.CoinSVG(true) + (indirimli ? '<s>' + temel + '</s>' : '') + '<span>' + f + '</span></button>';
       if (indirimli) {
         s += '<div class="mk-indirim acik">' + KAMERA_SVG + '%50 indirim aktif</div>';
-      } else {
+      } else if (M.reklamVarMi()) {   // reklam yoksa buton hic cikmaz
         s += '<button class="mk-indirim" data-eylem="indirim" data-id="' + tema.id + '">' +
              KAMERA_SVG + 'İzle · %50 indirim</button>';
       }
@@ -459,7 +459,8 @@ window.MarketEkran = (function () {
       el.hediye.className = 'mk-hediye';
       el.hediye.innerHTML =
         '<span class="mk-hediye-yazi">GÜNLÜK ÜCRETSİZ HEDİYE</span>' +
-        '<button class="mk-hediye-btn" data-eylem="hediye">' + KAMERA_SVG + 'REKLAM İZLE &amp; AÇ</button>';
+        '<button class="mk-hediye-btn" data-eylem="hediye">' +
+        (M.reklamVarMi() ? KAMERA_SVG + 'REKLAM İZLE &amp; AÇ' : 'AÇ') + '</button>';
     } else {
       el.hediye.className = 'mk-hediye alindi';
       el.hediye.innerHTML =

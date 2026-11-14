@@ -455,7 +455,7 @@
       if(!window.AppGold || window.AppGold.get() < price) return;
       const target = findHintSnake();
       if(!target) return;
-      window.AppGold.add(-price);
+      if(!window.AppGold.harca(price)) return;
       hintsUsedThisLevel++;
       renderHintBtn();
       const hg = kcBodyEls.get(target.id);

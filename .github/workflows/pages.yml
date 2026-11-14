@@ -32,7 +32,7 @@ jobs:
       - name: Yayin klasorunu hazirla
         run: |
           mkdir _site
-          cp index.html style.css manifest.json sw.js _site/
+          cp index.html gizlilik.html style.css manifest.json sw.js _site/
           cp launchericon-*.png _site/
           cp -r js img fonts _site/
           cp -r .well-known _site/

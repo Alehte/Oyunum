@@ -56,10 +56,8 @@
       return 0;
     },
     harca: function (miktar) {
-      if (!global.AppGold || typeof global.AppGold.add !== 'function') return false;
-      if (global.AppGold.get() < miktar) return false;
-      global.AppGold.add(-miktar);
-      return true;
+      if (!global.AppGold || typeof global.AppGold.harca !== 'function') return false;
+      return global.AppGold.harca(miktar);
     },
     kazan: function (miktar) {
       if (global.AppGold && typeof global.AppGold.add === 'function') global.AppGold.add(miktar);
