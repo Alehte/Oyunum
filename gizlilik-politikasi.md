@@ -4,7 +4,7 @@ Son güncelleme: 13 Kasım 2026
 
 Bu politika, **All in Together** oyununun (Android paketi `com.alehte.allintogether` ve web sürümü) kişisel verilerle ilgili uygulamalarını açıklar.
 
-Geliştirici: Talha Eralp
+Geliştirici: lehtestudios (Talha Eralp)
 İletişim: lehtestudios@gmail.com
 
 ## Kısaca
