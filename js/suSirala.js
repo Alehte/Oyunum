@@ -31,6 +31,47 @@
 
   /* ---------- 2) ZORLUK EĞRİSİ ---------- */
 
+  /* 101-250: iki mekanik (karisik sise boyu, perde) karistirilarak
+     kullanilir. Her 10'luk blokta 6 temel bolum (karisik boy + perde),
+     2 sadece boy (perdesiz) ve 2 sadece perde (tek boy) var. Ikinci
+     sadece-boy yuvasi cift bloklarda sert boy farkli (yalniz 3'luk ve
+     5'lik), tek bloklarda duz (dinlenme). Zorluk 101'den 250'ye
+     kademeli artar. */
+  var ILERI_TUR = ['temel', 'boyut', 'temel', 'karanlik', 'temel',
+                   'temel', null, 'temel', 'karanlik', 'temel'];
+
+  function ileriProfil(p) {
+    var n = p.bolumNo, i = n - 101;
+    var tekBlok = Math.floor(i / 10) % 2 === 1;
+    var tur = ILERI_TUR[i % 10] || (tekBlok ? 'duz' : 'boyut');
+    var sert = !ILERI_TUR[i % 10] && !tekBlok;
+    p.tur = tur;   /* temel | boyut | karanlik | duz */
+    p.renk = n <= 125 ? 9 : 10;
+
+    /* Sise boylari: tek boy, karisik ya da sert (yalniz 3'luk ve 5'lik) */
+    if (tur === 'karanlik' || tur === 'duz') p.kapasiteAgirlik = [0, 1, 0];
+    else if (sert)                          p.kapasiteAgirlik = [1, 0, 1];
+    else if (n <= 150)                      p.kapasiteAgirlik = [2, 3, 2];
+    else if (n <= 200)                      p.kapasiteAgirlik = [3, 2, 3];
+    else                                    p.kapasiteAgirlik = [3, 1, 3];
+
+    /* Perde: 4 siseden 7'ye; tek boy perdeli bolumde bir fazla */
+    if (tur === 'temel' || tur === 'karanlik') {
+      p.gizliTam = true;
+      p.gizliTup = Math.min(p.renk, 4 + Math.floor(i * 4 / 150) + (tur === 'karanlik' ? 1 : 0));
+    }
+
+    /* Tuzak bandi: cozum yolu boyunca olculur (tools/suSiralaUret.js).
+       Iki bos siseyle olculen degerler %0-15 arasinda; bant 0-10'dan
+       5-15'e kayar. Perdeli bolumde alt sinir bir puan geri cekilir,
+       duz bolum dinlenmedir. */
+    p.tuzakAlt = Math.round(i * 5 / 149);
+    p.tuzakUst = p.tuzakAlt + 10;
+    if (p.gizliTup > 0) p.tuzakAlt = Math.max(0, p.tuzakAlt - 1);
+    if (tur === 'duz') { p.tuzakAlt = 0; p.tuzakUst = 6; }
+    return p;
+  }
+
   function bolumProfili(n) {
     var p = {
       bolumNo: n,
@@ -49,19 +90,17 @@
     if (n === 12) { p.renk = 5; p.kapasiteAgirlik = [1, 1, 0]; p.tuzakUst = 5; p.tanitim = 'uclu'; return p; }
     if (n === 22) { p.renk = 5; p.kapasiteAgirlik = [1, 1, 1]; p.tuzakUst = 5; p.tanitim = 'besli'; return p; }
     if (n === 38) { p.renk = 6; p.bos = 1; p.tuzakUst = 15; p.tanitim = 'tekBos'; return p; }
+    if (n > 100) return ileriProfil(p);
 
     /* Renk sayisi: 23. bolumde tavana vurur */
     if (n <= 4)        p.renk = 2 + n;
     else if (n <= 11)  p.renk = Math.min(9, 5 + (n - 5));
-    else if (n <= 120) p.renk = 9;
-    else               p.renk = 10;
+    else               p.renk = 9;
 
     /* Sise boylari */
     if (n < 12)        p.kapasiteAgirlik = [0, 1, 0];
     else if (n < 22)   p.kapasiteAgirlik = [1, 3, 0];
-    else if (n < 121)  p.kapasiteAgirlik = [2, 3, 2];
-    else if (n < 161)  p.kapasiteAgirlik = [3, 1, 3];
-    else               p.kapasiteAgirlik = [1, 0, 1];
+    else               p.kapasiteAgirlik = [2, 3, 2];
 
     /* Bos sise: olcumler 6+ renkte tek bos sisenin bolumu cozumsuz
        yaptigini gosterdi. Bu yuzden tek bos sise sadece renk sayisi
@@ -70,18 +109,14 @@
 
     /* Gizli bolum sikligi */
     var gizliVar = false;
-    if (n >= 161)      gizliVar = true;
-    else if (n >= 121) gizliVar = (n % 4 !== 0);
-    else if (n >= 71)  gizliVar = (n % 2 === 0);
+    if (n >= 71)       gizliVar = (n % 2 === 0);
     else if (n >= 39)  gizliVar = (n % 3 === 0);
     else if (n >= 23)  gizliVar = (n % 4 === 0);
     else if (n >= 13)  gizliVar = (n % 5 === 0);
 
     if (gizliVar) {
       p.gizliTam = true;
-      if (n >= 161)      p.gizliTup = 7 + Math.floor((n - 161) / 40);
-      else if (n >= 121) p.gizliTup = 5 + Math.floor((n - 121) / 20);
-      else if (n >= 71)  p.gizliTup = 3 + Math.floor((n - 71) / 25);
+      if (n >= 71)       p.gizliTup = 3 + Math.floor((n - 71) / 25);
       else if (n >= 39)  p.gizliTup = 2 + Math.floor((n - 39) / 32);
       else if (n >= 23)  p.gizliTup = 1 + Math.floor((n - 23) / 16);
       else               p.gizliTup = 1;
@@ -91,7 +126,7 @@
     /* Tuzak orani: cozume giden yol boyunca olculur (sadece ilk hamlede
        degil). Bantlar gercek olcumlere gore ayarlandi. */
     var t = [[11, 0, 12], [21, 5, 20], [37, 15, 32], [70, 25, 42],
-             [120, 32, 50], [160, 38, 56], [99999, 42, 62]];
+             [100, 32, 50]];
     for (var i = 0; i < t.length; i++) {
       if (n <= t[i][0]) { p.tuzakAlt = t[i][1]; p.tuzakUst = t[i][2]; break; }
     }
