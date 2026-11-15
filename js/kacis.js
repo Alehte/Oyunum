@@ -255,6 +255,19 @@
       }
       inner.innerHTML = html;
 
+      // hediye kutulari (yalniz normal mod): dugumun dal susu OLMAYAN yaninda.
+      // Dal, sagdaki dugumde saga, digerlerinde sola cizilir; kutu tersine durur.
+      if(kcMode !== 'ozel' && window.AppHediye){
+        Object.keys(window.AppHediye.takvim).map(Number).filter(n => n <= KC_TOTAL).forEach(n => {
+          const k = window.AppHediye.kutu('kacis', n);
+          if(!k) return;
+          const pt = pts[n-1];
+          k.style.left = (pt.x + (pt.x > cx ? -54 : 54)) + 'px';
+          k.style.top = pt.y + 'px';
+          inner.appendChild(k);
+        });
+      }
+
       if(!wrap.dataset.scrollBound){
         wrap.dataset.scrollBound = '1';
         wrap.addEventListener('scroll', () => { kcMapScroll[kcMode] = wrap.scrollTop; }, {passive:true});
@@ -951,7 +964,7 @@
       outer.addEventListener('touchcancel', endPinch);
     })();
     // Yeniden boyutlanma mobilde (adres cubugu, klavye, donme) art arda cok kez
-    // tetiklenir. Tahtayi ve 100 dugumlu haritayi her olayda bastan kurmak yerine
+    // tetiklenir. Tahtayi ve bolum haritasini her olayda bastan kurmak yerine
     // olaylar durulunca BIR kez ciz; Kacis ekranlari sahnede degilse hic cizme
     // (harita ve bolum, ekrana girilirken zaten yeniden kurulur).
     let kcResizeTimer = null;
@@ -1199,6 +1212,14 @@
     document.getElementById('kcRetryBtn').addEventListener('click', () => {
       document.getElementById('kcFailOverlay').classList.remove('show');
       loadLevel(kcCurrentLevel);                 // canlar, ipucu fiyati ve tahta sifirlanir
+    });
+    // Bastan basla: Tekrar Dene ile ayni sifirlama; bolum no ve coin degismez.
+    // Animasyon / kutlama / yenilgi sirasinda yok sayilir (yaris olmasin).
+    document.getElementById('kcBastanBtn').addEventListener('click', () => {
+      if(kcGliding > 0 || kcHearts <= 0) return;
+      if(kcOverlayEl.classList.contains('show')) return;
+      if(document.getElementById('kcFailOverlay').classList.contains('show')) return;
+      loadLevel(kcCurrentLevel);
     });
     document.getElementById('kcAdBtn').addEventListener('click', () => {
       // reklam entegrasyonu henuz yok

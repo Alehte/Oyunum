@@ -425,9 +425,10 @@
   // KAYIT SURUMU: ait_progress.surum. Kaydin bicimi degisirse KAYIT_SURUM bir
   // artirilir ve gocEt() icine "s < N ise ..." adimi eklenir. Adimlar sirayla
   // calisir; eski kayit hicbir zaman silinmez, yalnizca tamamlanir/cevrilir.
-  const KAYIT_SURUM = 1;
+  const KAYIT_SURUM = 2;
   function varsayilanIlerleme(){
-    return { surum: KAYIT_SURUM, unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {} };
+    return { surum: KAYIT_SURUM, unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {},
+             hediye: { kacis: {}, ss: {} } };
   }
   // Donen: { p: kayit, degisti: diske yeniden yazilmali mi }
   function gocEt(p){
@@ -446,6 +447,21 @@
       if(!p.ssYildiz || typeof p.ssYildiz !== 'object') p.ssYildiz = {};
       if(!p.ssoYildiz || typeof p.ssoYildiz !== 'object') p.ssoYildiz = {};
       p.surum = 1;
+      degisti = true;
+    }
+    // 1 -> 2: harita hediye kutulari (hediye.kacis / hediye.ss: { bolumNo: 1 }).
+    // Eksik ya da bozuk alan tamamlanir, gecerli isaretler korunur. Ayrica eski
+    // surumde Kacis 100 bolumdu ve unlocked 100'de tavan yapiyordu: 100. bolumu
+    // gecmis oyuncuda yeni 101. bolum acilir.
+    if(s < 2){
+      const nesneMi = function(o){ return !!o && typeof o === 'object' && !Array.isArray(o); };
+      if(!nesneMi(p.hediye)) p.hediye = {};
+      if(!nesneMi(p.hediye.kacis)) p.hediye.kacis = {};
+      if(!nesneMi(p.hediye.ss)) p.hediye.ss = {};
+      // surum 1'de nesne olmayan (null / sayi / dizi) ilerleme alanlari da onarilir
+      ['kacisHearts', 'ssYildiz', 'ssoYildiz'].forEach(function(a){ if(!nesneMi(p[a])) p[a] = {}; });
+      if(p.unlocked === 100 && p.kacisHearts && p.kacisHearts[100] > 0) p.unlocked = 101;
+      p.surum = 2;
       degisti = true;
     }
     return { p: p, degisti: degisti };
@@ -532,6 +548,84 @@
     Store.set('ait_progress', window.AppProgress);
   };
   setTimeout(function(){ if(window.AppGold) window.AppGold.render(); }, 0);
+
+  // --- harita hediye kutulari (Kacis + Su Sirala NORMAL modlari) ---
+  // Saf kurallar; tools/hediyeTest.js bu blogu keserek dener (DOM/global yok).
+  // HEDIYE-BASI
+  // Odul takvimi (oyun basina, TEK yer): bolum no -> jeton. Toplam 5200.
+  const HEDIYE_TAKVIM = { 20: 300, 40: 300, 60: 300, 80: 300, 100: 1000, 150: 1000, 200: 1000, 250: 1000 };
+  // "Gecilmis": Kacis -> kacisHearts[n] > 0 ('o' onekli ozel anahtarlar ayri)
+  // YA DA unlocked > n (bolum 0 kalple bitebilir: unlocked artar, kalp yazilmaz),
+  // Su Sirala -> ssYildiz[n] > 0. Boylece eski kayitlarda geriye donuk acilir.
+  function hediyeDurum(p, oyun, bolum){
+    if(oyun !== 'kacis' && oyun !== 'ss') return 'yok';
+    if(!Object.prototype.hasOwnProperty.call(HEDIYE_TAKVIM, bolum)) return 'yok';
+    const h = p && p.hediye && p.hediye[oyun];
+    if(!h || typeof h !== 'object' || Array.isArray(h)) return 'yok';   // taninmayan (daha yeni) bicim: dokunma
+    if(h[bolum]) return 'alindi';
+    const kayit = oyun === 'kacis' ? p.kacisHearts : p.ssYildiz;
+    if(kayit && kayit[bolum] > 0) return 'al';
+    if(oyun === 'kacis' && typeof p.unlocked === 'number' && isFinite(p.unlocked) && p.unlocked > Number(bolum)) return 'al';
+    return 'kilitli';
+  }
+  // Isareti p'ye koyar ve verilecek miktari dondurur (0 = verilmedi).
+  // Jetonu cagiran ekler; ikinci cagri 'alindi' gordugu icin 0 doner.
+  function hediyeAl(p, oyun, bolum){
+    if(hediyeDurum(p, oyun, bolum) !== 'al') return 0;
+    p.hediye[oyun][bolum] = 1;
+    return HEDIYE_TAKVIM[bolum];
+  }
+  // HEDIYE-SONU
+  // Yazim sirasi: isaret once bellekteki AppProgress'e konur, sonra AppGold.add
+  // altini ekleyip AppSaveProgress ile AYNI nesneyi tek Store.set'te yazar.
+  // Isaret ile jeton ayni yazimda diske gider: "jeton verildi, isaret yok"
+  // (cift odul) ya da tersi bir ara durum olusmaz.
+  window.AppHediye = {
+    takvim: HEDIYE_TAKVIM,
+    durum(oyun, bolum){ return hediyeDurum(window.AppProgress, oyun, bolum); },
+    al(oyun, bolum){
+      const miktar = hediyeAl(window.AppProgress, oyun, bolum);
+      if(miktar > 0) window.AppGold.add(miktar);
+      return miktar;
+    },
+    // Harita icin hazir kutu elemani (iki oyun ayni gorunumu kullanir).
+    // Takvim disi bolumde null. Konumu (style.left/top) cagiran verir.
+    kutu(oyun, bolum){
+      const ilk = hediyeDurum(window.AppProgress, oyun, bolum);
+      if(ilk === 'yok') return null;
+      const k = document.createElement('div');
+      k.setAttribute('role', 'button');
+      k.tabIndex = 0;
+      k.innerHTML = '<span class="hediye-ikon" aria-hidden="true"><span class="hediye-kapak"><span class="hediye-fiyonk"></span></span><span class="hediye-govde"></span></span>';
+      const miktar = HEDIYE_TAKVIM[bolum];
+      function yaz(d){
+        k.className = 'hediye-kutu hediye-' + d;
+        const ek = d === 'al' ? 'al' : d === 'alindi' ? 'alındı' : bolum + '. bölümü geçince açılır';
+        k.setAttribute('aria-label', bolum + '. bölüm hediyesi: ' + miktar + ' jeton — ' + ek);
+        if(d === 'al') k.removeAttribute('aria-disabled'); else k.setAttribute('aria-disabled', 'true');
+      }
+      function dokun(e){
+        e.preventDefault();
+        e.stopPropagation();   // alttaki dugum/harita tiklamasi bolum baslatmasin
+        const d = hediyeDurum(window.AppProgress, oyun, bolum);
+        if(d === 'al'){
+          if(window.AppHediye.al(oyun, bolum) > 0){
+            yaz('alindi');
+            k.classList.add('hediye-acildi');
+            window.AppFX.seq([[520, .12, .16, 0], [720, .12, .16, 110], [980, .22, .18, 220]], 'triangle');
+            window.AppFX.vibrate([18, 40, 18]);
+          }
+        } else if(d === 'kilitli'){
+          k.classList.remove('hediye-salla'); void k.offsetWidth; k.classList.add('hediye-salla');
+          window.AppFX.vibrate(12);
+        }
+      }
+      k.addEventListener('click', dokun);
+      k.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' ') dokun(e); });
+      yaz(ilk);
+      return k;
+    }
+  };
 
 // --- GEÇİCİ: masaüstü kaydırma yardımcısı ---
 (() => {

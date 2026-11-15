@@ -19,8 +19,73 @@
   var TOPLAM_BOLUM = 250;
   var OZEL_ACILIS = 20;      /* ozel bolumler bu bolum gecilince acilir */
 
+  // DOKUM-BASI  (saf: DOM'a dokunmaz; tools/dokumAnimTest.js bu blogu keser)
   /* Dokme animasyon sureleri (ms), aktarilan blok sayisina gore */
   var SURE = { 1: 600, 2: 800, 3: 1000, 4: 1000, 5: 1200 };
+
+  /* Dokum zamanlamasi ve bicimi: tum sabitler burada.
+     Evreler: git (kalkar, hedefin agzina yaklasir, egilir) -> [bekle]
+     -> akis (serit uzar; hedef dolar, kaynak bosalir, sise biraz daha egilir)
+     -> don (sise dogrulup yerine doner; serit bu sirada incelip biter).
+     git + akis + don = SURE[adet] (bekleme yoksa). */
+  var DOKUM = {
+    GIT: 200, DON: 200,
+    AC: 80,           /* akis seridinin agizdan asagi uzama suresi */
+    KAPA: 140,        /* seridin incelip bitme suresi (DON'dan uzun olamaz) */
+    ACI_ILK: 50,      /* yaklasinca egim (derece) */
+    ACI_SON: 62,      /* akis sonunda egim ... */
+    ACI_ARTIS: 26,    /* ... kaynak bosaldikca bu kadar artar (en fazla 88) */
+    DUDAK_BOSLUK: 38, /* dokme dudagi hedefin agzinin bu kadar ustunde durur (px) */
+    AZALT: 180        /* hareket azaltilmis: yalniz kisa solma (ms) */
+  };
+
+  /* Zaman plani (ms, dokum basindan). s: { azalt, kalan, kap, hedefSerbest }
+     kalan/kap: dokumden sonra kaynakta kalan katman / kaynagin kapasitesi.
+     hedefSerbest: hedefe suren onceki dolumun bitmesine kalan sure; yeni
+     dolum ondan once baslamaz (katmanlar arasinda bosluk gorunmesin). */
+  function dokumPlani(adet, s) {
+    if (s.azalt) {
+      return { azalt: true, toplam: DOKUM.AZALT, dolumBas: 0, dolumSure: DOKUM.AZALT, dolumBitis: DOKUM.AZALT };
+    }
+    var toplam = SURE[adet] || SURE[5];
+    var akis = Math.max(DOKUM.AC + 100, toplam - DOKUM.GIT - DOKUM.DON);
+    var bekle = Math.max(0, (s.hedefSerbest || 0) - (DOKUM.GIT + DOKUM.AC));
+    var akisBas = DOKUM.GIT + bekle;
+    var dolumBas = akisBas + DOKUM.AC;
+    var akisBitis = akisBas + akis;
+    var dolumSure = akisBitis - dolumBas;
+    var doluluk = s.kap > 0 ? s.kalan / s.kap : 0;
+    return {
+      azalt: false, git: DOKUM.GIT, bekle: bekle,
+      akisBas: akisBas, akisBitis: akisBitis,
+      dolumBas: dolumBas, dolumSure: dolumSure, dolumBitis: dolumBas + dolumSure,
+      birim: dolumSure / adet,
+      kapa: DOKUM.KAPA, don: DOKUM.DON, toplam: akisBitis + DOKUM.DON,
+      aciIlk: DOKUM.ACI_ILK, aciSon: DOKUM.ACI_SON + DOKUM.ACI_ARTIS * (1 - doluluk)
+    };
+  }
+
+  /* Konum hesabi. k, h: kaynak ve hedef sisenin tahtaya gore YERLESIM kutusu
+     ({left, top, width, height}; transform haric). Sise, dokme dudagi (hedefe
+     bakan ust kose) etrafinda doner; dudak hedefin agzinin tam ustune gider.
+     Akis seridi dudaktan camin tabanina iner: sivi katmanlari opak oldugu
+     ve hedef seridin onunde durdugu icin serit sivi yuzeyinde biter. */
+  function dokumGeometri(k, h, kat, oncekiUzunluk, adet) {
+    var sagaMi = (h.left + h.width / 2) > (k.left + k.width / 2);
+    var hedefX = h.left + h.width / 2;
+    var hedefY = h.top - DOKUM.DUDAK_BOSLUK;
+    var taban = h.top + h.height - 3;          /* camin ic tabani (kenarlik + pay) */
+    return {
+      yon: sagaMi ? 1 : -1,
+      origin: sagaMi ? '100% 0' : '0 0',
+      dx: hedefX - (sagaMi ? k.left + k.width : k.left),
+      dy: hedefY - k.top,
+      akisX: hedefX, akisY: hedefY, akisBoy: taban - hedefY,
+      yuzeyY: taban - oncekiUzunluk * kat,     /* dolum basinda sivi yuzeyi */
+      yuksel: adet * kat                       /* yuzeyin yukselecegi mesafe */
+    };
+  }
+  // DOKUM-SONU
 
   var oyun = null;
   var secili = -1;
@@ -139,6 +204,7 @@
      ============================================================ */
 
   function haritaCiz() {
+    oyundanCikis();   /* oyun ekranindan donuluyorsa yarim dokumleri kapat */
     var ic = $('ssPathInner');
     if (!ic) return;
     var p = ilerleme();
@@ -227,6 +293,18 @@
         for (var z = 0; z < 3; z++) metin += (z < yildiz ? '★' : '☆');
         ys.textContent = metin;
       }
+
+      /* Hediye kutusu: yol dugumden dikey cikar, kutu yaninda durur. Once
+         virajin dis tarafi; ekrana sigmiyorsa ic taraf. */
+      var kutu = global.AppHediye ? global.AppHediye.kutu('ss', bolumNo) : null;
+      if (kutu) {
+        var yon = nokta[0] >= orta ? 1 : -1;
+        var kx = nokta[0] + yon * 54;
+        if (kx < 22 || kx > genislik - 22) kx = nokta[0] - yon * 54;
+        kutu.style.left = kx + 'px';
+        kutu.style.top = nokta[1] + 'px';
+        ic.appendChild(kutu);
+      }
     }
 
     /* Acik olan en ust bolume kaydir */
@@ -273,6 +351,7 @@
   }
 
   function tahtaKur() {
+    dokumIptal();     /* tahta yeniden kuruluyor: suren dokumlerin geri cagrilari gecersiz */
     var tahta = $('ssTahta');
     if (!tahta) return;
     tahta.innerHTML = '';
@@ -525,11 +604,63 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
      agzinin tam ustune tasinir, sivi oradan akar.
      Hamle modele ANINDA islenir, animasyon ayri yurur; boylece
      oyuncu ayni anda baska siselere de dokunabilir.
+     Zaman plani ve konum hesabi en ustteki DOKUM blogunda (saf).
+     Yalniz transform/opacity canlanir; olcum dokum basinda bir kez.
      ============================================================ */
+
+  var dokumNesli = 0;          /* tahta kurulunca / oyundan cikinca artar */
+  var dokumZamanlari = {};     /* bekleyen zamanlayicilar (iptalde temizlenir) */
+  var dolumSonu = {};          /* hedef sise -> suren son dolumunun bitecegi an (ms) */
+  var kazanmaBekliyor = false; /* son dokum bitti, bolumBitti kisa beklemede */
+
+  /* kacis.js ile ayni desen: ayar sinifi ya da sistem tercihi */
+  function hareketAzMi() {
+    return !!(document.querySelector('.phone.reduced-motion') ||
+      (global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches));
+  }
+
+  /* Bu tahtaya ait zamanlayici: arada tahta yeniden kurulduysa hic calismaz,
+     boylece gec gelen geri cagri yeni bolumun DOM'una dokunmaz. */
+  function dokumZamanla(fn, ms) {
+    var nesil = dokumNesli;
+    var id = setTimeout(function () {
+      delete dokumZamanlari[id];
+      if (nesil === dokumNesli) fn();
+    }, ms);
+    dokumZamanlari[id] = true;
+  }
+
+  /* Suren dokumleri birakir; DOM'u cagiran (tahtaKur) modele gore yeniden kurar */
+  function dokumIptal() {
+    dokumNesli++;
+    for (var id in dokumZamanlari) clearTimeout(+id);
+    dokumZamanlari = {};
+    doken = {}; dolan = {}; dolumSonu = {}; akanSayisi = 0;
+    kazanmaBekliyor = false;
+  }
+
+  /* Oyun ekranindan cikis (geri dugmesi / telefon geri tusu haritaCiz'dan
+     gecer): yarim dokum varsa iptal et, tahtayi modele gore ciz. Model zaten
+     kazanilmissa zafer kaybolmasin: sonucu simdi isle (tam bir kez). */
+  function oyundanCikis() {
+    if (!oyun || (akanSayisi === 0 && !kazanmaBekliyor)) return;
+    secili = -1; perdeModu = false;
+    tahtaKur(); barYenile();
+    if (oyun.kazandiMi()) bolumBitti();
+  }
+
+  /* Sisenin tahtaya gore yerlesim kutusu. offset* transform'u saymaz:
+     secim kalkisi (translateY) olcumu kaydirmaz. yuva ve tahta konumlu. */
+  function yerlesim(tup) {
+    var yuva = tup.parentNode;
+    return { left: yuva.offsetLeft + tup.offsetLeft, top: yuva.offsetTop + tup.offsetTop,
+             width: tup.offsetWidth, height: tup.offsetHeight };
+  }
 
   function dokmeAnimasyonu(a, b) {
     var d = oyun.durum;
     var oncekiHedefUzunluk = d.tupler[b].length;
+    var oncekiKaynakUzunluk = d.tupler[a].length;
     var renk = d.tupler[a][d.tupler[a].length - 1];
 
     /* Hamleyi once modele isle: es zamanli hamleler cakismasin */
@@ -537,10 +668,12 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     if (!sonuc) return;
     var adet = sonuc.adet;
 
-    var toplam = SURE[adet] || SURE[5];
-    var egilme = 190;
-    var akisSuresi = Math.max(160, toplam - egilme * 2);
-    var birim = akisSuresi / adet;
+    var an = Date.now();
+    var plan = dokumPlani(adet, {
+      azalt: hareketAzMi(), kalan: d.tupler[a].length, kap: d.kaplar[a],
+      hedefSerbest: (dolumSonu[b] || 0) - an
+    });
+    dolumSonu[b] = an + plan.dolumBitis;
 
     doken[a] = true;
     dolan[b] = (dolan[b] || 0) + 1;
@@ -552,98 +685,104 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     var kaynakEl = tupElemani(a), hedefEl = tupElemani(b), tahta = $('ssTahta');
     if (!kaynakEl || !hedefEl || !tahta) { animasyonBitti(a, b, sonuc); return; }
 
-    var kr = kaynakEl.getBoundingClientRect();
-    var hr = hedefEl.getBoundingClientRect();
-    var tr = tahta.getBoundingClientRect();
+    var renkKodu = RENKLER[renk % RENKLER.length];
 
-    var sagaMi = (hr.left + hr.width / 2) > (kr.left + kr.width / 2);
-    var aci = sagaMi ? 68 : -68;
-
-    /* Dokme dudagi: hedefe bakan ust kose */
-    kaynakEl.style.transformOrigin = sagaMi ? '100% 0' : '0 0';
-    var dudakX = sagaMi ? kr.right : kr.left;
-    var dudakY = kr.top;
-
-    /* Dudagin gitmesi gereken yer: hedefin agzinin tam ustu */
-    var hedefDudakX = hr.left + hr.width / 2;
-    var hedefDudakY = hr.top - 38;
-
-    var dx = hedefDudakX - dudakX;
-    var dy = hedefDudakY - dudakY;
-
-    kaynakEl.classList.add('ss-dokuyor');
-    kaynakEl.style.transition = 'transform ' + egilme + 'ms cubic-bezier(.35,.05,.25,1)';
-    kaynakEl.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px) rotate(' + aci + 'deg)';
-
-    /* Akan sivi seridi: dudaktan hedefteki sivi yuzeyine kadar */
-    var akisEl = el('div', 'ss-akis', tahta);
-    akisEl.style.backgroundColor = RENKLER[renk % RENKLER.length];
-    akisEl.style.left = (hedefDudakX - tr.left - 3) + 'px';
-    akisEl.style.top = (hedefDudakY - tr.top) + 'px';
-
-    function yuzeyY(doluKatman) {
-      return hr.bottom - 3 - (doluKatman * katmanYuksekligi);
-    }
-    function akisBoyu(doluKatman) {
-      return Math.max(10, yuzeyY(doluKatman) - hedefDudakY);
-    }
-    /* Sivinin yuzeye carptigi yerde kucuk bir sicrama */
-    function sicrat(doluKatman) {
-      var sp = el('div', 'ss-sicrama', tahta);
-      sp.style.background = RENKLER[renk % RENKLER.length];
-      sp.style.left = (hedefDudakX - tr.left - 11) + 'px';
-      sp.style.top = (yuzeyY(doluKatman) - tr.top - 5) + 'px';
-      setTimeout(function () { if (sp.parentNode) sp.parentNode.removeChild(sp); }, 380);
-    }
-
-    setTimeout(function () {
-      akisEl.style.height = akisBoyu(oncekiHedefUzunluk) + 'px';
-      akisEl.classList.add('show');
-
-      var doldu = 0;
-      function birKatman() {
-        if (doldu >= adet) {
-          akisEl.classList.remove('show');
-          kaynakEl.style.transition = 'transform ' + egilme + 'ms cubic-bezier(.35,.05,.25,1)';
-          kaynakEl.style.transform = '';
-          setTimeout(function () {
-            if (akisEl.parentNode) akisEl.parentNode.removeChild(akisEl);
-            kaynakEl.classList.remove('ss-dokuyor');
-            kaynakEl.style.transition = '';
-            kaynakEl.style.transformOrigin = '';
-            animasyonBitti(a, b, sonuc);
-          }, egilme);
-          return;
-        }
-
-        var sonKaynak = kaynakEl.lastElementChild;
-        if (sonKaynak) sonKaynak.parentNode.removeChild(sonKaynak);
-
-        var yeniKatman = el('div', 'ss-sivi ss-dolan', hedefEl);
-        yeniKatman.style.height = katmanYuksekligi + 'px';
-        yeniKatman.style.setProperty('--ss-renk', RENKLER[renk % RENKLER.length]);
-
-        sicrat(oncekiHedefUzunluk + doldu);
-        doldu++;
-        akisEl.style.height = akisBoyu(oncekiHedefUzunluk + doldu) + 'px';
-        ses('dok');
-        setTimeout(birKatman, birim);
+    /* Katmanlar: hedefe gelecekler simdi eklenir ve sirayla alttan buyur,
+       kaynaktan gidecekler ustten baslayip sirayla kuculur. Ikisi ayni
+       cizelgeyi (CSS gecikmesi) paylasir: yuzey surekli yukselir / iner. */
+    hedefEl.classList.add('ss-dk-hedef');
+    for (var j = 0; j < adet; j++) {
+      var gecikme = plan.azalt ? 0 : plan.dolumBas + j * plan.birim;
+      var sure = plan.azalt ? plan.toplam : plan.birim;
+      var gelen = el('div', 'ss-sivi ss-dk-gelen', hedefEl);
+      gelen.style.height = katmanYuksekligi + 'px';
+      gelen.style.setProperty('--ss-renk', renkKodu);
+      gelen.style.setProperty('--dk-gec', gecikme + 'ms');
+      gelen.style.setProperty('--dk-sure', sure + 'ms');
+      var giden = kaynakEl.children[oncekiKaynakUzunluk - 1 - j];
+      if (giden) {
+        giden.classList.add('ss-dk-giden');
+        giden.style.setProperty('--dk-gec', gecikme + 'ms');
+        giden.style.setProperty('--dk-sure', sure + 'ms');
       }
-      birKatman();
-    }, egilme);
+      if (!plan.azalt) dokumZamanla(function () { ses('dok'); }, gecikme);
+    }
+
+    /* Hareket azaltma: sise yerinde kalir, katmanlar kisaca solar */
+    if (plan.azalt) {
+      ses('dok');
+      dokumZamanla(function () { animasyonBitti(a, b, sonuc); }, plan.toplam);
+      return;
+    }
+
+    var g = dokumGeometri(yerlesim(kaynakEl), yerlesim(hedefEl), katmanYuksekligi, oncekiHedefUzunluk, adet);
+
+    /* 1) git: kalkar, dudak hedefin agzina yaklasir, sise egilir */
+    kaynakEl.style.transformOrigin = g.origin;
+    kaynakEl.style.setProperty('--dk-x', g.dx.toFixed(1) + 'px');
+    kaynakEl.style.setProperty('--dk-y', g.dy.toFixed(1) + 'px');
+    kaynakEl.style.setProperty('--dk-aci', (plan.aciIlk * g.yon) + 'deg');
+    kaynakEl.style.setProperty('--dk-sure', plan.git + 'ms');
+    kaynakEl.classList.add('ss-dokuyor', 'ss-dk-git');
+
+    /* Akis seridi ve yuzeydeki sicrama: dokum basina bir kez olusur, sonda silinir */
+    var akisEl = el('div', 'ss-dk-akis', tahta);
+    akisEl.style.backgroundColor = renkKodu;
+    akisEl.style.left = g.akisX + 'px';
+    akisEl.style.top = g.akisY + 'px';
+    akisEl.style.height = g.akisBoy + 'px';
+    akisEl.style.setProperty('--dk-ac', DOKUM.AC + 'ms');
+    akisEl.style.setProperty('--dk-kapa', plan.kapa + 'ms');
+
+    var sicEl = el('div', 'ss-dk-sicrama', tahta);
+    el('i', '', sicEl).style.background = renkKodu;
+    sicEl.style.left = g.akisX + 'px';
+    sicEl.style.top = g.yuzeyY + 'px';
+    sicEl.style.setProperty('--dk-gec', plan.dolumBas + 'ms');
+    sicEl.style.setProperty('--dk-sure', plan.dolumSure + 'ms');
+    sicEl.style.setProperty('--dk-yuksel', (-g.yuksel) + 'px');
+
+    /* 2) akis: serit uzar, sise bosaldikca biraz daha egilir */
+    dokumZamanla(function () {
+      kaynakEl.style.setProperty('--dk-aci', (plan.aciSon * g.yon).toFixed(1) + 'deg');
+      kaynakEl.style.setProperty('--dk-sure', (plan.akisBitis - plan.akisBas) + 'ms');
+      kaynakEl.classList.add('ss-dk-dok');
+      akisEl.classList.add('show');
+      sicEl.classList.add('show');
+    }, plan.akisBas);
+
+    /* 3) don: serit incelip biter, sise dogrulup yerine doner */
+    dokumZamanla(function () {
+      akisEl.classList.add('bitis');
+      sicEl.classList.remove('show');
+      kaynakEl.style.setProperty('--dk-sure', plan.don + 'ms');
+      kaynakEl.classList.add('ss-dk-don');
+    }, plan.akisBitis);
+
+    dokumZamanla(function () {
+      if (akisEl.parentNode) akisEl.parentNode.removeChild(akisEl);
+      if (sicEl.parentNode) sicEl.parentNode.removeChild(sicEl);
+      kaynakEl.classList.remove('ss-dokuyor', 'ss-dk-git', 'ss-dk-dok', 'ss-dk-don');
+      kaynakEl.style.transformOrigin = '';
+      ['--dk-x', '--dk-y', '--dk-aci', '--dk-sure'].forEach(function (p) { kaynakEl.style.removeProperty(p); });
+      animasyonBitti(a, b, sonuc);
+    }, plan.toplam);
   }
 
   function animasyonBitti(a, b, sonuc) {
     delete doken[a];
     dolan[b] = (dolan[b] || 1) - 1;
-    if (dolan[b] <= 0) delete dolan[b];
+    if (dolan[b] <= 0) { delete dolan[b]; delete dolumSonu[b]; }
     akanSayisi = Math.max(0, akanSayisi - 1);
 
     /* Perde acilmis olabilir; kaynagi modele gore yeniden ciz.
        Hedefi ancak baska bir dokum ona akmiyorsa yeniden ciziyoruz. */
     var ka = tupElemani(a);
     if (ka) sivilariCiz(ka, a);
-    if (!dolan[b]) { var hb = tupElemani(b); if (hb) sivilariCiz(hb, b); }
+    if (!dolan[b]) {
+      var hb = tupElemani(b);
+      if (hb) { hb.classList.remove('ss-dk-hedef'); sivilariCiz(hb, b); }
+    }
 
     isaretleriYenile();
     tamamlanmaKontrol(a);
@@ -652,7 +791,11 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
 
     if (akanSayisi > 0) return;   /* baska dokum suruyorsa sonu bekle */
 
-    if (oyun.kazandiMi()) setTimeout(bolumBitti, 220);
+    if (oyun.kazandiMi()) {
+      if (kazanmaBekliyor) return;
+      kazanmaBekliyor = true;
+      dokumZamanla(function () { kazanmaBekliyor = false; bolumBitti(); }, 220);
+    }
     else if (!oyun.oynanabilirMi()) mesajGoster('Hamle kalmadı — geri al veya baştan başla');
   }
 
@@ -791,6 +934,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
   if (global.AppReset && global.AppReset.push) {
     global.AppReset.push(function () {
       if (global.AppProgress) { global.AppProgress.ssAcik = 1; global.AppProgress.ssYildiz = {}; global.AppProgress.ssJoker = null; }
+      dokumIptal();   /* gec dokum geri cagrilari bos oyuna dokunmasin */
       oyun = null;
     });
   }

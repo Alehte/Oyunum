@@ -782,7 +782,8 @@
   .hint-btn svg.bulb{width:17px; height:17px;}
   .hint-btn .price{display:inline-flex; align-items:center; gap:3px;}
   .hint-btn .price img{width:14px; height:14px;}
-  .kc-hint-row{display:flex; justify-content:center; padding:0 0 8px; position:relative; z-index:5;}
+  .kc-hint-row{display:flex; justify-content:center; align-items:center; gap:10px; padding:0 0 8px; position:relative; z-index:5;}
+  .kc-hint-row .ss-alt-btn{flex:none;}
   .kc-node-coins{position:absolute; transform:translate(-50%,0); display:flex; gap:3px; z-index:4;}
   .kc-node-coins img{width:12px; height:12px; display:block;}
   .kc-win-gold{display:flex; align-items:center; justify-content:center; gap:7px; margin-top:10px;
@@ -1136,6 +1137,65 @@
   45%{transform:scale(1.05,1); opacity:.6;}
   100%{transform:scale(1.5,.6); opacity:0;}}
 .phone.reduced-motion .ss-sicrama{animation:none; opacity:0;}
+
+/* --- NORMAL mod dokumu (suSiralaOyun.js). Ozel mod yukaridaki .ss-akis /
+   .ss-sicrama / .ss-dolan siniflarini kullanmaya devam eder; bunlar ona dokunmaz.
+   Yalniz transform/opacity canlanir. Sure ve konum JS'ten degisken olarak gelir:
+     --dk-x --dk-y --dk-aci --dk-sure : kaynak sisenin otelemesi, egimi, gecis suresi
+     --dk-gec --dk-sure               : katmanin / sicramanin gecikmesi ve suresi
+     --dk-ac --dk-kapa                : akis seridinin uzama / incelip bitme suresi
+     --dk-yuksel                      : sicramanin yuzeyle yukselecegi mesafe (eksi px)
+   Akis seridi hedef sisenin ARKASINDA (19 < 20) camin tabanina iner: opak
+   sivi katmanlari onu yuzeyin altinda saklar, serit hep yuzeyde biter. --- */
+.ss-tup.ss-dk-git{transform:translate(var(--dk-x), var(--dk-y)) rotate(var(--dk-aci));
+  transition:transform var(--dk-sure, .2s) cubic-bezier(.35,.05,.25,1);}
+.ss-tup.ss-dk-git.ss-dk-dok{transition-timing-function:linear;}
+.ss-tup.ss-dk-git.ss-dk-don{transform:none; transition:transform var(--dk-sure, .2s) cubic-bezier(.4,0,.3,1);}
+.ss-tup.ss-dk-hedef{z-index:20;}
+.ss-sivi.ss-dk-gelen{transform-origin:50% 100%; will-change:transform;
+  animation:ssDkDol var(--dk-sure, .15s) linear var(--dk-gec, 0ms) both;}
+.ss-sivi.ss-dk-giden{transform-origin:50% 100%; will-change:transform;
+  animation:ssDkBosal var(--dk-sure, .15s) linear var(--dk-gec, 0ms) both;}
+@keyframes ssDkDol{from{transform:scaleY(0);} to{transform:scaleY(1);}}
+@keyframes ssDkBosal{from{transform:scaleY(1);} to{transform:scaleY(0);}}
+.ss-dk-akis{position:absolute; width:8px; margin-left:-4px; z-index:19; overflow:hidden; pointer-events:none;
+  border-radius:4px 4px 6px 6px;
+  opacity:0; transform:scaleY(0); transform-origin:50% 0;
+  box-shadow:0 0 12px rgba(255,255,255,.28), inset -2.5px 0 5px rgba(0,0,0,.3),
+             inset 2px 0 4px rgba(255,255,255,.35);}
+.ss-dk-akis::after{content:''; position:absolute; left:0; right:0; top:-100%; bottom:-100%;
+  background:repeating-linear-gradient(180deg,
+    rgba(255,255,255,.32) 0 5px, rgba(255,255,255,0) 5px 17px);
+  animation:ssAkisKay .42s linear infinite;}
+.ss-dk-akis.show{opacity:.97; transform:none; will-change:transform, opacity;
+  transition:transform var(--dk-ac, 80ms) cubic-bezier(.3,.6,.4,1), opacity 60ms ease;}
+/* sonda serit agizdan kopar: alt uca dogru toplanip incelir */
+.ss-dk-akis.show.bitis{opacity:0; transform:scale(.3, 0); transform-origin:50% 100%;
+  transition:transform var(--dk-kapa, 140ms) ease-in, opacity var(--dk-kapa, 140ms) ease-in;}
+/* yuzeydeki sicrama: yuzeyle birlikte yukselir, kendi icinde dalgalanir */
+.ss-dk-sicrama{position:absolute; width:22px; height:10px; margin:-5px 0 0 -11px; z-index:21; pointer-events:none;
+  opacity:0; transition:opacity 80ms ease;
+  animation:ssDkYuksel var(--dk-sure, .3s) linear var(--dk-gec, 0ms) both;}
+.ss-dk-sicrama.show{opacity:.85;}
+.ss-dk-sicrama i{position:absolute; inset:0; border-radius:50%; animation:ssDkDalga .3s ease-out infinite;}
+@keyframes ssDkYuksel{from{transform:translateY(0);} to{transform:translateY(var(--dk-yuksel, 0px));}}
+@keyframes ssDkDalga{
+  0%{transform:scale(.4,.6); opacity:.9;}
+  60%{transform:scale(1.1,1); opacity:.6;}
+  100%{transform:scale(1.4,.6); opacity:.25;}}
+/* hareketi azalt: sise yerinde kalir, akis yok; katmanlar kisaca solar */
+@keyframes ssDkSolGir{from{opacity:0;} to{opacity:1;}}
+@keyframes ssDkSolCik{from{opacity:1;} to{opacity:0;}}
+.phone.reduced-motion .ss-sivi.ss-dk-gelen{animation-name:ssDkSolGir; animation-timing-function:ease;}
+.phone.reduced-motion .ss-sivi.ss-dk-giden{animation-name:ssDkSolCik; animation-timing-function:ease;}
+.phone.reduced-motion .ss-tup.ss-dk-git{transform:none; transition:none;}
+.phone.reduced-motion .ss-dk-akis, .phone.reduced-motion .ss-dk-sicrama{display:none;}
+@media (prefers-reduced-motion: reduce){
+  .ss-sivi.ss-dk-gelen{animation-name:ssDkSolGir; animation-timing-function:ease;}
+  .ss-sivi.ss-dk-giden{animation-name:ssDkSolCik; animation-timing-function:ease;}
+  .ss-tup.ss-dk-git{transform:none; transition:none;}
+  .ss-dk-akis, .ss-dk-sicrama{display:none;}
+}
 
 .ss-mesaj{position:relative; z-index:4; text-align:center; min-height:18px; padding:0 16px;
   font:600 12.5px/1.3 'Fredoka', sans-serif; color:#FBE7AE; opacity:0; transition:opacity .2s ease;}
@@ -1973,3 +2033,44 @@
     -webkit-background-clip:text; background-clip:text;
     color:transparent; -webkit-text-fill-color:transparent;
     filter:drop-shadow(0 2px 7px rgba(6,14,30,.75));}
+
+  /* =======================================================
+     HARITA HEDIYE KUTUSU — Kacis + Sirala Dur (normal mod)
+     Vurus alani 46px; cizim (govde + kapak + kurdele + fiyonk) 30px.
+     Durumlar: .hediye-kilitli / .hediye-al / .hediye-alindi
+     Animasyon yalnizca transform/opacity.
+     ======================================================= */
+  .hediye-kutu{position:absolute; transform:translate(-50%,-50%); width:46px; height:46px; z-index:5;
+    display:flex; align-items:center; justify-content:center; border-radius:12px;
+    cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent;}
+  .hediye-kutu:focus-visible{box-shadow:0 0 0 2px #FBE7AE;}
+  .hediye-kutu[aria-disabled="true"]{cursor:default;}
+  .hediye-ikon{position:relative; display:block; width:30px; height:28px;}
+  .hediye-govde{position:absolute; left:3px; right:3px; bottom:0; height:17px; border-radius:2px 2px 4px 4px;
+    background:linear-gradient(180deg, #E8657F 0%, #B93A58 100%); box-shadow:0 3px 6px -2px rgba(0,0,0,.55);}
+  .hediye-kapak{position:absolute; left:0; right:0; top:4px; height:8px; border-radius:3px; z-index:1;
+    background:linear-gradient(180deg, #F27C93 0%, #CF4767 100%); box-shadow:0 2px 3px rgba(0,0,0,.35);
+    transform-origin:0 100%; transition:transform .35s cubic-bezier(.34,1.56,.64,1);}
+  .hediye-govde::before, .hediye-kapak::before{content:''; position:absolute; left:50%; top:0; bottom:0;
+    width:5px; margin-left:-2.5px; background:#FBE7AE;}
+  .hediye-fiyonk{position:absolute; left:50%; top:-5px; width:0; height:0;}
+  .hediye-fiyonk::before, .hediye-fiyonk::after{content:''; position:absolute; top:0; width:7px; height:5px;
+    border:2px solid #FBE7AE; border-radius:50%;}
+  .hediye-fiyonk::before{right:0; transform:rotate(20deg);}
+  .hediye-fiyonk::after{left:0; transform:rotate(-20deg);}
+  /* kilitli: soluk, renksiz */
+  .hediye-kilitli .hediye-ikon{opacity:.55; filter:grayscale(1) brightness(.8);}
+  /* al: parlak, nabiz atar */
+  .hediye-al .hediye-ikon{filter:drop-shadow(0 0 6px rgba(251,231,174,.8)); animation:hediyeNabiz 1.6s ease-in-out infinite;}
+  /* alindi: kapak acik, kutu bos */
+  .hediye-alindi .hediye-ikon{opacity:.7;}
+  .hediye-alindi .hediye-kapak{transform:translate(-3px,-7px) rotate(-28deg);}
+  .hediye-alindi .hediye-govde{background:linear-gradient(180deg, #6E2236 0%, #A23450 55%, #B93A58 100%);}
+  .hediye-acildi .hediye-ikon{animation:hediyeAcildi .45s cubic-bezier(.34,1.56,.64,1);}
+  .hediye-salla .hediye-ikon{animation:hediyeSalla .4s ease;}
+  @keyframes hediyeNabiz{0%,100%{transform:translateY(0) scale(1);} 30%{transform:translateY(-4px) scale(1.07);} 55%{transform:translateY(0) scale(.97);}}
+  @keyframes hediyeAcildi{0%{transform:scale(1);} 40%{transform:scale(1.25);} 100%{transform:scale(1);}}
+  @keyframes hediyeSalla{0%,100%{transform:rotate(0);} 25%{transform:rotate(-9deg);} 50%{transform:rotate(8deg);} 75%{transform:rotate(-4deg);}}
+  .phone.reduced-motion .hediye-ikon{animation:none !important;}
+  .phone.reduced-motion .hediye-kapak{transition:none;}
+  @media (prefers-reduced-motion: reduce){ .hediye-ikon{animation:none !important;} .hediye-kapak{transition:none;} }

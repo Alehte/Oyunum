@@ -93,4 +93,104 @@ dene('goc iki kez calisinca ayni sonuc (idempotent)', () => {
   assert.deepStrictEqual(kopya(b.p), kopya(a));
 });
 
+// ---- 1 -> 2: hediye kutulari + Kacis 100. bolum tavani ----
+const surum1 = () => ({
+  surum: 1, unlocked: 37, best: 2048, gold: 4321, kacisHearts: { 1: 3, 20: 2, o20: 3 },
+  ssAcik: 41, ssYildiz: { 1: 3, 20: 1, 40: 2 }, ssJoker: { geri: 2 }, ssoAcik: 3, ssoYildiz: { 1: 1 },
+  tempoBest: 9000, market: { surum: 2, s: ['buz'], a: 'buz' }
+});
+
+dene('surum 1 kaydi -> 2: hediye eklenir, diger alanlar aynen', () => {
+  const eski = surum1();
+  const g = gocEt(kopya(eski));
+  assert.strictEqual(g.degisti, true);
+  assert.strictEqual(g.p.surum, 2);
+  assert.deepStrictEqual(kopya(g.p.hediye), { kacis: {}, ss: {} });
+  Object.keys(eski).filter(k => k !== 'surum').forEach(k => assert.deepStrictEqual(g.p[k], eski[k], 'alan degisti: ' + k));
+});
+
+dene('surumsuz cok eski kayit -> 2 (hediye dahil)', () => {
+  const g = gocEt({ unlocked: 4, best: 512, gold: 10 });
+  assert.strictEqual(g.p.surum, 2);
+  assert.strictEqual(g.p.unlocked, 4);
+  assert.strictEqual(g.p.gold, 10);
+  assert.deepStrictEqual(kopya(g.p.hediye), { kacis: {}, ss: {} });
+});
+
+dene('bozuk hediye alanlari onarilir, gecerli degerler korunur', () => {
+  [null, 5, 'x', [], [1, 2]].forEach(b => {
+    const k = surum1(); k.hediye = b;
+    assert.deepStrictEqual(kopya(gocEt(k).p.hediye), { kacis: {}, ss: {} }, JSON.stringify(b));
+  });
+  const k1 = surum1(); k1.hediye = { kacis: { 20: 1 }, ss: [3] };
+  assert.deepStrictEqual(kopya(gocEt(k1).p.hediye), { kacis: { 20: 1 }, ss: {} });
+  const k2 = surum1(); k2.hediye = { kacis: 'bozuk', ss: { 40: 1 } };
+  assert.deepStrictEqual(kopya(gocEt(k2).p.hediye), { kacis: {}, ss: { 40: 1 } });
+  const k3 = surum1(); k3.hediye = { ss: null };
+  assert.deepStrictEqual(kopya(gocEt(k3).p.hediye), { kacis: {}, ss: {} });
+});
+
+dene('unlocked 100 + kacisHearts[100] > 0 -> 101', () => {
+  const k = surum1(); k.unlocked = 100; k.kacisHearts[100] = 1;
+  assert.strictEqual(gocEt(k).p.unlocked, 101);
+  const s0 = { unlocked: 100, kacisHearts: { 100: 3 } };   // surumsuz kayitta da
+  assert.strictEqual(gocEt(s0).p.unlocked, 101);
+});
+
+dene('unlocked 100 ama 100 gecilmemis -> 100 kalir', () => {
+  const k = surum1(); k.unlocked = 100; k.kacisHearts[99] = 3;
+  assert.strictEqual(gocEt(k).p.unlocked, 100);
+  const k2 = surum1(); k2.unlocked = 100; k2.kacisHearts.o100 = 3;   // ozel anahtar sayilmaz
+  assert.strictEqual(gocEt(k2).p.unlocked, 100);
+});
+
+dene('unlocked 57 -> ayni kalir', () => {
+  const k = surum1(); k.unlocked = 57; k.kacisHearts[100] = 3;
+  assert.strictEqual(gocEt(k).p.unlocked, 57);
+});
+
+dene('surum 3 kaydi dokunulmaz', () => {
+  const k = { surum: 3, unlocked: 100, kacisHearts: { 100: 3 }, hediye: 'gelecek-bicim' };
+  const g = gocEt(kopya(k));
+  assert.strictEqual(g.degisti, false);
+  assert.deepStrictEqual(kopya(g.p), k);
+});
+
+dene('1 -> 2 gocu idempotent (101 bir kez, hediye isaretleri korunur)', () => {
+  const k = surum1(); k.unlocked = 100; k.kacisHearts[100] = 2; k.hediye = { kacis: { 20: 1 } };
+  const a = gocEt(k).p;
+  const b = gocEt(kopya(a));
+  assert.strictEqual(b.degisti, false);
+  assert.strictEqual(b.p.unlocked, 101);
+  assert.deepStrictEqual(kopya(b.p), kopya(a));
+  assert.deepStrictEqual(kopya(b.p.hediye), { kacis: { 20: 1 }, ss: {} });
+});
+
+dene('surum 1 kaydinda bozuk kacisHearts / ssYildiz / ssoYildiz -> {} (gecerliler korunur)', () => {
+  [null, 5, 'x', [], [3, 2]].forEach(b => {
+    const k = surum1(); k.kacisHearts = b; k.ssYildiz = b; k.ssoYildiz = b;
+    const g = gocEt(k);
+    ['kacisHearts', 'ssYildiz', 'ssoYildiz'].forEach(a => assert.deepStrictEqual(kopya(g.p[a]), {}, a + ' ' + JSON.stringify(b)));
+    const b2 = gocEt(kopya(g.p));
+    assert.strictEqual(b2.degisti, false);
+    assert.deepStrictEqual(kopya(b2.p), kopya(g.p));
+  });
+  const k = surum1(); k.ssYildiz = [1];
+  const g = gocEt(k).p;
+  assert.deepStrictEqual(kopya(g.kacisHearts), { 1: 3, 20: 2, o20: 3 });
+  assert.deepStrictEqual(kopya(g.ssoYildiz), { 1: 1 });
+  assert.deepStrictEqual(kopya(g.ssYildiz), {});
+});
+
+dene('surumsuz kayitta dizi kacisHearts da onarilir', () => {
+  assert.deepStrictEqual(kopya(gocEt({ kacisHearts: [1, 2] }).p.kacisHearts), {});
+});
+
+dene('varsayilan kayitta hediye bos ve surum 2', () => {
+  const v = varsayilan();
+  assert.strictEqual(v.surum, 2);
+  assert.deepStrictEqual(kopya(v.hediye), { kacis: {}, ss: {} });
+  assert.notStrictEqual(varsayilan().hediye, varsayilan().hediye);   // her cagrida yeni nesne
+});
+
 console.log(gecti + ' test gecti' + (process.exitCode ? ', HATA VAR' : ''));
