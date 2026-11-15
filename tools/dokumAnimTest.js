@@ -179,7 +179,7 @@ function ortamKur(secenek) {
       throw new Error('desteklenmeyen secici: ' + sel);
     }
   };
-  const sayac = { kayit: 0, altin: 0 };
+  const sayac = { kayit: 0, altin: 0, altinToplam: 0, ses: 0 };
   const ctx = {
     document, console, Math, JSON,
     setTimeout: zaman.setTimeout, clearTimeout: zaman.clearTimeout,
@@ -187,7 +187,8 @@ function ortamKur(secenek) {
     matchMedia: q => ({ matches: q.indexOf('reduce') >= 0 && durumlar.sistemAzalt }),
     AppProgress: {},
     AppSaveProgress: () => { sayac.kayit++; },
-    AppGold: { render() {}, add() { sayac.altin++; } },
+    AppGold: { render() {}, add(n) { sayac.altin++; sayac.altinToplam += n; } },
+    AppFX: { tone() {}, seq() { sayac.ses++; }, vibrate() { sayac.titresim = (sayac.titresim || 0) + 1; } },   // seq yalniz 'kazan' sesinde
     SuSiralaJoker: {
       TURLER: ['geriAl'], TANIM: { geriAl: { ad: 'Geri Al', fiyat: 25 } },
       adet: () => 9, geriAl: o => ({ ok: o.geriAl() })
@@ -411,6 +412,128 @@ dene('hareket azaltma (sistem tercihi, matchMedia)', () => {
   assert.ok(!o.tup(0).classList.contains('ss-dokuyor'));
   o.zaman.ilerle(DOKUM.AZALT);
   o.modeleUygunMu();
+});
+
+console.log('Oyundan cikis: kayit / sunum ayrimi (sahte DOM)');
+const YILDIZ_ODUL = [0, 10, 20, 30];
+const KAZAN = () => D([[0, 0, 0], [0], [1, 1], []]);   // tek dokumle (1 -> 0) kazanilir
+// kayit tam bir kez ve dogru: yildiz, ssAcik, coin (ilk gecis = yildiz odulu)
+function tekKayit(o, yildiz) {
+  const p = o.ctx.AppProgress;
+  assert.strictEqual(o.sayac.kayit, 1, 'ilerleme kaydi tam bir kez');
+  assert.strictEqual(p.ssYildiz[1], yildiz, 'ssYildiz yazildi');
+  assert.strictEqual(p.ssAcik, 2, 'sonraki bolum acildi');
+  assert.strictEqual(o.sayac.altin, 1, 'coin tam bir kez eklendi');
+  assert.strictEqual(o.sayac.altinToplam, YILDIZ_ODUL[yildiz], 'coin yildiz kuralina gore');
+}
+// cikis yapilmis ekranda sunum yok: kart, kazan sesi, kart konfetisi
+function sunumYok(o) {
+  const kutu = o.ctx.document.getElementById('ssSonuc');
+  assert.ok(!o.sonucAcik(), 'sonuc karti show almadi');
+  assert.strictEqual(o.sayac.ses, 0, 'kazan sesi calmadi');
+  assert.ok(!o.sayac.titresim, 'titresim yok');
+  assert.strictEqual(kutu.children.filter(c => c._cls.includes('ss-konfeti')).length, 0, 'kart konfetisi yok');
+}
+
+dene('(1) kazandiran dokum ortasinda cikis: kart/ses yok, yildiz+ssAcik+coin tam bir kez', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(100);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  tekKayit(o, y); sunumYok(o);
+  o.zaman.ilerle(500);   // kart konfetisi zamanlayicilari (120/380ms) gecti
+  sunumYok(o);
+});
+
+dene('(2) hizli art arda iki cikis: tek kayit', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(100);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.ctx.SuSiralaOyun.haritaCiz();
+  tekKayit(o, y); sunumYok(o);
+});
+
+dene('(3) cikis + tum zamanlayicilar ilerler: ek kayit / ek kart yok', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(100);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.zaman.ilerle(10000);
+  tekKayit(o, y); sunumYok(o);
+});
+
+dene('(4) zafer bekleme penceresinde cikis: tek kayit, kart yok', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(SURE[1] + 50);    // dokum bitti, 220ms kazanma beklemesi suruyor
+  assert.strictEqual(o.sayac.kayit, 0);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  tekKayit(o, y); sunumYok(o);
+  o.zaman.ilerle(5000);
+  tekKayit(o, y); sunumYok(o);
+});
+
+dene('(5) normal bitis (kart acik) sonrasi cikis: ek odul yok', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(3000);
+  assert.ok(o.sonucAcik(), 'normal bitiste kart acik');
+  assert.strictEqual(o.sayac.ses, 1, 'normal bitiste kazan sesi');
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.zaman.ilerle(5000);
+  tekKayit(o, y);
+  assert.strictEqual(o.sayac.ses, 1, 'cikista ikinci kazan sesi yok');
+});
+
+dene('(6) cikip ayni bolume yeniden giris: kart kapali, akan yok, oynanabilir, odul tekrar yazilmaz', () => {
+  const o = ortamKur();
+  o.baslat(KAZAN());
+  o.dok(1, 0);
+  const y = o.oyun.yildiz();
+  o.zaman.ilerle(100);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.baslat(D([[0, 0], [0], [0], [1, 1, 1, 1], []]));   // iki dokumle kazanilir
+  o.zaman.ilerle(5000);          // eski oyunun gec zamanlayicilari
+  assert.ok(!o.sonucAcik(), 'yeni bolumde kart kapali');
+  o.modeleUygunMu(); renklerDogru(o);
+  assert.ok(!o.oyun.kazandiMi());
+  tekKayit(o, y);
+  o.dok(1, 0);
+  assert.strictEqual(o.oyun.hamleSayisi, 1, 'yeni bolum oynanabilir');
+  o.zaman.ilerle(3000);
+  // akanSayisi eskiden kalsaydi dokum bitince de joker kilitli kalirdi
+  assert.ok(!o.jokerKapali(), 'akanSayisi 0, joker acik');
+  o.dok(2, 0);
+  o.zaman.ilerle(3000);
+  assert.ok(o.sonucAcik(), 'yeni oyunda normal bitis karti');
+  assert.strictEqual(o.sayac.kayit, 2, 'yeni oyun ornegi kendi kaydini yapar');
+  assert.strictEqual(o.sayac.altinToplam, YILDIZ_ODUL[Math.max(y, o.oyun.yildiz())], 'yildiz farki kurali');
+});
+
+dene('(7) kazandirmayan dokum ortasinda cikis: kayit yok', () => {
+  const o = ortamKur();
+  o.baslat(D([[0, 0], [0], [1, 1], [1], []]));
+  o.dok(1, 0);
+  o.zaman.ilerle(100);
+  o.ctx.SuSiralaOyun.haritaCiz();
+  o.zaman.ilerle(5000);
+  assert.ok(!o.oyun.kazandiMi());
+  assert.strictEqual(o.sayac.kayit, 0);
+  assert.strictEqual(o.sayac.altin, 0);
+  assert.strictEqual(o.ctx.AppProgress.ssYildiz[1], undefined);
+  sunumYok(o);
 });
 
 console.log(gecti + ' test gecti' + (process.exitCode ? ', HATA VAR' : ''));

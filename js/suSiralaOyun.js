@@ -641,12 +641,13 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
 
   /* Oyun ekranindan cikis (geri dugmesi / telefon geri tusu haritaCiz'dan
      gecer): yarim dokum varsa iptal et, tahtayi modele gore ciz. Model zaten
-     kazanilmissa zafer kaybolmasin: sonucu simdi isle (tam bir kez). */
+     kazanilmissa zafer kaybolmasin: sonucu simdi isle (tam bir kez).
+     Yalniz kayit: cikilan ekranda kart, ses, konfeti yok. */
   function oyundanCikis() {
     if (!oyun || (akanSayisi === 0 && !kazanmaBekliyor)) return;
     secili = -1; perdeModu = false;
     tahtaKur(); barYenile();
-    if (oyun.kazandiMi()) bolumBitti();
+    if (oyun.kazandiMi()) bolumKaydet();
   }
 
   /* Sisenin tahtaya gore yerlesim kutusu. offset* transform'u saymaz:
@@ -666,6 +667,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     /* Hamleyi once modele isle: es zamanli hamleler cakismasin */
     var sonuc = oyun.dok(a, b);
     if (!sonuc) return;
+    kaydedilenOyun = null;   /* yeni hamle: bu oyunun sonraki zaferi yeniden yazilabilir */
     var adet = sonuc.adet;
 
     var an = Date.now();
@@ -806,7 +808,15 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
   /* yildiz sayisina gore toplam altin (0..3 yildiz) */
   var YILDIZ_ODUL = [0, 10, 20, 30];
 
-  function bolumBitti() {
+  /* Sonucu yazilmis oyun ornegi: ayni zafer ikinci kez yazilmaz / odenmez.
+     Bastan Basla ayni nesneyi sifirlar; o yuzden her yeni hamle bunu temizler. */
+  var kaydedilenOyun = null;
+
+  /* Kayit / odul kismi (sunum yok): yildiz, ssAcik, coin, harita vurgusu.
+     Bu oyun ornegi icin zaten yazildiysa ya da kazanilmadiysa null doner. */
+  function bolumKaydet() {
+    if (!oyun || !oyun.kazandiMi() || kaydedilenOyun === oyun) return null;
+    kaydedilenOyun = oyun;
     var p = ilerleme();
     var no = oyun.bolum.bolumNo;
     var yildiz = oyun.yildiz();
@@ -821,6 +831,16 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     var odul = YILDIZ_ODUL[yildiz] - YILDIZ_ODUL[oncekiYildiz];
     if (odul > 0) { if (global.AppGold) global.AppGold.add(odul); }
     else odul = 0;
+
+    sonKazanilan = Math.min(TOPLAM_BOLUM, no + 1);
+    return { no: no, yildiz: yildiz, odul: odul };
+  }
+
+  /* Normal bitis: once kayit, sonra sunum (ses, kart, konfeti) */
+  function bolumBitti() {
+    var k = bolumKaydet();
+    if (!k) return;
+    var no = k.no, yildiz = k.yildiz, odul = k.odul;
 
     ses('kazan');
 
@@ -841,8 +861,6 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     var sonrakiBtn = $('ssSonrakiBtn');
     if (sonrakiBtn) sonrakiBtn.style.display = no < TOPLAM_BOLUM ? 'block' : 'none';
     kutu.classList.add('show');
-
-    sonKazanilan = Math.min(TOPLAM_BOLUM, no + 1);
 
     /* Kart acilirken konfeti: once merkezden, sonra iki yandan */
     setTimeout(function () {

@@ -983,7 +983,16 @@
       return { cols: Math.round(KC_VIEW_START.cols + t*(KC_VIEW_END.cols - KC_VIEW_START.cols)),
                rows: Math.round(KC_VIEW_START.rows + t*(KC_VIEW_END.rows - KC_VIEW_START.rows)) };
     }
-    function loadLevel(n){
+    // GIRIS-BASI
+    // Bolum girisinde hangi yazi gosterilir? yeniden=true (Tekrar Dene / Bastan basla) -> normal modda hicbiri.
+    function girisGosterilsinMi(mod, bolum, yeniden){
+      if(yeniden) return { intro: false, ipucu: null };
+      if(mod === 'ozel') return { intro: false, ipucu: 'Tüm yılanları çıkar' };
+      return { intro: bolum === 1, ipucu: bolum === 10 ? 'Basılı tut ve yolunu gör' : null };
+    }
+    // GIRIS-SONU
+    let kcIntroTimer = null;
+    function loadLevel(n, yeniden){
       kcCurrentLevel = n;
       kcSnakeLayerEl.innerHTML = '';
       kcArrowEl = null;          // katman temizlendi, ok elemani da gitti
@@ -1017,19 +1026,23 @@
       kcCenterOnHero();
       kcMaybeShowSwipeHint();
       kcHideTip();
+      // onceki girisin intro'su ve bekleyen 2 sn'lik gizleme zamanlayicisi yeni duruma karismasin
+      clearTimeout(kcIntroTimer);
+      kcIntroSplash.classList.remove('show');
+      const giris = girisGosterilsinMi(kcMode, n, !!yeniden);
       if(kcMode === 'ozel'){
-        kcShowTip('Tüm yılanları çıkar', 1600);
+        if(giris.ipucu) kcShowTip(giris.ipucu, 1600);
         return;
       }
-      if(n === 10) kcShowTip('Basılı tut ve yolunu gör', 1500);
-      startHeroAttention(n);
-      if(n === 1){
+      if(giris.ipucu) kcShowTip(giris.ipucu, 1500);
+      startHeroAttention(yeniden ? 0 : n);   // yeniden baslatmada intro beklenmez
+      if(giris.intro){
         // ozel mod yukarida dondugu icin burasi yalnizca normal 1. bolum
         kcIntroTitle.innerHTML = twoTone('Bölüm 1', '#7FDB98', '#3FA65C');
         const introGoal = document.querySelector('.kc-intro-goal');
         if(introGoal) introGoal.textContent = '!Yeşil Yılanı Kurtar!';
         kcIntroSplash.classList.add('show');
-        setTimeout(() => kcIntroSplash.classList.remove('show'), 2000);
+        kcIntroTimer = setTimeout(() => kcIntroSplash.classList.remove('show'), 2000);
       }
     }
 
@@ -1211,7 +1224,7 @@
     });
     document.getElementById('kcRetryBtn').addEventListener('click', () => {
       document.getElementById('kcFailOverlay').classList.remove('show');
-      loadLevel(kcCurrentLevel);                 // canlar, ipucu fiyati ve tahta sifirlanir
+      loadLevel(kcCurrentLevel, true);           // canlar, ipucu fiyati ve tahta sifirlanir
     });
     // Bastan basla: Tekrar Dene ile ayni sifirlama; bolum no ve coin degismez.
     // Animasyon / kutlama / yenilgi sirasinda yok sayilir (yaris olmasin).
@@ -1219,7 +1232,7 @@
       if(kcGliding > 0 || kcHearts <= 0) return;
       if(kcOverlayEl.classList.contains('show')) return;
       if(document.getElementById('kcFailOverlay').classList.contains('show')) return;
-      loadLevel(kcCurrentLevel);
+      loadLevel(kcCurrentLevel, true);
     });
     document.getElementById('kcAdBtn').addEventListener('click', () => {
       // reklam entegrasyonu henuz yok
