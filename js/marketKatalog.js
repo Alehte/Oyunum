@@ -1,7 +1,7 @@
 // marketKatalog.js — MARKET tema tablosu. SAF VERI, mantik yok.
 //
 // TEK URUN = TEK TEMA
-// Bir tema satin alininca / kutudan cikinca DORT oyuna birden uygulanir:
+// Bir tema satin alininca / kutudan cikinca BES oyuna birden uygulanir:
 //   deri : Kacis? yilan derisi            (ozel bolumlerde uygulanmaz)
 //   karo : Hedef 2048 karolari + tahta zemini
 //   blok : Tempo Kup bloklari
@@ -12,6 +12,7 @@
 //            ender    -> vazo (Cini), iksir (Vitray)
 //            efsanevi -> kum saati (Lav)
 //          Siluet yalnizca gorseldir; kapasite ve dokme degismez.
+//   isik : Ates Bocegi isigi, tozu, izi ve karanlik tonu
 //   ton  : ana ekran + market icin renk tonu (yari saydam CSS gradyani)
 // Oyunlarin kendi arka planlari temayla DEGISMEZ.
 //
@@ -55,7 +56,7 @@ window.AppMarketKatalog = (function () {
     // VARSAYILAN — ucretsiz, bastan sahip, seckiye/kutuya girmez
     // =============================================================
     { id: 'varsayilan', ad: 'Varsayılan', nadirlik: 'siradan', varsayilan: true,
-      ton: YERLESIK, deri: YERLESIK, karo: YERLESIK, blok: YERLESIK, sise: YERLESIK },
+      ton: YERLESIK, deri: YERLESIK, karo: YERLESIK, blok: YERLESIK, sise: YERLESIK, isik: YERLESIK },
 
     // #############################################################
     // TOPRAK (siradan) — islak kakao toprak, kuru kil, yosun. Mat ve sicak.
@@ -63,6 +64,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'toprak', ad: 'Toprak', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(175deg, rgba(122,84,46,.46) 0%, rgba(58,40,22,.50) 55%, rgba(30,20,12,.62) 100%)' },
+      isik: { isik: '#F2C078', toz: '#FFE0A8', vurgu: '#9CCB6A', karanlik: '#120C07',
+              iz: { renk: '#D99A4E', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'benekli', renkler: ['#9C7A55', '#7E5F3E', '#B69572', '#6A4C30'], kontur: '#3B2A1B' },
         // hedef: topragin altindaki canli kok — kesintili yesil damar
@@ -90,6 +93,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'buz', ad: 'Buz', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(178deg, rgba(110,170,215,.40) 0%, rgba(40,84,128,.40) 55%, rgba(14,30,52,.58) 100%)' },
+      isik: { isik: '#BFE9FF', toz: '#E6F7FF', vurgu: '#7FF0D0', karanlik: '#060D16',
+              iz: { renk: '#8FD0F2', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'duz', renkler: ['#BBD4E4', '#9CBBD0', '#D8E9F2', '#8AA9C0'], kontur: '#3E5C74', parlak: true },
         // hedef: buzun altindan gorunen tek canli renk — parlak yesil kontur
@@ -117,6 +122,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'kumsal', ad: 'Kumsal', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(180deg, rgba(64,150,144,.42) 0%, rgba(60,104,104,.32) 50%, rgba(196,160,104,.46) 100%)' },
+      isik: { isik: '#FFE9B8', toz: '#FFF4D6', vurgu: '#58C4B4', karanlik: '#08110F',
+              iz: { renk: '#5CC4B4', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'duz', renkler: ['#E0C79B', '#C9A87A', '#8FC7C2', '#EFDCBC'], kontur: '#6E5B41' },
         // hedef: govdeye sarilmis deniz yosunu seridi
@@ -144,6 +151,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'murekkep', ad: 'Mürekkep', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(176deg, rgba(86,96,200,.44) 0%, rgba(52,40,128,.46) 55%, rgba(12,14,36,.66) 100%)' },
+      isik: { isik: '#AEB8FF', toz: '#DCE1FF', vurgu: '#7FE0C0', karanlik: '#07081A',
+              iz: { renk: '#7C88F0', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'benekli', renkler: ['#4A4A8C', '#38386E', '#5E5EA6', '#2C2C56'], kontur: '#16162E' },
         // hedef: kagida dusen ikinci renk — govde boyunca yesil murekkep cizgisi
@@ -171,6 +180,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'kiraz', ad: 'Kiraz', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(174deg, rgba(190,60,92,.42) 0%, rgba(110,24,52,.46) 55%, rgba(26,8,14,.64) 100%)' },
+      isik: { isik: '#FFB3C6', toz: '#FFDCE5', vurgu: '#A6E08A', karanlik: '#14060B',
+              iz: { renk: '#F07A98', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'seritli', renkler: ['#A8324E', '#7E203A', '#C45E76', '#5E1428'], kontur: '#3A0C1C' },
         // hedef: meyvenin sapi ve yapragi — govdeyi saran yesil kontur
@@ -198,6 +209,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'sedef', ad: 'Sedef', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(168deg, rgba(244,190,220,.38) 0%, rgba(190,180,230,.30) 50%, rgba(150,196,236,.36) 100%)' },
+      isik: { isik: '#F6E6FF', toz: '#FFF0FA', vurgu: '#9FE0D0', karanlik: '#120D16',
+              iz: { renk: '#E3A9C8', sekil: 'cizgi' } },
       deri: {
         govde: { tip: 'kristal', renkler: ['#F0E3EA', '#E6D8E8', '#DCE7F2', '#F2E6D8'], kontur: '#B596B0', parlak: true },
         // hedef: inci icindeki yesil su — ince yesil cizgi
@@ -228,6 +241,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'cini', ad: 'Çini', nadirlik: 'ender',
       ton: { css: 'linear-gradient(172deg, rgba(58,121,198,.50) 0%, rgba(30,74,140,.44) 52%, rgba(46,158,158,.38) 100%)' },
+      isik: { isik: '#9FD0FF', toz: '#F4EEDF', vurgu: '#FFA892', karanlik: '#06101E',
+              iz: { renk: '#3F9FE0', sekil: 'damla' } },
       deri: {
         govde: { tip: 'seritli', renkler: ['#2E5FA8', '#3F79C6', '#2E9E9E', '#25518E'], kontur: '#F4EEDF' },
         // hedef: beyaz cini uzerine yesil firca borduru
@@ -257,6 +272,8 @@ window.AppMarketKatalog = (function () {
     {
       id: 'vitray', ad: 'Vitray', nadirlik: 'ender',
       ton: { css: 'linear-gradient(160deg, rgba(196,58,74,.40) 0%, rgba(126,58,180,.38) 48%, rgba(58,110,196,.42) 100%)' },
+      isik: { isik: '#FFD36A', toz: '#FFE9A8', vurgu: '#4FD98A', karanlik: '#0A0B12',
+              iz: { renkler: ['#E8566A', '#5C8FE8', '#A06AE0'], sekil: 'baklava' } },
       deri: {
         govde: { tip: 'kristal', renkler: ['#C43A4A', '#3A6EC4', '#7E3AB4', '#D8A32E'], kontur: '#0E1018', parlak: true },
         // hedef: yesil cam panel, kursun konturun yerini yesil aliyor
@@ -288,6 +305,9 @@ window.AppMarketKatalog = (function () {
     {
       id: 'lav', ad: 'Lav', nadirlik: 'efsanevi',
       ton: { css: 'linear-gradient(172deg, rgba(190,44,26,.44) 0%, rgba(96,26,12,.48) 50%, rgba(240,110,24,.42) 100%)' },
+      isik: { isik: '#FFA64A', toz: '#FFD98A', vurgu: '#7CF0A0', karanlik: '#120604',
+              iz: { renk: '#FF6A2A', renk2: '#FFD07A', sekil: 'akkor' },
+              animasyon: 'lav' },
       deri: {
         animasyon: 'lav',
         govde: { tip: 'seritli', renkler: ['#2A1C16', '#E8622A', '#3A2620', '#FF8A3C'], kontur: '#0A0503', parlak: true },

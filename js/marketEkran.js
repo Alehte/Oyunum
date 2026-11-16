@@ -164,6 +164,56 @@ window.MarketEkran = (function () {
     M.siseYaz(tahta, tema.sise);
   }
 
+  // --- Ates Bocegi: 58x58 inline SVG (tasarim 7.6). Renk gercek isikCoz
+  // ciktisindan gelir; engel (dal) renkleri CSS'te (.mo-ates-dal) sabittir.
+  var ATES_SAYAC = 0;
+  function hexKaristir(a, b, t) {
+    var s = '#', i, x, y, v;
+    for (i = 1; i < 7; i += 2) {
+      x = parseInt(a.substr(i, 2), 16); y = parseInt(b.substr(i, 2), 16);
+      v = Math.round(x + (y - x) * t);
+      s += (v < 16 ? '0' : '') + v.toString(16);
+    }
+    return s;
+  }
+  function atesIzDamgalari(iz) {
+    var s = '', i, x, a, r = iz.renkler || [iz.renk, iz.renk2];
+    for (i = 0; i < 4; i++) {
+      x = 24 - i * 5.5; a = (0.6 - i * 0.12).toFixed(2);
+      if (iz.sekil === 'damla') {
+        s += '<path d="M' + x + ' 26.2C' + (x + 1.8) + ' 28.4 ' + (x + 1.8) + ' 30.2 ' + x + ' 30.6C' + (x - 1.8) + ' 30.2 ' + (x - 1.8) + ' 28.4 ' + x + ' 26.2Z" fill="' + iz.renk + '" opacity="' + a + '"/>';
+      } else if (iz.sekil === 'baklava') {
+        s += '<path d="M' + x + ' 26.6L' + (x + 2.2) + ' 29L' + x + ' 31.4L' + (x - 2.2) + ' 29Z" fill="' + r[i % r.length] + '" stroke="#0E1018" stroke-width=".5" opacity="' + a + '"/>';
+      } else if (iz.sekil === 'akkor') {
+        s += '<rect x="' + (x - 2.6) + '" y="27.2" width="5.2" height="3.6" rx="1.8" fill="' + iz.renk + '" opacity="' + a + '"/>' +
+             '<rect x="' + (x - 2.2) + '" y="28.3" width="4.4" height="1.4" rx=".7" fill="' + iz.renk2 + '" opacity="' + a + '"/>';
+      } else {
+        s += '<rect x="' + (x - 2.6) + '" y="28.1" width="5.2" height="1.8" rx=".9" fill="' + iz.renk + '" opacity="' + a + '"/>';
+      }
+    }
+    return s;
+  }
+  function atesSahnesi(ana, tema) {
+    var sahne = kutu('mo-sahne mo-ates', ana);
+    var p = M.isikCoz(tema.isik), id = 'moAtes' + (++ATES_SAYAC);
+    var zemin = hexKaristir('#24402F', p.isik, 0.12);
+    sahne.innerHTML =
+      '<svg viewBox="0 0 58 58" aria-hidden="true" focusable="false">' +
+      '<defs><radialGradient id="' + id + 'z"><stop offset=".72" stop-color="' + zemin + '"/><stop offset="1" stop-color="' + zemin + '" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="' + p.isik + '" stop-opacity=".7"/><stop offset="1" stop-color="' + p.isik + '" stop-opacity="0"/></radialGradient></defs>' +
+      '<rect width="58" height="58" rx="9" fill="' + p.karanlik + '"/>' +
+      '<circle cx="29" cy="29" r="25" fill="url(#' + id + 'z)"/>' +
+      '<g class="mo-ates-iz' + (p.animasyon ? ' ' + p.animasyon : '') + '">' + atesIzDamgalari(p.iz) + '</g>' +
+      '<circle cx="31" cy="29" r="10" fill="url(#' + id + 'p)"/>' +
+      '<circle cx="39.5" cy="21.5" r="1.4" fill="' + p.toz + '"/><circle cx="43" cy="35" r="1.4" fill="' + p.toz + '"/><circle cx="37" cy="41.5" r="1.4" fill="' + p.toz + '"/>' +
+      '<ellipse cx="29.5" cy="26" rx="1.6" ry="4" fill="#fff" opacity=".55" transform="rotate(-30 29.5 26)"/>' +
+      '<ellipse cx="32.5" cy="25" rx="1.6" ry="4" fill="#fff" opacity=".45" transform="rotate(25 32.5 25)"/>' +
+      '<ellipse cx="30" cy="29.5" rx="4.4" ry="3.2" fill="' + p.isik + '"/>' +
+      '<circle cx="35" cy="29" r="2" fill="#1A1410"/>' +
+      '<path class="mo-ates-dal" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
+      '</svg>';
+  }
+
   function onizlemeKur(kap, tema) {
     kap.innerHTML = '';
     M.tonYaz(kap, tema.ton);
@@ -171,6 +221,7 @@ window.MarketEkran = (function () {
     yilanSahnesi(kap, tema);
     blokSahnesi(kap, tema);
     siseSahnesi(kap, tema);
+    atesSahnesi(kap, tema);
   }
 
   // HTML metniyle basilan kartlardaki bos onizleme kutularini doldur
@@ -367,7 +418,7 @@ window.MarketEkran = (function () {
            '<div class="mk-sonuc-ust">' + (sonuc.satinAlma ? 'Satın alındı' : 'Yeni tema') + ' · ' + n.ad + '</div>' +
            '<div class="mk-onizleme" data-tema="' + t.id + '"></div>' +
            '<div class="mk-sonuc-ad">' + t.ad + '</div>' +
-           '<div class="mk-sonuc-kat">Dört oyunda birden geçerli</div>' +
+           '<div class="mk-sonuc-kat">Beş oyunda birden geçerli</div>' +
            '<button class="mk-sonuc-btn" data-eylem="sec" data-id="' + t.id + '">Hemen Kullan</button>' +
            '<button class="mk-sonuc-btn ikincil" data-eylem="sonucKapat">Sonra</button></div>';
     } else if (sonuc.tur === 'iade') {

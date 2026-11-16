@@ -223,7 +223,7 @@ window.AppMarket = (function () {
     return true;
   }
 
-  // Temayi sec: dort oyuna birden uygulanir.
+  // Temayi sec: bes oyuna birden uygulanir.
   function sec(id) {
     if (!sahipMi(id)) return false;
     kayit.a = id;
@@ -251,6 +251,32 @@ window.AppMarket = (function () {
     var veri = (t && t[tur]) ? t[tur] : YERLESIK;
     onbellek[tur] = veri;
     return veri;
+  }
+
+  // ---------------------------------------------------------------
+  // ISIK — Ates Bocegi paleti. SAF islev: yerlesik / eksik / bozuk girdiyi
+  // tam palete tamamlar (atesBocegiOyun.js paletTamamla ile birebir uyumlu).
+  // iz.sekil tanimsizsa 'cizgi'; iz.renk yoksa iz.renkler[0] renk olur.
+  // ---------------------------------------------------------------
+  var ISIK_YERLESIK = {
+    isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D',
+    iz: { renk: '#FFD24A', sekil: 'cizgi' }, animasyon: ''
+  };
+  var IZ_SEKILLER = { cizgi: 1, damla: 1, baklava: 1, akkor: 1 };
+  function hexMi(x) { return typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x); }
+
+  function isikCoz(v) {
+    var y = ISIK_YERLESIK, o = { iz: {} };
+    if (!v || typeof v !== 'object' || v.yerlesik) v = {};
+    ['isik', 'toz', 'vurgu', 'karanlik'].forEach(function (a) { o[a] = hexMi(v[a]) ? v[a] : y[a]; });
+    var iz = (v.iz && typeof v.iz === 'object') ? v.iz : {};
+    var ler = Array.isArray(iz.renkler) && iz.renkler.length > 0 && iz.renkler.every(hexMi) ? iz.renkler.slice() : null;
+    o.iz.renk = hexMi(iz.renk) ? iz.renk : (ler ? ler[0] : y.iz.renk);
+    o.iz.renk2 = hexMi(iz.renk2) ? iz.renk2 : (ler && ler[1] ? ler[1] : o.iz.renk);
+    o.iz.sekil = IZ_SEKILLER[iz.sekil] === 1 ? iz.sekil : 'cizgi';
+    if (ler) o.iz.renkler = ler;
+    o.animasyon = typeof v.animasyon === 'string' ? v.animasyon : '';
+    return o;
   }
 
   // ---------------------------------------------------------------
@@ -690,6 +716,7 @@ window.AppMarket = (function () {
     siseTemasiUygula(document.getElementById('ssoSiseler'));
     blokTemasiUygula(document.getElementById('tpBoard'));
     blokTemasiUygula(document.getElementById('tpTray'));
+    if (window.AtesBocegiOyun) window.AtesBocegiOyun.temaDegisti();
   }
 
   // ---------------------------------------------------------------
@@ -913,6 +940,7 @@ window.AppMarket = (function () {
     siseTemasiUygula: siseTemasiUygula,
     siseKapakSvg: siseKapakSvg,
     temayiYay: temayiYay,
+    isikCoz: isikCoz,
 
     // onizleme (verilen tema parcasi)
     tonYaz: tonYaz,
