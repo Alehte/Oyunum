@@ -16,6 +16,9 @@
     ssoOyun: document.getElementById('screen-susirala-ozeloyun'),
     market: document.getElementById('screen-market'),
   };
+  // Ates Bocegi ekrani: index.html'de yoksa (henuz eklenmediyse) atlanir.
+  const atesEkran = document.getElementById('screen-ates');
+  if(atesEkran) screens.ates = atesEkran;
   let navBusy = false, pendingPop = null, settleTimer = null, settleDone = null;
   let aktifEkran = 'home';   // sahnedeki (ya da su an sahneye giren) ekranin anahtari
   // baslangicta home disindaki her ekran sahne disi: DevTools'ta Elements
@@ -82,7 +85,8 @@
     kacis:    ['js/bolumler.js', 'js/ozel_bolumler.js', 'js/kacis.js'],
     susirala: ['js/suSirala.js', 'js/suSiralaBolumler.js', 'js/suSiralaOzel.js', 'js/suSiralaJoker.js',
                'js/suSiralaOyun.js', 'js/suSiralaOzelOyun.js'],
-    tempo:    ['js/tempoCekirdek.js', 'js/tempoKup.js']
+    tempo:    ['js/tempoCekirdek.js', 'js/tempoKup.js'],
+    ates:     ['js/atesBocegi.js', 'js/atesBocegiOyun.js']
   };
   const metinSozu = {};     // src -> Promise<kaynak metni>
   const calisti = {};       // src -> true
@@ -183,6 +187,13 @@
   document.getElementById('ssOyunBackBtn').addEventListener('click', () => slideBack('ssOyun','ssHarita'));
   document.getElementById('ssoHaritaBackBtn').addEventListener('click', () => slideBack('ssoHarita','ssMod'));
   document.getElementById('ssoOyunBackBtn').addEventListener('click', () => slideBack('ssoOyun','ssoHarita'));
+  // Ates Bocegi: eleman yoksa baglanmaz (index.html'e sonra eklenir)
+  const cardAtes = document.getElementById('cardAtes'), atesBackBtn = document.getElementById('atesBackBtn');
+  if(cardAtes) cardAtes.addEventListener('click', () => oyunAc('ates', () => { slideForward('home','ates'); window.AtesBocegiOyun.start(); }));
+  if(atesBackBtn) atesBackBtn.addEventListener('click', () => {
+    if(window.AtesBocegiOyun) window.AtesBocegiOyun.dur();
+    slideBack('ates','home');
+  });
   // --- telefonun kendi geri tusu ile senkron ---
   // Her ileri gecis tarayici gecmisine bir kayit ekler. Ekrandaki geri dugmesi
   // de bu kaydi geri sarar (history.go); boylece gecmiste olu kayit birikmez
@@ -344,6 +355,8 @@
     }
   };
   window.AppReset = [];   // her oyun kendi sifirlama islevini buraya ekler
+  // Ates Bocegi: acik kosuyu atar, HUD'u sifirlar (modul yuklenmediyse bir sey yapmaz)
+  window.AppReset.push(function(){ if(window.AtesBocegiOyun && window.AtesBocegiOyun.sifirla) window.AtesBocegiOyun.sifirla(); });
 
   const phoneEl = document.querySelector('.phone');
   function applyMotion(){ phoneEl.classList.toggle('reduced-motion', !!settings.reducedMotion); }
@@ -425,10 +438,10 @@
   // KAYIT SURUMU: ait_progress.surum. Kaydin bicimi degisirse KAYIT_SURUM bir
   // artirilir ve gocEt() icine "s < N ise ..." adimi eklenir. Adimlar sirayla
   // calisir; eski kayit hicbir zaman silinmez, yalnizca tamamlanir/cevrilir.
-  const KAYIT_SURUM = 2;
+  const KAYIT_SURUM = 3;
   function varsayilanIlerleme(){
     return { surum: KAYIT_SURUM, unlocked: 1, best: 0, gold: 0, kacisHearts: {}, ssAcik: 1, ssYildiz: {}, ssJoker: null, ssoAcik: 1, ssoYildiz: {},
-             hediye: { kacis: {}, ss: {} } };
+             hediye: { kacis: {}, ss: {} }, atesBocegi: { rekor: 0, kosu: 0, gun: '', gunJeton: 0 } };
   }
   // Donen: { p: kayit, degisti: diske yeniden yazilmali mi }
   function gocEt(p){
@@ -464,6 +477,22 @@
       p.surum = 2;
       degisti = true;
     }
+    // 2 -> 3: Ates Bocegi (rekor, bitirilen kosu, gun 'YYYY-AA-GG', o gun
+    // odenen ham kosu jetonu). Nesne degilse varsayilan; nesneyse bozuk alt
+    // alanlar tek tek onarilir, gecerli degerler ve taninmayan alanlar korunur.
+    if(s < 3){
+      const ab = p.atesBocegi;
+      if(!ab || typeof ab !== 'object' || Array.isArray(ab)){
+        p.atesBocegi = { rekor: 0, kosu: 0, gun: '', gunJeton: 0 };
+      } else {
+        ['rekor', 'kosu', 'gunJeton'].forEach(function(a){
+          if(typeof ab[a] !== 'number' || !isFinite(ab[a]) || ab[a] < 0) ab[a] = 0;
+        });
+        if(typeof ab.gun !== 'string') ab.gun = '';
+      }
+      p.surum = 3;
+      degisti = true;
+    }
     return { p: p, degisti: degisti };
   }
   window.AppKayitGoc = { gocEt: gocEt, varsayilan: varsayilanIlerleme, surum: KAYIT_SURUM };
@@ -480,7 +509,7 @@
   // Jeton kutulari. Miktar degisince sayi akarak guncellenir ve GORUNEN ekranin
   // kutusunun altinda yuzen bir +N / -N yazisi cikar (yalnizca transform/opacity).
   const GOLD_PILLS = ['goldPillHome','goldPillMap','goldPillMode','goldPillOzel','goldPillBoards','goldPill2048','goldPillTempo',
-    'goldPillLevel','goldPillSsMode','goldPillSsHarita','goldPillSsOyun','goldPillSsoHarita','goldPillSsoOyun','goldPillMarket'];
+    'goldPillLevel','goldPillSsMode','goldPillSsHarita','goldPillSsOyun','goldPillSsoHarita','goldPillSsoOyun','goldPillMarket','goldPillAtes'];
   let goldGorunen = null, goldRaf = 0, goldHedef = 0;
   function goldYaz(deger){
     GOLD_PILLS.forEach(id => {

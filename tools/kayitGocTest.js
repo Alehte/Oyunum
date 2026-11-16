@@ -104,14 +104,14 @@ dene('surum 1 kaydi -> 2: hediye eklenir, diger alanlar aynen', () => {
   const eski = surum1();
   const g = gocEt(kopya(eski));
   assert.strictEqual(g.degisti, true);
-  assert.strictEqual(g.p.surum, 2);
+  assert.strictEqual(g.p.surum, SURUM);
   assert.deepStrictEqual(kopya(g.p.hediye), { kacis: {}, ss: {} });
   Object.keys(eski).filter(k => k !== 'surum').forEach(k => assert.deepStrictEqual(g.p[k], eski[k], 'alan degisti: ' + k));
 });
 
-dene('surumsuz cok eski kayit -> 2 (hediye dahil)', () => {
+dene('surumsuz cok eski kayit -> guncel surum (hediye dahil)', () => {
   const g = gocEt({ unlocked: 4, best: 512, gold: 10 });
-  assert.strictEqual(g.p.surum, 2);
+  assert.strictEqual(g.p.surum, SURUM);
   assert.strictEqual(g.p.unlocked, 4);
   assert.strictEqual(g.p.gold, 10);
   assert.deepStrictEqual(kopya(g.p.hediye), { kacis: {}, ss: {} });
@@ -149,7 +149,7 @@ dene('unlocked 57 -> ayni kalir', () => {
   assert.strictEqual(gocEt(k).p.unlocked, 57);
 });
 
-dene('surum 3 kaydi dokunulmaz', () => {
+dene('surum 3 (guncel) kaydi dokunulmaz', () => {
   const k = { surum: 3, unlocked: 100, kacisHearts: { 100: 3 }, hediye: 'gelecek-bicim' };
   const g = gocEt(kopya(k));
   assert.strictEqual(g.degisti, false);
@@ -186,11 +186,112 @@ dene('surumsuz kayitta dizi kacisHearts da onarilir', () => {
   assert.deepStrictEqual(kopya(gocEt({ kacisHearts: [1, 2] }).p.kacisHearts), {});
 });
 
-dene('varsayilan kayitta hediye bos ve surum 2', () => {
+dene('varsayilan kayitta hediye bos ve surum 3', () => {
   const v = varsayilan();
-  assert.strictEqual(v.surum, 2);
+  assert.strictEqual(v.surum, 3);
   assert.deepStrictEqual(kopya(v.hediye), { kacis: {}, ss: {} });
   assert.notStrictEqual(varsayilan().hediye, varsayilan().hediye);   // her cagrida yeni nesne
+});
+
+// ---- 2 -> 3: Ates Bocegi (rekor, kosu, gunluk jeton sayaci) ----
+const AB_VARS = { rekor: 0, kosu: 0, gun: '', gunJeton: 0 };
+const surum2 = () => ({
+  surum: 2, unlocked: 57, best: 2048, gold: 4321, kacisHearts: { 1: 3, 20: 2, o20: 3 },
+  ssAcik: 41, ssYildiz: { 1: 3, 20: 1 }, ssJoker: { geri: 2 }, ssoAcik: 3, ssoYildiz: { 1: 1 },
+  hediye: { kacis: { 20: 1 }, ss: {} }, boards: [5, 6], bests: { b5: 8000 }, g2048active: { s: 5, t: [[0, 2]] },
+  tempoBest: 9000, tempoOyun: null, market: { surum: 2, s: ['buz'], a: 'buz', h: '2026-11-13' }
+});
+
+dene('surum 2 kaydi -> 3: atesBocegi eklenir, diger alanlar aynen', () => {
+  const eski = surum2();
+  const g = gocEt(kopya(eski));
+  assert.strictEqual(g.degisti, true);
+  assert.strictEqual(g.p.surum, 3);
+  assert.deepStrictEqual(kopya(g.p.atesBocegi), AB_VARS);
+  Object.keys(eski).filter(k => k !== 'surum').forEach(k => assert.deepStrictEqual(g.p[k], eski[k], 'alan degisti: ' + k));
+  assert.deepStrictEqual(Object.keys(g.p).sort(), Object.keys(eski).concat('atesBocegi').sort());
+});
+
+dene('surum 2 kaydinda unlocked 100 + kacisHearts[100] -> 100 kalir (1->2 adimi tekrar calismaz)', () => {
+  const k = surum2(); k.unlocked = 100; k.kacisHearts[100] = 3;
+  assert.strictEqual(gocEt(k).p.unlocked, 100);
+});
+
+dene('surumsuz kayit -> 3 (atesBocegi dahil)', () => {
+  const g = gocEt({ unlocked: 4, gold: 10 });
+  assert.strictEqual(g.p.surum, 3);
+  assert.strictEqual(g.p.gold, 10);
+  assert.deepStrictEqual(kopya(g.p.atesBocegi), AB_VARS);
+});
+
+dene('surum 1 kaydi -> 3 (hediye + atesBocegi)', () => {
+  const g = gocEt(surum1());
+  assert.strictEqual(g.p.surum, 3);
+  assert.deepStrictEqual(kopya(g.p.hediye), { kacis: {}, ss: {} });
+  assert.deepStrictEqual(kopya(g.p.atesBocegi), AB_VARS);
+});
+
+dene('bozuk atesBocegi (null / sayi / metin / dizi / true) -> varsayilan', () => {
+  [null, 5, 'x', [], [1, 2], true].forEach(b => {
+    const k = surum2(); k.atesBocegi = b;
+    assert.deepStrictEqual(kopya(gocEt(k).p.atesBocegi), AB_VARS, JSON.stringify(b));
+  });
+  const s0 = { gold: 3, atesBocegi: 7 };   // surumsuz kayitta da
+  assert.deepStrictEqual(kopya(gocEt(s0).p.atesBocegi), AB_VARS);
+});
+
+dene('bozuk alt alanlar tek tek onarilir, gecerliler korunur', () => {
+  const k = surum2();
+  k.atesBocegi = { rekor: 1234, kosu: -1, gun: 20261116, gunJeton: 'on' };
+  assert.deepStrictEqual(kopya(gocEt(k).p.atesBocegi), { rekor: 1234, kosu: 0, gun: '', gunJeton: 0 });
+  const k2 = surum2();
+  k2.atesBocegi = { rekor: NaN, kosu: 12, gun: '2026-11-16', gunJeton: Infinity };
+  assert.deepStrictEqual(kopya(gocEt(k2).p.atesBocegi), { rekor: 0, kosu: 12, gun: '2026-11-16', gunJeton: 0 });
+  const k3 = surum2();
+  k3.atesBocegi = { kosu: '5', gun: null };   // eksik + metin sayi
+  assert.deepStrictEqual(kopya(gocEt(k3).p.atesBocegi), AB_VARS);
+  const k4 = surum2();
+  k4.atesBocegi = { rekor: 16000, kosu: 3, gun: '2026-11-15', gunJeton: 190 };
+  assert.deepStrictEqual(kopya(gocEt(k4).p.atesBocegi), { rekor: 16000, kosu: 3, gun: '2026-11-15', gunJeton: 190 });
+});
+
+dene('taninmayan ek alt alan korunur', () => {
+  const k = surum2(); k.atesBocegi = { rekor: 5, ek: { a: 1 } };
+  assert.deepStrictEqual(kopya(gocEt(k).p.atesBocegi), { rekor: 5, ek: { a: 1 }, kosu: 0, gun: '', gunJeton: 0 });
+});
+
+dene('surum 3 kaydinda bozuk atesBocegi: dokunulmaz (goc yalniz eski surumde calisir)', () => {
+  const k = Object.assign(varsayilan(), { atesBocegi: null });
+  const g = gocEt(kopya(k));
+  assert.strictEqual(g.degisti, false);
+  assert.strictEqual(g.p.atesBocegi, null);
+});
+
+dene('surum 4 kaydi dokunulmaz', () => {
+  const k = { surum: 4, gold: 7, atesBocegi: 'gelecek-bicim', hediye: null };
+  const g = gocEt(kopya(k));
+  assert.strictEqual(g.degisti, false);
+  assert.deepStrictEqual(kopya(g.p), k);
+});
+
+dene('2 -> 3 gocu idempotent (bozuk ve gecerli girdilerde)', () => {
+  [undefined, null, 5, [], { rekor: -3, gun: 1 }, { rekor: 900, kosu: 4, gun: '2026-11-16', gunJeton: 40 }].forEach(b => {
+    const k = surum2(); if (b !== undefined) k.atesBocegi = b;
+    const a = gocEt(k).p;
+    const c = gocEt(kopya(a));
+    assert.strictEqual(c.degisti, false, JSON.stringify(b));
+    assert.deepStrictEqual(kopya(c.p), kopya(a), JSON.stringify(b));
+  });
+});
+
+dene('sifirlama sonrasi varsayilan: atesBocegi sifir, her cagrida yeni nesne', () => {
+  const v = varsayilan();
+  assert.deepStrictEqual(kopya(v.atesBocegi), AB_VARS);
+  assert.notStrictEqual(varsayilan().atesBocegi, varsayilan().atesBocegi);
+  const g = gocEt(null);                    // AppReset: Store.del + varsayilan; yeniden acilis gocEt(null)
+  assert.deepStrictEqual(kopya(g.p.atesBocegi), AB_VARS);
+  v.atesBocegi.rekor = 99;                  // bir nesneyi degistirmek digerini etkilemez
+  assert.strictEqual(varsayilan().atesBocegi.rekor, 0);
 });
 
 console.log(gecti + ' test gecti' + (process.exitCode ? ', HATA VAR' : ''));
