@@ -21,7 +21,7 @@ function dene(ad, fn) {
 // ---------------------------------------------------------------
 // Yapisal denetci: her yeni dilim + her engelin gorunurluk / varis zamani
 // ---------------------------------------------------------------
-const ist = { dilim: 0, nefes: 0, kivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0 },
+const ist = { dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakKivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0 },
               enAzPay: Infinity, enAzAra: Infinity, enCokDcOran: 0, kusur: [] };
 function kusur(tohum, s, msg) { ist.kusur.push('tohum ' + tohum + ' dilim ' + (s ? s.no : '-') + ': ' + msg); }
 
@@ -44,6 +44,7 @@ function dilimDenetle(dn, s) {
   const t = dn.t, p = dn.son, zf = AB.dilimZarfi(s), c = (zf.ust + zf.alt) / 2;
   const zr = AB.zorluk(s.x - XB), zs = zarflar(s);
   ist.dilim++; if (s.nefes) ist.nefes++; if (s.kivilcim) ist.kivilcim++;
+  if (s.x - XB > 10000) { ist.uzakDilim++; if (s.kivilcim) ist.uzakKivilcim++; }
   s.engeller.forEach(e => { ist.tur[e.tur]++; });
   if (s.no !== dn.sonNo + 1) kusur(t, s, 'dilim sirasi atladi');
   // kural 9: acilis
@@ -107,7 +108,8 @@ function dilimDenetle(dn, s) {
     if (!(kv.x > a && kv.x < b)) kusur(t, s, 'kivilcim araligin disinda');
     if (uz < U.KIVILCIM_UZAK_MIN - 1e-6 || uz > U.KIVILCIM_UZAK_MAX + 1e-6) kusur(t, s, 'kivilcim uzakligi ' + uz);
     if (kv.y < A.dunya.Y_UST || kv.y > A.dunya.Y_ALT) kusur(t, s, 'kivilcim ulasilamaz yukseklikte');
-    if (Math.abs(kv.y - pc) + Math.abs(c - kv.y) > V * (zr.tAra - T_MIN) + EPS) kusur(t, s, 'kivilcim dikey yolu sigmiyor');
+    if (Math.max(Math.abs(kv.y - pc), Math.abs(c - kv.y)) > V * zr.tAra / 2 + 1e-6) kusur(t, s, 'kivilcim bacagi > V_GUVENLI * tAra / 2');
+    if (Math.abs(kv.x - (a + b) / 2) > 1e-6) kusur(t, s, 'kivilcim ortada degil');
     if (hepsi.some(z => icinde(z, kv.x, kv.y))) kusur(t, s, 'kivilcim zarf icinde');
   }
   if (!s.nefes) dn.oncekiGercek = { x: s.x, w: s.w };
@@ -278,6 +280,11 @@ for (let i = 0; i < TOHUM_SAYI; i++) {
 }
 const sure = ((Date.now() - bas) / 1000).toFixed(1);
 
+dene('kivilcim orani: tum dilimler >= %3, d > 10000 dilimleri > %1', () => {
+  const tum = ist.kivilcim / ist.dilim, uzak = ist.uzakKivilcim / ist.uzakDilim;
+  console.log('       tum %' + (100 * tum).toFixed(2) + ', d>10000 %' + (100 * uzak).toFixed(2) + ' (' + ist.uzakDilim + ' dilim)');
+  assert.ok(tum >= 0.03, 'tum ' + tum); assert.ok(uzak > 0.01, 'uzak ' + uzak);
+});
 const kotu = (dizi, f) => dizi.filter(f).slice(0, 5).map(x => x.t).join(',');
 dene('yapisal kurallar 1-9 + T_MIN gorunurluk (' + ist.dilim + ' dilim)', () => {
   assert.strictEqual(ist.kusur.length, 0, ist.kusur.length + ' kusur: ' + ist.kusur.slice(0, 8).join(' | '));

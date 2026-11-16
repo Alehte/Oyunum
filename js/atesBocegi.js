@@ -253,13 +253,17 @@
       f = i / (n + 1);
       toz.push({ x: a + (b - a) * f, y: ur.c + (c - ur.c) * (1 - Math.cos(Math.PI * f)) / 2 + (2 * r() - 1) * U.TOZ_SAPMA, alindi: 0 });
     }
-    // Kivilcim (kural 7): aralik ortasinda, yoldan 10-16 uzakta; c1 -> kivilcim -> c2 dikey yolu sigmali.
+    // Kivilcim (kural 7): aralik ortasinda, yoldan 10-16 uzakta. Uzaktan gorunur (T_MIN yok):
+    // her bacak ayri ayri |ys - c1|, |c2 - ys| <= V_GUVENLI * tAra / 2. En buyuk bacak uz + |dc|/2
+    // oldugu icin uz, [UZAK_MIN, min(UZAK_MAX, sinir - |dc|/2)] icinden cekilir; bos aralikta kivilcim yok.
     var kiv = null;
     if (r() < U.KIVILCIM_OLASILIK) {
-      var uz = U.KIVILCIM_UZAK_MIN + r() * (U.KIVILCIM_UZAK_MAX - U.KIVILCIM_UZAK_MIN);
-      var ys = (ur.c + c) / 2 + (r() < 0.5 ? -uz : uz);
-      if (ys >= U.KIVILCIM_Y_MIN && ys <= U.KIVILCIM_Y_MAX &&
-          Math.abs(ys - ur.c) + Math.abs(c - ys) <= AD.V_GUVENLI * (zr.tAra - AD.T_MIN))
+      var ym = (ur.c + c) / 2, bacak = AD.V_GUVENLI * zr.tAra / 2;
+      var ust = Math.min(U.KIVILCIM_UZAK_MAX, bacak - Math.abs(c - ur.c) / 2);
+      var uz = U.KIVILCIM_UZAK_MIN + r() * (ust - U.KIVILCIM_UZAK_MIN), yon = r() < 0.5 ? -1 : 1;
+      var ys = ym + yon * uz;
+      if (ys < U.KIVILCIM_Y_MIN || ys > U.KIVILCIM_Y_MAX) ys = ym - yon * uz;   // diger yan
+      if (ust >= U.KIVILCIM_UZAK_MIN && ys >= U.KIVILCIM_Y_MIN && ys <= U.KIVILCIM_Y_MAX)
         kiv = { x: (a + b) / 2, y: ys, alindi: 0 };
     }
     var dl = {
