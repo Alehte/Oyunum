@@ -37,7 +37,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '12';
+var SURUM = '13';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
@@ -74,6 +74,8 @@ var OYUNLAR = [
   'js/suSiralaOzelOyun.js',
   'js/tempoCekirdek.js',
   'js/tempoKup.js',
+  'js/atesBocegi.js',
+  'js/atesBocegiOyun.js',
   'img/susirala-bg.webp',
   'img/joker-bastan-basla.webp',
   'img/joker-gerial.webp',

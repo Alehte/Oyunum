@@ -151,6 +151,24 @@ dene('listelerdeki her yol diskte tam bu adla var', () => {
   assert.strictEqual(new Set(HEPSI).size, HEPSI.length, 'listede tekrarlanan yol var');
 });
 
+dene('Ates Bocegi: iki dosya OYUNLAR icinde, SURUM 13, index.html ve core.js yukledigi her js listede', () => {
+  const oyunlar = Array.from(ilk.ctx.OYUNLAR);
+  ['js/atesBocegi.js', 'js/atesBocegiOyun.js'].forEach(y => assert.ok(oyunlar.includes(y), y + ' OYUNLAR icinde yok'));
+  assert.strictEqual(ilk.ctx.SURUM, '13');
+  const kok = path.join(__dirname, '..');
+  const kaynak = fs.readFileSync(path.join(kok, 'index.html'), 'utf8') + ' ' + fs.readFileSync(path.join(kok, 'js/core.js'), 'utf8');
+  const yuklenen = new Set();
+  let m;
+  const scriptRe = /<script[^>]+src="([^"]+\.js)"/g;
+  while ((m = scriptRe.exec(kaynak))) yuklenen.add(m[1]);
+  const dosyaRe = /'(js\/[A-Za-z0-9_]+\.js)'/g;
+  while ((m = dosyaRe.exec(kaynak))) yuklenen.add(m[1]);
+  const liste = new Set(HEPSI);
+  const eksik = Array.from(yuklenen).filter(y => !liste.has(y));
+  assert.deepStrictEqual(eksik, [], 'sw listesinde olmayan js: ' + eksik.join(', '));
+  assert.ok(yuklenen.has('js/atesBocegiOyun.js'), 'core.js Ates dosyalarini yuklemiyor');
+});
+
 dene('install: CEKIRDEK + OYUNLAR tamami onbellekte, temiz anahtarla; istekler ?v=SURUM ve cache:reload', () => {
   const o = ortamKur();
   return o.tetikle('install').then(() => {

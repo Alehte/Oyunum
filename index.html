@@ -57,6 +57,10 @@
               <div class="game-icon icon-potion"></div>
               <div class="game-label theme-potion">Sırala Dur</div>
             </div>
+            <div class="game-card playable" id="cardAtes" role="button" tabindex="0">
+              <div class="game-icon icon-ates"><svg viewBox="0 0 74 74" aria-hidden="true" focusable="false"><defs><radialGradient id="abIkonParilti"><stop offset="0" stop-color="#FFE27A" stop-opacity=".9"/><stop offset=".45" stop-color="#FFE27A" stop-opacity=".28"/><stop offset="1" stop-color="#FFE27A" stop-opacity="0"/></radialGradient></defs><rect width="74" height="74" fill="#0E2A2A"/><rect width="74" height="74" fill="#101B33" opacity=".55"/><circle cx="37" cy="32" r="25" fill="url(#abIkonParilti)"/><circle cx="14" cy="22" r="2" fill="#FFF3B0"/><circle cx="58" cy="16" r="2" fill="#FFF3B0"/><circle cx="55" cy="44" r="2" fill="#FFF3B0"/><path d="M0 74V62c8-2 12-8 20-6 6 2 8 6 16 4 10-3 16-8 24-4 6 3 10 2 14 0v18Z" fill="#05080D"/><path d="M52 74c0-8 3-12 8-14M56 66l5-2M58 61l5 0" stroke="#E9EDF2" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="33.5" cy="31" rx="2.4" ry="7" fill="#fff" opacity=".6" transform="rotate(-35 33.5 31)"/><ellipse cx="38.5" cy="29" rx="2.4" ry="7" fill="#fff" opacity=".5" transform="rotate(30 38.5 29)"/><ellipse cx="34" cy="35" rx="7" ry="5" fill="#FFE27A"/><circle cx="42.5" cy="34" r="3.4" fill="#1A1410"/></svg></div>
+              <div class="game-label theme-ates">Ateş Böceği</div>
+            </div>
           </div>
         </div>
 
@@ -113,7 +117,7 @@
 
           <div class="set-block" style="margin-bottom:4px;">
             <div class="set-block-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5"/><path d="M12 8h.01"/></svg>Hakkında</div>
-            <div class="about-row"><span>Sürüm</span><b>1.1.5</b></div>
+            <div class="about-row"><span>Sürüm</span><b>1.2.0</b></div>
             <div class="about-row"><span>Gizlilik Politikası</span><a class="about-link" id="privacyBtn" href="gizlilik.html">Görüntüle</a></div>
           </div>
         </div>
@@ -193,6 +197,37 @@
           </div>
         </div>
         <div class="tp-tray" id="tpTray"></div>
+      </div>
+
+      <!-- ============ ATEŞ BÖCEĞİ ============ -->
+      <div class="app-screen" id="screen-ates">
+        <div class="kc-topbar">
+          <button class="back-btn" id="atesBackBtn" aria-label="Geri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="ab-title">Ateş Böceği</div>
+          <div class="gold-pill compact" id="goldPillAtes"></div>
+        </div>
+        <div class="ab-hud">
+          <div class="ab-kutu cur"><div class="v" id="abPuan">0</div><div class="l">Puan</div></div>
+          <div class="ab-kutu best"><div class="v" id="abRekor">0</div><div class="l">Rekor</div></div>
+          <div class="ab-kutu carpan"><div class="v" id="abCarpan">×1</div><div class="l">Çarpan</div></div>
+          <button class="ab-dur-btn" id="abDurBtn" aria-label="Duraklat"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+        </div>
+        <div class="ab-isik" role="progressbar" aria-label="Işık" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="abIsik"></i></div>
+        <div class="ab-alan" id="abAlan">
+          <canvas class="ab-tuval" id="abTuval" aria-label="Ateş Böceği oyun alanı"></canvas>
+          <div class="ab-ipucu show" id="abIpucu"><b>Dokun ve başla</b><span>Basılı tut: yüksel<br>Bırak: süzül</span></div>
+          <div class="ab-ortu" id="abDuraklat">
+            <div class="ab-ortu-baslik">Duraklatıldı</div>
+            <button id="abDevam">Devam</button>
+            <button class="ikincil" id="abYeniden">Yeniden Başla</button>
+          </div>
+          <div class="ab-ortu" id="abSonuc">
+            <div class="ab-ortu-baslik" id="abSonBaslik"></div>
+            <div class="ab-sonalt" id="abSonAlt"></div>
+            <button id="abTekrar">Tekrar</button>
+            <button class="ikincil" id="abAna">Ana ekran</button>
+          </div>
+        </div>
       </div>
 
       <!-- ============ KAÇIŞ? LEVEL SELECT ============ -->
