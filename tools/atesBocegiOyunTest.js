@@ -173,4 +173,30 @@ dene('temaDegisti: bozuk isikCoz cikmaz, paletler cizilir', () => {
   o.sb.AppMarket.isikCoz = () => { throw new Error('bozuk'); }; o.O.temaDegisti(); o.kare(5);
 });
 
+dene('gercek market.js + katalog: 10 temanin palet sonucu isikCoz ile birebir (paletOku/paletTamamla)', () => {
+  const oku = f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8');
+  const win = { AppProgress: { gold: 0 }, AppGold: { harca() { return true; }, add() {} }, AppStore: { get: (k, v) => v, set() {} },
+    AppSaveProgress() {}, AppReset: [], addEventListener() {}, document: { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] } };
+  win.window = win; vm.createContext(win);
+  vm.runInContext(oku('marketKatalog.js'), win); vm.runInContext(oku('market.js'), win);
+  const a = KAYNAK.indexOf('  var YERLESIK = {'), qi = KAYNAK.indexOf('  function q(id)', a);
+  const h = KAYNAK.indexOf('  function hexMi'), pt = KAYNAK.indexOf('  function paletTamamla'), c = KAYNAK.indexOf('  // ONBELLEKLI GORSELLER');
+  assert(a > 0 && qi > a && h > 0 && pt > 0 && c > pt, 'oyun palet kodu bulunamadi');
+  const kod = KAYNAK.slice(a, qi) + KAYNAK.slice(h, KAYNAK.indexOf('\n', h) + 1) + KAYNAK.slice(pt, c);
+  const M = win.AppMarket, temalar = M.temalar();
+  assert.strictEqual(temalar.length, 10);
+  temalar.forEach(t => {
+    win.AppProgress.market.s.push(t.id); assert(M.sec(t.id), t.id);
+    const ic = { window: win, AppMarket: M };
+    vm.runInNewContext(kod + '\nthis.p = paletOku();', ic);
+    const beklenen = M.isikCoz(M.aktif('ates', 'isik')), p = JSON.parse(JSON.stringify(ic.p));
+    ['isik', 'toz', 'vurgu', 'karanlik', 'animasyon'].forEach(k => assert.strictEqual(p[k], beklenen[k], t.id + '.' + k));
+    assert.strictEqual(p.iz.sekil, beklenen.iz.sekil, t.id + ' sekil');
+    assert.strictEqual(p.iz.renk, beklenen.iz.renk, t.id + ' renk');
+    assert.strictEqual(p.iz.renk2, beklenen.iz.renk2, t.id + ' renk2');
+    assert.deepStrictEqual(p.iz.renkler, Array.from(beklenen.iz.renkler || [beklenen.iz.renk, beklenen.iz.renk2]), t.id + ' renkler');
+    if (t.isik && t.isik.iz && t.isik.iz.renkler) assert.deepStrictEqual(p.iz.renkler, Array.from(t.isik.iz.renkler), t.id + ' vitray renkler');
+  });
+});
+
 console.log(gecti + ' deneme gecti');

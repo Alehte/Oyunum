@@ -239,7 +239,10 @@
       return;
     }
     const last = navStack.pop();
-    if(last){ _back(last[1], last[0]); }
+    if(last){
+      if(last[1] === 'ates' && window.AtesBocegiOyun) window.AtesBocegiOyun.dur();
+      _back(last[1], last[0]);
+    }
   }
   window.addEventListener('popstate', () => {
     if(gecmisSariliyor){ gecmisSariliyor = false; return; }

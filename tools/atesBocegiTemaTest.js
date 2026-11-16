@@ -43,12 +43,12 @@ function sahteEl() {
   e.style.removeProperty = k => { delete e.style[k]; };
   return e;
 }
-function yukle(oyunVar) {
+function yukle(oyunVar, katalogDegis) {
   const { win, doc } = pencere();
   const ctx = vm.createContext(win);
   const cagri = [];
   if (oyunVar) win.AtesBocegiOyun = { temaDegisti() { cagri.push(1); } };
-  vm.runInContext(oku('js/marketKatalog.js'), ctx, { filename: 'marketKatalog.js' });
+  vm.runInContext(katalogDegis ? katalogDegis(oku('js/marketKatalog.js')) : oku('js/marketKatalog.js'), ctx, { filename: 'marketKatalog.js' });
   vm.runInContext(oku('js/market.js'), ctx, { filename: 'market.js' });
   return { win, doc, ctx, cagri };
 }
@@ -163,6 +163,24 @@ dene('yerlesik palet 4 bolge x K1-K5 x 3 bicim (60 oran) esik ustunde', () => {
   assert.strictEqual(y.length, 60);
   const kotu = y.filter(s => s.oran < ESIK[s.kural]);
   assert.strictEqual(kotu.length, 0, kotu.map(s => 'bolge' + s.bolge + ' ' + s.kural + ' ' + s.bicim + ' ' + s.oran.toFixed(2)).join('; '));
+});
+
+dene('K1 ek: engel kenari / paralaks katman renkleri >= 3,0 (oyundaki gercek hesap, 3 gorme bicimi)', () => {
+  const kat = /var koyu = karistir\(zemin, '#000000', kat === 0 \? ([0-9.]+) : ([0-9.]+)\), acik = karistir\(zemin, '#FFFFFF', ([0-9.]+)\)/.exec(OYUN);
+  assert(kat, 'katmanCiz hesabi okunamadi');
+  const k0 = +kat[1], k1 = +kat[2], ac = +kat[3];
+  const kenar = rgb(ENGEL_KENAR), kotu = [];
+  TEMALAR.map(t => ({ id: t.id, isik: t.isik.isik })).concat([{ id: 'yerlesik', isik: YERLESIK_PALET.isik }]).forEach(t => {
+    BOLGE.forEach((ton, bi) => {
+      const zemin = karistir(ton, t.isik, ISIK_KARISIM), mix = (c, h, x) => c.map(v => v + (h - v) * x);
+      const katmanlar = { 'k0 koyu': mix(zemin, 0, k0), 'k1 koyu': mix(zemin, 0, k1), 'k2 acik': mix(zemin, 1, ac) };
+      Object.keys(katmanlar).forEach(ad => BICIMLER.forEach(b => {
+        const o = oran(kenar, katmanlar[ad], b);
+        if (o < 3.0) kotu.push(t.id + ' bolge' + bi + ' ' + ad + ' ' + b + ' ' + o.toFixed(2));
+      }));
+    });
+  });
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
 dene('K6: HUD yazisi / HUD zemini >= 4,5 (style.css, 3 gorme bicimi)', () => {
@@ -280,9 +298,19 @@ dene('sec -> temayiYay AtesBocegiOyun.temaDegisti cagirir; oyun yokken hatasiz',
   assert.doesNotThrow(() => w2.AppMarket.sec('buz'));
 });
 
-dene('indeksle: isik alani eksik tema devre disi birakilmaz', () => {
-  const { win } = yukle(false);
-  assert.strictEqual(win.AppMarket.temalar().length, 10);
+dene('indeksle: isik alani silinen tema devre disi kalmaz, aktifken yerlesige duser', () => {
+  const degis = k => { assert(k.indexOf("isik: { isik: '#F2C078'") > 0); return k.replace("isik: { isik: '#F2C078'", "xisik: { isik: '#F2C078'"); };
+  const { win } = yukle(false, degis), m = win.AppMarket;
+  assert.strictEqual(m.temalar().length, 10);
+  assert(m.bul('toprak').isik === undefined);
+  win.AppProgress.market.s.push('toprak');
+  assert(m.sec('toprak'), 'toprak secilemedi');
+  assert.strictEqual(m.seciliId(), 'toprak');
+  const a = m.aktif('ates', 'isik');
+  assert.strictEqual(a.yerlesik, true);
+  const p = m.isikCoz(a);
+  assert.strictEqual(p.isik, '#FFE27A'); assert.strictEqual(p.iz.sekil, 'cizgi');
+  ['toz', 'vurgu', 'karanlik'].forEach(k => assert(HEX.test(p[k]), k));
 });
 
 dene('onizleme: her tema icin sahte DOM\'da hatasiz kurulur (atesSahnesi dahil)', () => {
@@ -314,6 +342,7 @@ dene('onizleme: her tema icin sahte DOM\'da hatasiz kurulur (atesSahnesi dahil)'
 
 dene('stil: .mo-ates CSS style.css\'te, JS stil enjekte etmiyor; hareketi azaltta animasyon kapali', () => {
   const css = oku('style.css'), ekran = oku('js/marketEkran.js');
+  assert(/@media \(max-width:339px\)\{ \.mo-sahne\.mo-ates\{display:none/.test(css) && /\.mo-sahne\.mo-ates\{flex:0 1 58px; min-width:0/.test(css));
   assert(/\.mo-sahne\.mo-ates\{/.test(css) && /\.mo-ates-iz\.lav\{animation/.test(css));
   assert(/reduced-motion \.mo-ates-iz\.lav\{animation:none/.test(css));
   assert(!/createElement\('style'\)|<style/.test(ekran));
