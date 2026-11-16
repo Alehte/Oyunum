@@ -40,7 +40,9 @@
       MERKEZ_MIN: 18, MERKEZ_MAX: 82,
       SERIT_UST: 10, SERIT_ALT: 90, SERIT_PENCERE: 4,
       AGIRLIK: [[5, 2, 2, 1], [6, 1, 0, 3], [3, 2, 5, 0], [4, 4, 1, 1]],   // dal/ag/kus/dusen
-      DENEME: 40, EK_DAL: 0.5,
+      DENEME: 40, EK_DAL: 0.5, YAN_ALT: 0.5,               // YAN_ALT: ag/kus/kivilcim icin alt yani secme olasiligi
+      DAL_IKI: 0.5, DAL_UST: 0.25,                     // dal: iki yan / yalniz tavan (kalan: yalniz zemin)
+      NEFES_SURE: 2,                                   // nefes cevresinde en az engelsiz sure (sn)
       DAL_GEN: 5,
       AG_GEN: 7, AG_BOY_MIN: 14, AG_BOY_MAX: 20, AG_KENAR: 2,
       KUS_GEN: 5, KUS_BOY: 3.5, KUS_PAY: 3,
@@ -99,6 +101,11 @@
       if (r.length !== 4 || !(r[0] + r[1] + r[2] + r[3] > 0)) h.push('AGIRLIK[' + i + '] gecersiz');
     });
     if (!(u.TOZ_MIN >= 1 && u.TOZ_MAX >= u.TOZ_MIN)) h.push('toz sayisi gecersiz');
+    // nefes: iki aralik (her biri >= tAra) eksi onceki dilimin en genis engeli
+    var enGenis = Math.max(u.DAL_GEN, u.AG_GEN, u.KUS_GEN, u.DUSEN_GEN);
+    if (!(2 * taMin - enGenis / z.HIZ_TABAN >= u.NEFES_SURE)) h.push('nefes engelsiz suresi < NEFES_SURE');
+    // kural 3: duruştan V_GUVENLI'ye cikis T_IVME icinde sigmali (iki yon)
+    if (!(ad.V_GUVENLI / Math.min(m.A_YUKSEL, m.G_SUZUL) <= ad.T_IVME)) h.push('V_GUVENLI T_IVME icinde kazanilamiyor');
     return h;
   }
   var hatalar = ayarDogrula(AYAR);
@@ -160,14 +167,14 @@
   function adayKur(tur, x, ust, alt, r) {
     var e, asagi, ustOk, altOk, q;
     if (tur === 'dal') {
-      q = r();                                    // %50 iki yan, %25 yalniz tavan, %25 yalniz zemin
-      return dalKur(x, ust, alt, q < 0.75, q < 0.5 || q >= 0.75);
+      q = r();
+      return dalKur(x, ust, alt, q < U.DAL_IKI + U.DAL_UST, q < U.DAL_IKI || q >= U.DAL_IKI + U.DAL_UST);
     }
     if (tur === 'ag') {
       var boy = U.AG_BOY_MIN + r() * (U.AG_BOY_MAX - U.AG_BOY_MIN);
       altOk = alt + boy <= D.H - U.AG_KENAR; ustOk = ust - boy >= U.AG_KENAR;
       if (!altOk && !ustOk) return null;
-      asagi = altOk && (!ustOk || r() < 0.5);   // ag boslugun altinda mi
+      asagi = altOk && (!ustOk || r() < U.YAN_ALT);   // ag boslugun altinda mi
       e = [{ tur: 'ag', x: x, y: asagi ? alt : ust - boy, w: U.AG_GEN, h: boy }];
       if (r() < U.EK_DAL) e = e.concat(dalKur(x, ust, alt, asagi, !asagi));
       return e;
@@ -176,7 +183,7 @@
       var pay = r() * U.KUS_PAY;
       altOk = alt + pay + U.KUS_BOY <= D.H; ustOk = ust - pay - U.KUS_BOY >= 0;
       if (!altOk && !ustOk) return null;
-      asagi = altOk && (!ustOk || r() < 0.5);
+      asagi = altOk && (!ustOk || r() < U.YAN_ALT);
       // Kus, dilimin sabit engelleriyle ayni anda bocegin onune (X_BOCEK + R_CARPMA) degecek
       // sekilde konur: dunya x'i = x0 - KUS_EK * mesafe (yaklasma hizi (1 + KUS_EK) * hiz).
       var x0 = x + AD.KUS_EK * (x - D.X_BOCEK - M.R_CARPMA);
@@ -207,9 +214,9 @@
     return TURLER[i];
   }
 
-  // this = uretici. bolge: dilimin engel agirliklarini secer; degisirse once nefes dilimi gelir.
-  function sonraki(bolge) {
-    var ur = this, r = function () { return rngAdim(ur); };
+  // ur = uretici verisi (duz nesne). bolge: dilimin engel agirliklarini secer; degisirse once nefes dilimi gelir.
+  function uret(ur, bolge) {
+    var r = function () { return rngAdim(ur); };
     bolge = bolge | 0;
     var x = ur.x + aralik(ur.x - D.X_BOCEK);
     var zr = zorluk(x - D.X_BOCEK);
@@ -254,20 +261,22 @@
       toz.push({ x: a + (b - a) * f, y: ur.c + (c - ur.c) * (1 - Math.cos(Math.PI * f)) / 2 + (2 * r() - 1) * U.TOZ_SAPMA, alindi: 0 });
     }
     // Kivilcim (kural 7): aralik ortasinda, yoldan 10-16 uzakta. Uzaktan gorunur (T_MIN yok):
-    // her bacak ayri ayri |ys - c1|, |c2 - ys| <= V_GUVENLI * tAra / 2. En buyuk bacak uz + |dc|/2
-    // oldugu icin uz, [UZAK_MIN, min(UZAK_MAX, sinir - |dc|/2)] icinden cekilir; bos aralikta kivilcim yok.
+    // her bacak ayri ayri |ys - c1|, |c2 - ys| <= V_GUVENLI * tBacak; tBacak = onceki boslugu
+    // terk etmekten (a + R_CARPMA) kivilcima / kivilcimdan sonraki boslugun onune (b - R_CARPMA)
+    // gercek sure = ((b - a)/2 - R_CARPMA) / hiz (hiz artan: bu dilimin hizi en kotusu).
+    // En buyuk bacak uz + |dc|/2 oldugu icin uz, [UZAK_MIN, min(UZAK_MAX, sinir - |dc|/2)] icinden cekilir.
     var kiv = null;
     if (r() < U.KIVILCIM_OLASILIK) {
-      var ym = (ur.c + c) / 2, bacak = AD.V_GUVENLI * zr.tAra / 2;
+      var ym = (ur.c + c) / 2, bacak = AD.V_GUVENLI * ((b - a) / 2 - M.R_CARPMA) / zr.hiz;
       var ust = Math.min(U.KIVILCIM_UZAK_MAX, bacak - Math.abs(c - ur.c) / 2);
-      var uz = U.KIVILCIM_UZAK_MIN + r() * (ust - U.KIVILCIM_UZAK_MIN), yon = r() < 0.5 ? -1 : 1;
+      var uz = U.KIVILCIM_UZAK_MIN + r() * (ust - U.KIVILCIM_UZAK_MIN), yon = r() < U.YAN_ALT ? 1 : -1;
       var ys = ym + yon * uz;
       if (ys < U.KIVILCIM_Y_MIN || ys > U.KIVILCIM_Y_MAX) ys = ym - yon * uz;   // diger yan
       if (ust >= U.KIVILCIM_UZAK_MIN && ys >= U.KIVILCIM_Y_MIN && ys <= U.KIVILCIM_Y_MAX)
         kiv = { x: (a + b) / 2, y: ys, alindi: 0 };
     }
     var dl = {
-      no: ur.n, x: x, w: w, tur: tur, nefes: nefes ? 1 : 0,
+      no: ur.n, x: x, w: w, tur: tur, nefes: nefes ? 1 : 0, bolge: bolge,
       z: zr.z, hiz: zr.hiz, tAra: zr.tAra, bosluk: zr.bosluk,
       c: c, ust: c - g / 2, alt: c + g / 2,
       engeller: e, toz: toz, kivilcim: kiv
@@ -275,9 +284,13 @@
     ur.n++; ur.x = x; ur.w = w; ur.c = c;
     return dl;
   }
+  // Uretici durumu duz veridir (rng durumu dahil sayi): durum JSON gidis-donusunden sonra aynen devam eder.
+  function ureticiVerisi(tohum) {
+    return { s: tohum >>> 0, n: 0, x: D.X_BOCEK, w: 0, c: D.Y_BASLA, bolge: 0, ustSay: 0, altSay: 0 };
+  }
   function ureticiOlustur(tohum) {
-    // Veri alanlari JSON'a girer (determinizm karsilastirmasi bunlari da kapsar).
-    return { s: tohum >>> 0, n: 0, x: D.X_BOCEK, w: 0, c: D.Y_BASLA, bolge: 0, ustSay: 0, altSay: 0, sonraki: sonraki };
+    var v = ureticiVerisi(tohum);
+    return { veri: v, sonraki: function (bolge) { return uret(v, bolge); } };
   }
   function dilimZarfi(dl) { return { ust: dl.ust, alt: dl.alt }; }
 
@@ -285,13 +298,13 @@
   // OYUN
   // ---------------------------------------------------------------
   function doldur(d) {
-    while (d.uretici.x <= d.mesafe + D.X_BOCEK + U.ONDE * D.W) d.dilimler.push(d.uretici.sonraki(d.bolge));
+    while (d.uretici.x <= d.mesafe + D.X_BOCEK + U.ONDE * D.W) d.dilimler.push(uret(d.uretici, d.bolge));
   }
   function oyunOlustur(tohum) {
     var d = {
       t: 0, mesafe: 0, puan: 0, y: D.Y_BASLA, vy: 0, isik: I.BASLANGIC, dokunulmaz: 0,
-      zincir: 0, zincirSure: 0, toz: 0, bolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
-      uretici: ureticiOlustur(tohum)
+      zincir: 0, zincirSure: 0, toz: 0, bolge: 0, gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
+      uretici: ureticiVerisi(tohum)
     };
     doldur(d);
     return d;
@@ -337,7 +350,9 @@
       var ag = vurdu.tur === 'ag';
       d.isik -= ag ? I.AG_HASAR : I.HASAR;
       d.zincir = 0; d.zincirSure = 0; d.dokunulmaz = I.DOKUNULMAZ;
-      olay.push({ tur: ag ? 'ag' : 'hasar', engel: vurdu.tur });
+      olay.push({ tur: ag ? 'ag' : 'hasar', engel: vurdu.tur, x: bx, y: d.y });
+      // Olumcul hasar ayni adimdaki tozla iptal olmaz.
+      if (d.isik <= 0) { d.isik = 0; d.bitti = 1; olay.push({ tur: 'bitti' }); return olay; }
     }
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
@@ -351,18 +366,24 @@
         var kz = P.TOZ * carpan(d.zincir);
         d.puan += kz; d.isik = Math.min(1, d.isik + I.TOZ);
         d.zincir++; d.zincirSure = P.ZINCIR_SURE; d.toz++;
-        olay.push({ tur: 'toz', puan: kz });
+        olay.push({ tur: 'toz', puan: kz, x: t.x, y: t.y });
       }
       t = s.kivilcim;
       if (t && !t.alindi && (t.x - bx) * (t.x - bx) + (t.y - d.y) * (t.y - d.y) <= r2) {
         t.alindi = 1;
         var kk = P.KIVILCIM * carpan(d.zincir);
         d.puan += kk; d.isik = Math.min(1, d.isik + I.KIVILCIM);
-        olay.push({ tur: 'kivilcim', puan: kk });
+        olay.push({ tur: 'kivilcim', puan: kk, x: t.x, y: t.y });
       }
     }
-    var nb = bolgeNo(d.puan);
-    if (nb !== d.bolge) { d.bolge = nb; olay.push({ tur: 'bolge', bolge: nb }); }
+    // bolge: uretici agirliklari icin puanla hemen degisir (olay yok).
+    // gorunenBolge: arka plan ve SIS; nefes dilimi bocege varinca degisir, 'bolge' olayi o an.
+    d.bolge = bolgeNo(d.puan);
+    for (i = 0; i < d.dilimler.length; i++) {
+      s = d.dilimler[i];
+      if (s.x > bx) break;
+      if (s.nefes && s.bolge !== d.gorunenBolge && s.x + s.w + M.R_CARPMA >= bx) { d.gorunenBolge = s.bolge; olay.push({ tur: 'bolge', bolge: s.bolge }); }
+    }
     if (d.isik <= 0) { d.isik = 0; d.bitti = 1; olay.push({ tur: 'bitti' }); }
     return olay;
   }

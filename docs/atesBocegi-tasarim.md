@@ -396,3 +396,16 @@ Her aşama kendi testleri yeşil olmadan sonrakine geçilmez. Commit aşama baş
 | 9 | Yayın: `sw.js` `OYUNLAR` + SURUM 13, sürüm 1.2.0, tüm testler | 8 mevcut + 3 yeni paket yeşil; bağımsız denetim temiz |
 
 Açık kararlar (uygulamadan önce kullanıcı onayı): bölüm 4.2'deki ekonomi rakamları; sürüm numarası 1.2.0.
+
+---
+
+## 10. Uygulama sapmaları (Aşama A, onaylı)
+
+Aşağıdakiler bu dosyadaki ilgili satırların yerine geçer; sayılar `AtesBocegi.AYAR`'dadır.
+
+- **`V_GUVENLI` 28 → 20** (3.4 kural 3). Işık 0'da yarıçap `minYaricap` olduğundan `T_MIN` gecikmeli oyuncu dünyayı yalnız ~0,23 sn önceden bilir; 28 ile Bot B çarpışıyordu. Kural 3 sınırı `z = 0`'da 23, `z = 1`'de 10 birim.
+- **`DUSEN_UYARI` 0,25 → 0,15** (3.3, 3.4). 0,25 ile tetik mesafesi `hiz·(T_MIN + DUSEN_UYARI)` hiçbir hızda `minYaricap`'tan küçük değildi.
+- **Kural 7 (kıvılcım):** iki boşluk arasında x'te tam ortada, yoldan 10–16 uzakta, `y ∈ [10, 90]`. Kıvılcım uzaktan görünür (`T_MIN` yok); her bacak ayrı: `|ys − c₁| ≤ V_GUVENLI·tBacak` ve `|c₂ − ys| ≤ V_GUVENLI·tBacak`, `tBacak = ((b − a)/2 − R_CARPMA) / hiz` (a = önceki dilimin arka kenarı, b = yeni dilimin ön kenarı). Sapma bu koşula sığacak şekilde 10–16 içinden çekilir.
+- **Bot B (8.2) tozu da görür:** ışık çemberine giren engelden o dilimin boşluğunu, giren tozdan tozun konumunu öğrenir; ikisini `T_MIN` sonra kullanır. Ek olarak **Bot D** kıvılcımı kovalar; çarpışmasız alma oranı ≥ %95 aranır.
+- **Görünen bölge:** `durum.bolge` üretici ağırlıkları içindir ve puanla hemen değişir (olay yok). Yeni alan `durum.gorunenBolge` arka plan ve `SIS` içindir; nefes dilimi böceğe varınca değişir ve `bolge` olayı o an çıkar. `isikYaricapi(isik, hiz, durum.gorunenBolge)` kullanılır.
+- **API ayrıntıları:** `ureticiOlustur(tohum)` → `{veri, sonraki(bolge)}`; `durum.uretici` düz veridir (rng durumu sayı), durum JSON gidiş-dönüşünden sonra aynen sürer. Dilimde `bolge` alanı vardır. Olaylarda `toz`/`kivilcim`/`hasar`/`ag` için `x, y` vardır. Ölümcül hasar aynı adımdaki tozla iptal olmaz.

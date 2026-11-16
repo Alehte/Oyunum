@@ -2,12 +2,13 @@
 // Calistirma:  node tools/atesBocegiAdaletTest.js [tohumSayisi=1000] [mesafe=20000]
 // Botlar yalniz cekirdek API'sini (oyunOlustur, adim, dilimZarfi, zorluk, isikYaricapi,
 // minYaricap, kosuJetonu) ve durum/dilim alanlarini okur.
+// Yapisal denetim tohum basina bir kez (Bot A kosusunda) yapilir.
 'use strict';
 const assert = require('assert');
 const AB = require('../js/atesBocegi.js');
 const A = AB.AYAR, DT = A.dunya.DT, XB = A.dunya.X_BOCEK, H = A.dunya.H, RC = A.hareket.R_CARPMA;
 const T_MIN = A.adalet.T_MIN, K = A.adalet.KUS_EK, V = A.adalet.V_GUVENLI, T_IVME = A.adalet.T_IVME;
-const U = A.uretici, EPS = 1e-9, NEFES_SURE = 2;   // 3.4 kural 8: "2 sn engel yok"
+const U = A.uretici, EPS = 1e-9, NEFES_SURE = U.NEFES_SURE, RT = A.hareket.R_TOPLA;
 
 const TOHUM_SAYI = +process.argv[2] || 1000, MESAFE = +process.argv[3] || 20000;
 const tohum = i => (Math.imul(i + 1, 2654435761) + 0x7F4A7C15) >>> 0;
@@ -21,7 +22,7 @@ function dene(ad, fn) {
 // ---------------------------------------------------------------
 // Yapisal denetci: her yeni dilim + her engelin gorunurluk / varis zamani
 // ---------------------------------------------------------------
-const ist = { dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakKivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0 },
+const ist = { bolgeOlay: 0, dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakKivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0 },
               enAzPay: Infinity, enAzAra: Infinity, enCokDcOran: 0, kusur: [] };
 function kusur(tohum, s, msg) { ist.kusur.push('tohum ' + tohum + ' dilim ' + (s ? s.no : '-') + ': ' + msg); }
 
@@ -33,7 +34,6 @@ function zarflar(s) {
     return { x1: e.x, x2: e.x + e.w, y1: e.y, y2: e.y + e.h };
   });
 }
-const icinde = (z, x, y) => x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2;
 const yol = (c1, c2, f) => c1 + (c2 - c1) * (1 - Math.cos(Math.PI * f)) / 2;
 
 function yeniDenetci(t) {
@@ -93,13 +93,13 @@ function dilimDenetle(dn, s) {
     if (dn.altSay >= U.SERIT_PENCERE) kusur(t, s, 'zemin seridi 4 dilimdir acik');
   }
   // kural 6: toz
-  const oncekiZ = p ? zarflar(p) : [], hepsi = zs.concat(oncekiZ), a = px + pw, b = s.x;
+  // Toz/kivilcim x'i (a, b) acik araliginda: sabit zarflar [p.x, p.x+w] ve [s.x, s.x+w] disinda kalir.
+  const a = px + pw, b = s.x;
   if (s.toz.length < U.TOZ_MIN || s.toz.length > U.TOZ_MAX) kusur(t, s, 'toz sayisi ' + s.toz.length);
   s.toz.forEach(tz => {
     if (!(tz.x > a && tz.x < b)) kusur(t, s, 'toz araligin disinda');
     const f = (tz.x - a) / (b - a);
     if (Math.abs(tz.y - yol(pc, c, f)) > U.TOZ_SAPMA + 1e-6) kusur(t, s, 'toz egriden sapmis');
-    if (hepsi.some(z => icinde(z, tz.x, tz.y))) kusur(t, s, 'toz zarf icinde');
   });
   // kural 7: kivilcim
   const kv = s.kivilcim;
@@ -108,9 +108,9 @@ function dilimDenetle(dn, s) {
     if (!(kv.x > a && kv.x < b)) kusur(t, s, 'kivilcim araligin disinda');
     if (uz < U.KIVILCIM_UZAK_MIN - 1e-6 || uz > U.KIVILCIM_UZAK_MAX + 1e-6) kusur(t, s, 'kivilcim uzakligi ' + uz);
     if (kv.y < A.dunya.Y_UST || kv.y > A.dunya.Y_ALT) kusur(t, s, 'kivilcim ulasilamaz yukseklikte');
-    if (Math.max(Math.abs(kv.y - pc), Math.abs(c - kv.y)) > V * zr.tAra / 2 + 1e-6) kusur(t, s, 'kivilcim bacagi > V_GUVENLI * tAra / 2');
+    const tBacak = ((b - a) / 2 - RC) / zr.hiz;   // bosluktan cikis -> kivilcim -> sonraki bosluga giris
+    if (Math.max(Math.abs(kv.y - pc), Math.abs(c - kv.y)) > V * tBacak + 1e-6) kusur(t, s, 'kivilcim bacagi > V_GUVENLI * tBacak');
     if (Math.abs(kv.x - (a + b) / 2) > 1e-6) kusur(t, s, 'kivilcim ortada degil');
-    if (hepsi.some(z => icinde(z, kv.x, kv.y))) kusur(t, s, 'kivilcim zarf icinde');
   }
   if (!s.nefes) dn.oncekiGercek = { x: s.x, w: s.w };
   dn.son = { no: s.no, x: s.x, w: s.w, c: c, nefes: s.nefes, engeller: s.engeller.map(e => Object.assign({}, e)) };
@@ -185,6 +185,24 @@ function botA() {
     return kontrol(d, d.y);
   };
 }
+// Bot D: Bot A gibi gecikmesiz; siradaki dilimin onunde alinmamis kivilcim varsa once onu hedefler,
+// kivilcimi gecince bosluga doner. Kivilcim denemeleri kayit'a yazilir: {s, carpti}.
+function botD(kayit) {
+  return d => {
+    const bx = d.mesafe + XB;
+    for (const s of d.dilimler) {
+      if (s.x + s.w + RC < bx) continue;
+      const k = s.kivilcim;
+      if (k) {
+        if (!kayit.has(s)) kayit.set(s, { carpti: false });
+        if (!k.alindi && k.x + RT >= bx) return kontrol(d, k.y);
+      }
+      const z = AB.dilimZarfi(s);
+      return kontrol(d, (z.ust + z.alt) / 2);
+    }
+    return kontrol(d, d.y);
+  };
+}
 function cemberKesar(e, bx, by, r) {
   const cx = Math.max(e.x, Math.min(bx, e.x + e.w)), cy = Math.max(e.y, Math.min(by, e.y + e.h));
   return (bx - cx) * (bx - cx) + (by - cy) * (by - cy) <= r * r;
@@ -197,7 +215,7 @@ function botB(sabit) {
   const kuyruk = [], yp = new Float64Array(512);   // bilinen yol noktalari: x0, y0, x1, y1, ...
   return d => {
     const bx = d.mesafe + XB, by = d.y, hiz = AB.zorluk(d.mesafe).hiz;
-    const R = AB.isikYaricapi(sabit ? 0 : d.isik, hiz, d.bolge), R2 = R * R, sinir = d.t - T_MIN + EPS;
+    const R = AB.isikYaricapi(sabit ? 0 : d.isik, hiz, d.gorunenBolge), R2 = R * R, sinir = d.t - T_MIN + EPS;
     const L = d.dilimler;
     for (let i = 0; i < L.length; i++) {
       if (L[i].no <= sonNo) continue;
@@ -243,17 +261,26 @@ function botB(sabit) {
 // ---------------------------------------------------------------
 function kos(t, bot, secenek) {
   const d = AB.oyunOlustur(t), dn = yeniDenetci(t);
-  const yeni = () => { const L = d.dilimler; let i = L.length; while (i > 0 && L[i - 1].no > dn.sonNo) i--; for (; i < L.length; i++) { dilimDenetle(dn, L[i]); if (secenek.zaman) izBaslat(dn, L[i]); } };
+  const yeni = () => { if (!secenek.zaman) return; const L = d.dilimler; let i = L.length; while (i > 0 && L[i - 1].no > dn.sonNo) i--; for (; i < L.length; i++) { dilimDenetle(dn, L[i]); izBaslat(dn, L[i]); } };
   yeni();
-  let carpma = 0, enAzIsik = d.isik, adimSay = 0;
+  let carpma = 0, enAzIsik = d.isik, adimSay = 0, bolge = d.bolge;
   while (d.mesafe < MESAFE && !d.bitti) {
     if (secenek.isikSabit) d.isik = 1;
     const olay = AB.adim(d, bot(d));
     adimSay++;
     yeni();
+    if (d.bolge !== bolge) { bolge = d.bolge; dn.nefesBekle = true; }   // sonraki uretilen dilim nefes olmali
     for (const o of olay) {
-      if (o.tur === 'hasar' || o.tur === 'ag') carpma++;
-      if (o.tur === 'bolge') dn.nefesBekle = true;
+      if (o.tur === 'hasar' || o.tur === 'ag') {
+        carpma++;
+        if (secenek.kayit) { const bx = d.mesafe + XB, s = d.dilimler.find(q => q.x + q.w + RC >= bx); if (s && secenek.kayit.has(s)) secenek.kayit.get(s).carpti = true; }
+      }
+      if (o.tur === 'bolge' && secenek.zaman) {
+        const bx = d.mesafe + XB, hiz = AB.zorluk(d.mesafe).hiz;
+        ist.bolgeOlay++;
+        if (d.gorunenBolge !== o.bolge || !d.dilimler.some(q => q.nefes && q.bolge === o.bolge && q.x <= bx && q.x > bx - hiz * DT - 1e-6))
+          kusur(t, null, 'bolge olayi nefes diliminin varisinda degil');
+      }
     }
     if (secenek.zaman) zamanDenetle(dn, d);
     if (d.isik < enAzIsik) enAzIsik = d.isik;
@@ -263,11 +290,19 @@ function kos(t, bot, secenek) {
 
 console.log('Ates Bocegi adalet: ' + TOHUM_SAYI + ' tohum x ' + MESAFE + ' birim');
 const bas = Date.now();
-const sonuc = { A: [], B: [], Bg: [], C0: [], C1: [] };
+const sonuc = { A: [], B: [], Bg: [], C0: [], C1: [] }, kivD = { deneme: 0, alinan: 0, temiz: 0, carpma: 0, tohumCarpma: 0 };
 for (let i = 0; i < TOHUM_SAYI; i++) {
   const t = tohum(i);
   const a = kos(t, botA(), { isikSabit: true, zaman: true });   // zaman denetimi geometriye bagli: A kosusunda
   sonuc.A.push({ t: t, c: a.carpma, m: a.d.mesafe });
+  const kayit = new Map(), dk = kos(t, botD(kayit), { isikSabit: true, kayit: kayit });
+  kivD.carpma += dk.carpma; if (dk.carpma) kivD.tohumCarpma++;
+  for (const [s, k] of kayit) {
+    if (s.x + s.w + RC >= dk.d.mesafe + XB) continue;   // kosu bitiminde gecilmemis
+    kivD.deneme++;
+    if (s.kivilcim.alindi) kivD.alinan++;
+    if (s.kivilcim.alindi && !k.carpti) kivD.temiz++;
+  }
   const b = kos(t, botB(true), { isikSabit: true });
   sonuc.B.push({ t: t, c: b.carpma, m: b.d.mesafe });
   const bg = kos(t, botB(false), {});
@@ -299,11 +334,20 @@ dene('Bot A (ideal): ' + TOHUM_SAYI + '/' + TOHUM_SAYI + ' tohumda 0 carpisma', 
 dene('Bot B (gecikmeli, isik = 0 sabit): ' + TOHUM_SAYI + '/' + TOHUM_SAYI + ' tohumda 0 carpisma', () => {
   const n = sonuc.B.filter(x => x.c > 0).length; assert.strictEqual(n, 0, n + ' tohum carpti: ' + kotu(sonuc.B, x => x.c > 0));
 });
+dene('Bot B gercek isikla: ' + TOHUM_SAYI + '/' + TOHUM_SAYI + ' tohumda 0 carpisma', () => {
+  const n = sonuc.Bg.filter(x => x.c > 0).length; assert.strictEqual(n, 0, n + ' tohum carpti: ' + kotu(sonuc.Bg, x => x.c > 0));
+});
+dene('Bot D (kivilcim kovalar): carpismasiz alma orani >= %95', () => {
+  const oran = kivD.temiz / kivD.deneme;
+  console.log('       ' + kivD.deneme + ' kivilcim, alinan ' + kivD.alinan + ', carpismasiz alinan ' + kivD.temiz + ' (%' + (100 * oran).toFixed(2) + '), toplam carpisma ' + kivD.carpma + ' (' + kivD.tohumCarpma + ' tohum)');
+  assert.ok(kivD.deneme > 0 && oran >= 0.95, 'oran ' + oran);
+});
+dene('bolge olaylari nefes varisinda (' + ist.bolgeOlay + ' olay)', () => assert.ok(ist.bolgeOlay > 0));
 dene('Bot B gercek isikla: isik hicbir tohumda 0,25 altina inmez', () => {
   const n = sonuc.Bg.filter(x => x.isik < 0.25 || x.bitti || x.m < MESAFE).length;
   const enAz = Math.min(...sonuc.Bg.map(x => x.isik));
   assert.strictEqual(n, 0, n + ' tohum, en az isik ' + enAz.toFixed(3) + ': ' + kotu(sonuc.Bg, x => x.isik < 0.25 || x.bitti));
-  console.log('       en az isik ' + enAz.toFixed(3) + ', carpisan tohum ' + sonuc.Bg.filter(x => x.c > 0).length);
+  console.log('       en az isik ' + enAz.toFixed(3));
 });
 [['C0', 'hic basmaz'], ['C1', 'hep basili']].forEach(([ad, ac]) => {
   dene('Bot C (' + ac + '): <= 40 sn biter, toz < 10, jeton 0', () => {

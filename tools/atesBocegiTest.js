@@ -42,12 +42,14 @@ dene('bozuk ayar: R_TAVAN > W - X_BOCEK - 2', () => { const a = ayarKopya(); a.a
 dene('bozuk ayar: dusen tetik mesafesi >= minYaricap', () => { const a = ayarKopya(); a.uretici.DUSEN_UYARI = 0.25; assert.ok(AB.ayarDogrula(a).length > 0); });
 dene('bozuk ayar: kivilcim/toz cizim orani < 1,8', () => { const a = ayarKopya(); a.hareket.R_KIVILCIM_GORSEL = a.hareket.R_TOZ_GORSEL * 1.7; assert.ok(AB.ayarDogrula(a).length > 0); });
 dene('bozuk ayar: tAra tabani T_MIN + T_IVME altinda', () => { const a = ayarKopya(); a.zorluk.TARA_Z = 1.2; assert.ok(AB.ayarDogrula(a).length > 0); });
+dene('bozuk ayar: nefes engelsiz suresi < NEFES_SURE', () => { const a = ayarKopya(); a.uretici.NEFES_SURE = 3; assert.ok(AB.ayarDogrula(a).length > 0); });
+dene('bozuk ayar: V_GUVENLI T_IVME icinde kazanilamiyor', () => { const a = ayarKopya(); a.adalet.T_IVME = 0.1; assert.ok(AB.ayarDogrula(a).length > 0); });
 dene('kivilcim/toz cizim yaricap orani >= 1,8', () => assert.ok(A.hareket.R_KIVILCIM_GORSEL / A.hareket.R_TOZ_GORSEL >= 1.8));
 dene('bozuk AYAR ile modul yuklenirken throw', () => {
   const bozuk = kaynak.replace(/R_TAVAN:\s*40/, 'R_TAVAN: 30');
   assert.notStrictEqual(bozuk, kaynak);
   const m = { exports: {} };
-  assert.throws(() => vm.runInNewContext(bozuk, { module: m, Math: Math, Object: Object }));
+  assert.throws(() => vm.runInNewContext(bozuk, { module: m, Math: Math, Object: Object }), /AYAR gecersiz/);
 });
 dene('cekirdekte Math.random ve Date yok', () => {
   const kod = kaynak.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -141,12 +143,27 @@ dene('farkli kare hizi taklidi (ayni adim sayisi) ayni sonuc', () => {
   const s60 = sonuc([1 / 60]), s144 = sonuc([1 / 144]), sKarisik = sonuc([0.016, 0.033, 0.007, 0.05, 0.02]);
   assert.strictEqual(s60, s144); assert.strictEqual(s60, sKarisik);
 });
-dene('durum alanlari ve JSON', () => {
+dene('durum alanlari; durumda islev yok', () => {
   const d = AB.oyunOlustur(5);
-  ['t', 'mesafe', 'puan', 'y', 'vy', 'isik', 'dokunulmaz', 'zincir', 'zincirSure', 'toz', 'bolge', 'bitti', 'dilimler', 'tohum']
+  ['t', 'mesafe', 'puan', 'y', 'vy', 'isik', 'dokunulmaz', 'zincir', 'zincirSure', 'toz', 'bolge', 'gorunenBolge', 'bitti', 'dilimler', 'tohum', 'uretici']
     .forEach(k => assert.ok(k in d, k));
   assert.ok(Array.isArray(d.dilimler) && d.dilimler.length > 0);
-  assert.deepStrictEqual(kopya(d), JSON.parse(JSON.stringify(d)));
+  (function gez(o, yol) {
+    assert.notStrictEqual(typeof o, 'function', yol + ' islev');
+    if (o && typeof o === 'object') Object.keys(o).forEach(k => gez(o[k], yol + '.' + k));
+  })(d, 'durum');
+});
+dene('JSON gidis-donusu: geri yuklenen durum 8000 adim boyunca ayni', () => {
+  const a = AB.oyunOlustur(4242);
+  for (let i = 0; i < 4000; i++) { a.isik = 1; AB.adim(a, girdi(i)); }
+  const b = JSON.parse(JSON.stringify(a));
+  assert.deepStrictEqual(b, kopya(a));
+  for (let i = 4000; i < 12000; i++) {
+    a.isik = 1; b.isik = 1;
+    assert.deepStrictEqual(AB.adim(b, girdi(i)), AB.adim(a, girdi(i)));
+  }
+  assert.strictEqual(JSON.stringify(b), JSON.stringify(a));
+  assert.ok(a.uretici.n > 50);
 });
 
 console.log('Uretici');
@@ -293,10 +310,42 @@ dene('mesafe puani: her 4 birimde 1', () => {
   adimla(d, 1200, false);
   assert.strictEqual(d.puan, Math.floor(d.mesafe / 4));
 });
-dene('bolge olayi puan 500 gecince', () => {
-  const d = bosDurum(); d.puan = 499; d.y = 50;
-  let o = []; while (!o.length || say(o, 'bolge') === 0) { o = AB.adim(d, false); if (d.t > 10) break; }
-  assert.strictEqual(say(o, 'bolge'), 1); assert.strictEqual(d.bolge, 1);
+dene('bolge: agirlik bolgesi puanla hemen, gorunenBolge nefes varinca', () => {
+  const d = AB.oyunOlustur(77);
+  for (let i = 0; i < 1200; i++) { d.isik = 1; AB.adim(d, girdi(i)); }
+  assert.strictEqual(d.gorunenBolge, 0); assert.ok(d.puan < 500);
+  d.puan = 500;
+  let o = AB.adim(d, false), n = 0;
+  assert.strictEqual(d.bolge, 1); assert.strictEqual(d.gorunenBolge, 0); assert.strictEqual(say(o, 'bolge'), 0);
+  let nefes = null;
+  while (n++ < 4000) {
+    d.isik = 1; o = AB.adim(d, false);
+    if (!nefes) nefes = d.dilimler.find(s => s.nefes) || null;
+    if (say(o, 'bolge')) break;
+  }
+  assert.ok(nefes, 'nefes uretilmedi'); assert.strictEqual(nefes.bolge, 1);
+  assert.strictEqual(say(o, 'bolge'), 1); assert.strictEqual(o.find(x => x.tur === 'bolge').bolge, 1);
+  assert.strictEqual(d.gorunenBolge, 1);
+  const bx = d.mesafe + XB;
+  assert.ok(nefes.x <= bx && nefes.x > bx - AB.zorluk(d.mesafe).hiz * DT - 1e-9, 'olay nefes varisinda degil');
+  for (let i = 0; i < 600; i++) assert.strictEqual(say(AB.adim(d, false), 'bolge'), 0);
+});
+dene('isikYaricapi gorunenBolge ile: bataklik nefesten sonra daralir', () => {
+  const d = { isik: 1, hiz: 24 };
+  assert.ok(AB.isikYaricapi(d.isik, d.hiz, 3) < AB.isikYaricapi(d.isik, d.hiz, 2));
+});
+dene('olumcul hasar ayni adimdaki tozla iptal olmaz', () => {
+  const d = bosDurum(); d.y = 50; d.vy = 0; d.isik = 0.33;
+  d.dilimler = [dilim([{ tur: 'dal', x: XB - 1, y: 0, w: 3, h: 100 }], [{ x: XB, y: 50, alindi: 0 }])];
+  const o = AB.adim(d, false);
+  assert.strictEqual(say(o, 'hasar'), 1); assert.strictEqual(say(o, 'bitti'), 1); assert.strictEqual(say(o, 'toz'), 0);
+  assert.strictEqual(d.bitti, 1); assert.strictEqual(d.isik, 0); assert.strictEqual(d.zincir, 0);
+});
+dene('olaylarda konum', () => {
+  const d = bosDurum(); d.y = 50; d.vy = 0;
+  d.dilimler = [dilim([], [{ x: XB + 0.5, y: 50.5, alindi: 0 }])];
+  const t = AB.adim(d, false).find(o => o.tur === 'toz');
+  assert.strictEqual(t.x, XB + 0.5); assert.strictEqual(t.y, 50.5);
 });
 dene('isik <= 0 -> bitti tek kez, sonra adim bos', () => {
   const d = bosDurum(); d.y = 50; d.isik = 0.0005;
@@ -316,7 +365,7 @@ dene('dilimler 2W ileriye kadar uretilir, arkadakiler atilir', () => {
     d.isik = 1; AB.adim(d, girdi(i));
     const son = d.dilimler[d.dilimler.length - 1], ilk = d.dilimler[0];
     assert.ok(son.x > d.mesafe + XB + 2 * A.dunya.W);
-    assert.ok(ilk.x + ilk.w >= d.mesafe - 1 - 50);
+    assert.ok(ilk.x + ilk.w >= d.mesafe - 1 - AB.zorluk(d.mesafe).hiz * DT);
   }
   assert.ok(d.dilimler.length < 12);
 });
