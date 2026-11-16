@@ -26,7 +26,9 @@
   var IZ_SANIYE = 0.5, IZ_ORNEK = 30, IZ_ALFA = 0.6;
   var PARCACIK_TAVAN = 24, PARCACIK_OMUR = 0.6, PARCACIK_HIZ = 40;
   var BOLGE_GECIS = 1.5;              // arka plan capraz gecis suresi (sn)
-  var DUR_ONCE_MS = 650;              // olum ile sonuc karti arasi
+  var SONME_SN = 0.85;                // isik sonme suresi (sn); sonra sonuc karti
+  var SONME_AZ_SN = 0.3;              // azaltilmis hareket: kisa ve sade
+  var SONME_YAVAS = 0.5;              // sonerken dunyanin kalan kayma hizi (ilk andaki hizin orani)
 
   var YERLESIK = {
     isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D',
@@ -49,7 +51,8 @@
   var pal = null;                     // etkin palet
   var rafId = 0, sonZaman = 0, birikim = 0, zaman = 0, kare = 0;
   var calisiyor = false, duraklatildi = false, bekle = true, bitisIsleniyor = false;
-  var kosuNo = 0;                     // sonuc zamanlayicisi eski kosuya ait mi
+  var kosuNo = 0;                     // her yeni kosu / durdurma ile artar
+  var sonme = -1;                     // isik sonme suresi (sn); -1: baslamadi ya da bitti
   var basili = false, isaretciler = 0, tusBasili = false;
   var rekor = 0, sonSonuc = null;
   var hizOnbellek = 24, hizSayac = 0;
@@ -430,7 +433,7 @@
     if (parcBirikim > 2) parcBirikim = 2;
   }
 
-  function bocekCiz(c, dt) {
+  function bocekCiz(c, dt, p) {
     var d = durum, blink = d.dokunulmaz > 0 && (Math.floor(d.t * 12) & 1) === 0, kanat, egim;
     kanatFaz += dt * (basili ? 88 : 31);
     if (blink && !d.bitti) return;
@@ -438,7 +441,7 @@
     egim = Math.max(-0.5, Math.min(0.5, d.vy * 0.012));
     c.save();
     c.translate(XB, d.y); c.rotate(egim);
-    c.globalAlpha = 0.75 + 0.2 * Math.sin(zaman * 5);
+    c.globalAlpha = (0.75 + 0.2 * Math.sin(zaman * 5)) * sonmeCarpan(p);
     c.drawImage(sprBocek, -M.R_GORSEL * 4, -M.R_GORSEL * 4, M.R_GORSEL * 8, M.R_GORSEL * 8);
     c.globalAlpha = 0.55; c.fillStyle = '#FFFFFF';                 // kanatlar
     c.beginPath(); c.ellipse(-0.5, -0.5, 0.45, 1.5, -0.5 - kanat, 0, 6.2832); c.fill();
@@ -466,7 +469,7 @@
     }
   }
 
-  function dunyaCiz(c, dt) {
+  function dunyaCiz(c, dt, p) {
     var d = durum, dl = d.dilimler, i, j, s, e, t, x, mesafe = d.mesafe, kenar = KENAR_PX / olcek;
     c.lineWidth = kenar; c.lineJoin = 'round'; c.lineCap = 'round';
     c.fillStyle = ENGEL_DOLGU; c.strokeStyle = ENGEL_KENAR;
@@ -500,20 +503,36 @@
     }
     izCiz(c);
     parcacikGuncelle(dt, c);
-    bocekCiz(c, dt);
+    bocekCiz(c, dt, p);
   }
 
-  function karanlikCiz() {
-    var R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge), ks = kc.width / W;
+  // Sonme ilerlemesi 0..1: kosu surerken 0; olumden sonra sure dolunca 1 (karanlik tamamen coker)
+  function sonmeIlerleme() {
+    if (!durum || !durum.bitti) return 0;
+    return sonme < 0 ? 1 : Math.min(1, sonme / (azHareketOn ? SONME_AZ_SN : SONME_SN));
+  }
+  // Isik carpani: yumusakca 1 -> 0; titreme yalniz azaltilmis hareket kapaliyken
+  function sonmeCarpan(p) {
+    if (p <= 0) return 1;
+    if (p >= 1) return 0;
+    var f = 1 - p * p * (3 - 2 * p);
+    if (!azHareketOn) f *= 1 + 0.16 * Math.sin(p * 46) * (1 - p);
+    return Math.max(0, f);
+  }
+
+  function karanlikCiz(p) {
+    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / W;
     kctx.setTransform(1, 0, 0, 1, 0, 0);
     kctx.globalCompositeOperation = 'source-over';
-    kctx.fillStyle = karanlikRenkStr;
+    kctx.fillStyle = p > 0 ? rgba(pal.karanlik, KARANLIK_OPAKLIK + (1 - KARANLIK_OPAKLIK) * p) : karanlikRenkStr;
     kctx.fillRect(0, 0, kc.width, kc.height);
-    kctx.globalCompositeOperation = 'destination-out';
-    kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, durum.y * ks);
-    kctx.fillStyle = karanlikGrad;
-    kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
-    kctx.globalCompositeOperation = 'source-over';
+    if (R > 0.01) {
+      kctx.globalCompositeOperation = 'destination-out';
+      kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, durum.y * ks);
+      kctx.fillStyle = karanlikGrad;
+      kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
+      kctx.globalCompositeOperation = 'source-over';
+    }
   }
 
   function ciz(dt) {
@@ -524,9 +543,10 @@
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
     ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
     arkaPlanCiz(ctx);
-    dunyaCiz(ctx, dt);
+    var p = sonmeIlerleme();
+    dunyaCiz(ctx, dt, p);
     ctx.restore();
-    karanlikCiz();
+    karanlikCiz(p);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(kc, Math.round(ox * dpr), Math.round(oy * dpr));
     hudYaz();
@@ -634,13 +654,9 @@
       }
       else if (o.tur === 'bitti') {
         titret([30, 40, 60]);
-        kosuBitti();
-        var no = kosuNo;
-        setTimeout(function () {
-          if (no !== kosuNo || !calisiyor) return;
-          if (ekran.classList.contains('offstage')) { dur(); return; }     // ekran terk edildi: kart/ses yok
-          sonucGoster(); rafDurdur();
-        }, DUR_ONCE_MS);
+        kosuBitti();                 // odul + kayit tek kez (bitisIsleniyor); sonuc karti sonme bitince dongude gelir
+        sonme = 0;
+        ton(520, 55, (azHareketOn ? SONME_AZ_SN : SONME_SN) + 0.1, 'sine', 0.09);     // sonme sesi
       }
     }
   }
@@ -669,6 +685,17 @@
       if (gecis < 1) gecis = Math.min(1, gecis + dt / BOLGE_GECIS);
       if ((hizSayac++ & 7) === 0) hizOnbellek = AB.zorluk(durum.mesafe).hiz;
     }
+    if (durum.bitti && sonme >= 0) {                 // isik sonuyor: dunya yavaslayip donar, sonra sonuc karti
+      var sure = azHareketOn ? SONME_AZ_SN : SONME_SN, oran = Math.min(1, sonme / sure);
+      if (!azHareketOn) durum.mesafe += hizOnbellek * dt * SONME_YAVAS * (1 - oran) * (1 - oran);
+      sonme += dt;
+      if (sonme >= sure) {
+        sonme = -1;
+        ciz(0);                                      // tam karanlik kare
+        sonucGoster(); rafDurdur();
+        return;
+      }
+    }
     ciz(durum.bitti ? 0 : dt);
   }
 
@@ -693,8 +720,9 @@
     gecis = 1; eskiBolge = oncekiBolge = durum.gorunenBolge; izN = 0; izBas = 0; adimSayaci = 0;
     hizOnbellek = AB.zorluk(0).hiz; hizSayac = 0; parcBirikim = 0;
     parc.fill(0); kanatFaz = 0; azHareketOn = azHareket();
+    sonme = -1;
     sonEl.classList.remove('show'); durEl.classList.remove('show');
-    ipucuEl.classList.add('show');
+    ipucuEl.classList.remove('show'); void ipucuEl.offsetWidth; ipucuEl.classList.add('show');     // belirme animasyonu her kosuda yeniden
     hudSifirla();
     if (cssW && JSON.stringify(pal) !== paletAnahtar) gorselKur();
     calisiyor = true;
@@ -703,6 +731,7 @@
 
   function duraklat() {
     if (!calisiyor || duraklatildi || !durum) return;
+    if (durum.bitti) { basili = false; isaretciler = 0; tusBasili = false; return; }     // sonme / sonuc: akis kesilmez
     rafDurdur();
     basili = false; isaretciler = 0; tusBasili = false;
     if (!durum.bitti && !bekle) {
@@ -720,7 +749,7 @@
   function dur() {
     rafDurdur();
     calisiyor = false; duraklatildi = false; basili = false; isaretciler = 0; tusBasili = false;
-    kosuNo++;                                   // bekleyen sonuc zamanlayicisini gecersiz kil
+    kosuNo++; sonme = -1;                       // sonme akisi biter; sonuc karti gelmez
     durEl.classList.remove('show'); sonEl.classList.remove('show');
   }
 

@@ -1838,9 +1838,10 @@
   [data-sise-tema][data-siluet].mo-siseler .ss-tup{--dudak-tasma:1.5px; --sivi-alt:2px;}
   .mo-siseler .ss-kapak{transition:none;}
   /* Ates Bocegi onizlemesi: sigmazsa yalniz bu sahne kuculur */
-  .mo-sahne.mo-ates{flex:0 1 58px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%;}
+  .mo-sahne.mo-ates{flex:0 1 58px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%; background:transparent;}
   @media (max-width:339px){ .mo-sahne.mo-ates{display:none;} }
-  .mo-ates svg{width:100%; height:100%; display:block;}
+  .mo-ates svg{width:100%; height:100%; display:block; background:transparent;}
+  .mo-ates-zemin{fill-opacity:.55;}      /* tema karanligi yari saydam: onizleme tonu arkadan gorunur */
   .mo-ates-dal{fill:#0B0F14; stroke:#E9EDF2; stroke-width:1.25; stroke-linejoin:round;}
   .mo-ates-iz.lav{animation:moAtesNabiz 1.6s ease-in-out infinite;}
   @keyframes moAtesNabiz{0%,100%{opacity:1;} 50%{opacity:.45;}}
@@ -2090,19 +2091,34 @@
   .phone.reduced-motion .hediye-kapak{transition:none;}
   @media (prefers-reduced-motion: reduce){ .hediye-ikon{animation:none !important;} .hediye-kapak{transition:none;} }
 
+  /* kisa bilgilendirme yazisi (Kacis ipucu + Su Sirala 1. bolum ogreticisi): ekran hafif kararir, yazi ortada */
+  .kc-tip{position:absolute; inset:0; z-index:31; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(6,18,10,.55); opacity:0; transition:opacity .28s ease; pointer-events:none;}
+  .kc-tip.show{opacity:1;}
+  .kc-tip-text{font-size:23px; font-weight:800; letter-spacing:.3px; text-align:center; line-height:1.35; padding:0 26px;
+    text-shadow:0 2px 10px rgba(0,0,0,.7);}
+  .kc-tip-alt{font-size:14.5px; font-weight:600; text-align:center; line-height:1.4; padding:4px 26px 0; color:#EAF6EC;
+    text-shadow:0 2px 8px rgba(0,0,0,.75);}
+  .ss-board-wrap .kc-tip{background:rgba(6,14,28,.55);}
+
   /* =======================================================
      ATES BOCEGI
      ======================================================= */
   .icon-ates{background:#0E2A2A;}
   .icon-ates svg{width:100%; height:100%; display:block;}
-  .game-label.theme-ates{background:#FFE27A; color:#1A1410; -webkit-text-fill-color:#1A1410;
-    padding:1px 6px; border-radius:8px; max-width:100%; box-sizing:border-box;}
+  .game-label.theme-ates{
+    background:linear-gradient(90deg, #FFE27A 0%, #C9F06F 55%, #7FE6B0 100%);
+    -webkit-background-clip:text; background-clip:text;
+    color:transparent; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 1px 3px rgba(4,12,10,.8));
+    max-width:100%; box-sizing:border-box; font-size:11.5px; line-height:1.2; text-wrap:balance;}
 
   #screen-ates{
     --ink:#E7F0FB; --ab-vurgu:#9BE86B; --ab-isik:#FFE27A; --ab-karanlik:#05080D;
     background:radial-gradient(circle at 50% 8%, #12232C 0%, #05080D 78%);
   }
-  .ab-title{font-family:'Fredoka', sans-serif; font-weight:500; font-size:30px; letter-spacing:.02em;
+  .ab-title{font-family:'Fredoka', sans-serif; font-weight:500; font-size:clamp(16px, 5.4vw, 22px); letter-spacing:.01em;
+    white-space:nowrap; min-width:0; text-align:center;
     color:#FFE27A; text-shadow:0 0 14px rgba(255,226,122,.45), 0 3px 8px rgba(4,8,14,.75);}
   .ab-hud{display:flex; align-items:stretch; justify-content:center; gap:8px; padding:2px 12px 6px;}
   .ab-kutu{flex:1 1 0; min-width:0; max-width:104px; border-radius:12px; padding:5px 8px; text-align:center;
@@ -2122,12 +2138,24 @@
   .ab-alan{position:relative; flex:1 1 0; min-height:0; overflow:hidden; background:var(--ab-karanlik);}
   .ab-tuval{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none;
     -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;}
-  .ab-ipucu{position:absolute; left:50%; bottom:12%; transform:translateX(-50%); z-index:5; display:none;
+  .ab-ipucu{position:absolute; left:50%; bottom:12%; transform:translate(-50%, -14px); z-index:5; display:flex;
     flex-direction:column; align-items:center; gap:4px; text-align:center; pointer-events:none;
-    color:#FFE9B8; text-shadow:0 2px 8px rgba(0,0,0,.9);}
-  .ab-ipucu.show{display:flex;}
-  .ab-ipucu b{font-family:'Fredoka', sans-serif; font-weight:600; font-size:20px;}
-  .ab-ipucu span{font-size:14px; line-height:1.4; opacity:.9;}
+    color:#FFE9B8; text-shadow:0 2px 8px rgba(0,0,0,.9);
+    opacity:0; transition:opacity .3s ease, transform .3s ease;}       /* kaybolma: yukari suzulup soner */
+  .ab-ipucu.show{opacity:1; transform:translate(-50%, 0); transition:none;}
+  .ab-ipucu b{font-family:'Fredoka', sans-serif; font-weight:600; font-size:20px; display:block;}
+  .ab-ipucu span{font-size:14px; line-height:1.4; opacity:.9; display:block;}
+  /* belirme: asagidan yukari suzul; sonra "Dokun ve basla" nefes alir */
+  .ab-ipucu.show b{animation:abIpucuGir .75s cubic-bezier(.2,.8,.2,1) both, abIpucuNefes 2.4s ease-in-out .75s infinite;}
+  .ab-ipucu.show span{animation:abIpucuGir .75s cubic-bezier(.2,.8,.2,1) .12s both;}
+  @keyframes abIpucuGir{from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:translateY(0);}}
+  @keyframes abIpucuNefes{0%,100%{transform:scale(1); opacity:1;} 50%{transform:scale(1.06); opacity:.8;}}
+  .phone.reduced-motion .ab-ipucu.show b, .phone.reduced-motion .ab-ipucu.show span{animation:none;}
+  .phone.reduced-motion .ab-ipucu{transition:opacity .2s ease; transform:translate(-50%, 0);}
+  @media (prefers-reduced-motion: reduce){
+    .ab-ipucu.show b, .ab-ipucu.show span{animation:none;}
+    .ab-ipucu{transition:opacity .2s ease; transform:translate(-50%, 0);}
+  }
   .ab-ortu{position:absolute; inset:0; z-index:10; display:none; flex-direction:column; align-items:center;
     justify-content:center; gap:12px; padding:22px; text-align:center; background:rgba(5,8,13,.88);}
   .ab-ortu.show{display:flex; animation:ortuSolukGir .25s ease;}

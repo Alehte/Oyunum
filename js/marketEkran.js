@@ -201,7 +201,7 @@ window.MarketEkran = (function () {
       '<svg viewBox="0 0 58 58" aria-hidden="true" focusable="false">' +
       '<defs><radialGradient id="' + id + 'z"><stop offset=".72" stop-color="' + zemin + '"/><stop offset="1" stop-color="' + zemin + '" stop-opacity="0"/></radialGradient>' +
       '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="' + p.isik + '" stop-opacity=".7"/><stop offset="1" stop-color="' + p.isik + '" stop-opacity="0"/></radialGradient></defs>' +
-      '<rect width="58" height="58" rx="9" fill="' + p.karanlik + '"/>' +
+      '<rect class="mo-ates-zemin" width="58" height="58" rx="9" fill="' + p.karanlik + '"/>' +
       '<circle cx="29" cy="29" r="25" fill="url(#' + id + 'z)"/>' +
       '<g class="mo-ates-iz' + (p.animasyon ? ' ' + p.animasyon : '') + '">' + atesIzDamgalari(p.iz) + '</g>' +
       '<circle cx="31" cy="29" r="10" fill="url(#' + id + 'p)"/>' +

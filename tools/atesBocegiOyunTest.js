@@ -1,6 +1,7 @@
 // atesBocegiOyunTest.js — js/atesBocegiOyun.js'i sahte DOM/canvas ile dener (gorsel dogrulamaz).
 // Kapsam: tek odeme, gun degisimi, yarim kosu odemez, sifirla, offstage'de rAF durur,
-// olum sonrasi zamanlayici ekran kapaninca iptal, bozuk/yeni surum kaydi, ilk kosuda rekor yok.
+// olum sonrasi isik sonme akisi ekran kapaninca iptal, bozuk/yeni surum kaydi, ilk kosuda rekor yok,
+// isik sonme: karanlik cokmeden kart gelmez, yeniden baslat/geri ile cift kart ve cift odeme olmaz.
 // Calistirma:  node tools/atesBocegiOyunTest.js
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
@@ -8,10 +9,10 @@ const AB = require(path.join(__dirname, '..', 'js', 'atesBocegi.js'));
 const KAYNAK = fs.readFileSync(path.join(__dirname, '..', 'js', 'atesBocegiOyun.js'), 'utf8');
 
 function ortam() {
-  const o = { rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0 };
+  const o = { oyuk: 0, rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0 };
   const proxyCtx = () => new Proxy({}, {
     get(h, k) { if (k in h) return h[k]; return (...a) => (/Gradient/.test(k) ? { addColorStop() {} } : undefined); },
-    set(h, k, v) { h[k] = v; return true; }
+    set(h, k, v) { if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
   });
   const els = {};
   const el = id => els[id] || (els[id] = (() => {
@@ -33,7 +34,7 @@ function ortam() {
     AtesBocegi: AB2, devicePixelRatio: 2, addEventListener() {},
     requestAnimationFrame: f => { o.rafF = f; return 1; }, cancelAnimationFrame() { o.rafF = null; },
     setTimeout: f => { o.zamanlayicilar.push(f); return o.zamanlayicilar.length; },
-    matchMedia: () => ({ matches: false }), CoinSVG: () => '<img>',
+    matchMedia: () => ({ matches: !!o.azHareket }), CoinSVG: () => '<img>',
     AppProgress: { surum: 3, gold: 10, atesBocegi: null },
     AppFX: { tone() { o.ses++; }, seq() { o.ses++; }, vibrate() {} }
   };
@@ -50,7 +51,8 @@ function ortam() {
     o.durum.puan = puan; o.durum.toz = toz; o.durum.isik = 0.0001; o.durum.dokunulmaz = 0;
     o.kare(10);
   };
-  o.zamanlayicilariCalistir = () => { const l = o.zamanlayicilar.splice(0); l.forEach(f => f()); };
+  // Sonme artik zamanlayici degil kare tabanli: "zamanlayicilari calistir" = sonme suresini (0.85 sn) bitirecek kadar kare
+  o.zamanlayicilariCalistir = () => { o.kare(80); };
   return o;
 }
 
@@ -144,6 +146,55 @@ dene('olum sonrasi zamanlayici ekran kapaninca iptal: kart ve ses yok', () => {
 dene('dur() sonrasi bekleyen zamanlayici kart basmaz', () => {
   const o = ortam(); o.yeni(); o.olum(2600, 30); o.O.dur();
   o.zamanlayicilariCalistir(); assert.ok(!o.el('abSonuc').cl.has('show'));
+});
+
+dene('isik sonme: olumden hemen sonra kart YOK; isik sonerken kart gelmez, bitince tek kart', () => {
+  const o = ortam(); o.yeni(); o.olum(2600, 30);
+  assert.ok(o.durum.bitti); assert.ok(!o.el('abSonuc').cl.has('show'), 'olumde kart hemen gelmemeli');
+  const oyuk0 = o.oyuk; o.kare(10); assert.ok(o.oyuk > oyuk0, 'isik sonerken hala cizilir');
+  assert.ok(!o.el('abSonuc').cl.has('show'));
+  o.kare(80);
+  assert.ok(o.el('abSonuc').cl.has('show')); assert.strictEqual(o.goldAdd.length, 1);
+  const o2 = o.oyuk; o.O.temaDegisti(); assert.strictEqual(o.oyuk, o2, 'sonme bitince isik yarigapi 0: delik acilmaz (tam karanlik)');
+});
+
+dene('isik sonme: dunya donar (mesafe kart gelince sabit), ses calar', () => {
+  const o = ortam(); o.yeni(); o.olum(2600, 30);
+  const ses = o.ses; o.kare(80); assert.ok(o.el('abSonuc').cl.has('show'));
+  const m = o.durum.mesafe; o.kare(30); assert.strictEqual(o.durum.mesafe, m); assert.ok(o.ses > ses);
+});
+
+dene('isik sonme: azaltilmis harekette kisa (30 kare icinde kart)', () => {
+  const o = ortam(); o.azHareket = true; o.yeni(); o.olum(2600, 30);
+  o.kare(30); assert.ok(o.el('abSonuc').cl.has('show'));
+});
+
+dene('yaris: sonme sirasinda geri (dur) -> kart/cift odeme yok, yeni kosu temiz', () => {
+  const o = ortam(); o.yeni(); o.olum(2600, 30); o.kare(5);
+  o.O.dur(); o.kare(80);
+  assert.ok(!o.el('abSonuc').cl.has('show')); assert.strictEqual(o.goldAdd.length, 1);
+  o.O.start(); o.bas(); o.kare(100);
+  assert.ok(!o.el('abSonuc').cl.has('show')); assert.strictEqual(o.goldAdd.length, 1);
+});
+
+dene('yaris: sonme sirasinda yeniden baslat (start) -> eski kosunun karti gelmez, odeme tek', () => {
+  const o = ortam(); o.yeni(); o.olum(2600, 30); o.kare(5);
+  o.O.start(); o.bas(); o.kare(90);
+  assert.ok(!o.el('abSonuc').cl.has('show')); assert.strictEqual(o.goldAdd.length, 1); assert.ok(!o.durum.bitti);
+});
+
+dene('yaris: sonme sirasinda girdi/duraklat/tekrar tiklari cift islem yapmaz', () => {
+  const o = ortam(); o.yeni(); o.olum(2600, 30);
+  o.bas(); o.birak(); o.el('abDurBtn').dinle.click(); o.el('abDevam').dinle.click(); o.kare(80);
+  assert.strictEqual(o.goldAdd.length, 1); assert.ok(o.el('abSonuc').cl.has('show')); assert.ok(!o.el('abDuraklat').cl.has('show'));
+  o.el('abTekrar').dinle.click(); o.el('abTekrar').dinle.click();
+  assert.strictEqual(o.goldAdd.length, 1); assert.ok(!o.el('abSonuc').cl.has('show'));
+});
+
+dene('Dokun ve basla ipucu: kosu basinda gorunur (show), dokununca kalkar', () => {
+  const o = ortam(); o.O.start(); assert.ok(o.el('abIpucu').cl.has('show'));
+  o.kare(30); assert.ok(o.el('abIpucu').cl.has('show'), 'dokunana kadar kalir');
+  o.bas(); assert.ok(!o.el('abIpucu').cl.has('show'));
 });
 
 dene('daha yeni kayit surumu (4): kayit/odeme yok, atesBocegi dokunulmaz', () => {

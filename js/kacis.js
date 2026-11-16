@@ -1117,20 +1117,7 @@
         .kc-swipe-hand, .kc-swipe-arrow{ animation:none; opacity:.9; }
       }
 
-      /* kisa bilgilendirme yazisi (orn. 10. bolum: basili tut ipucu) */
-      .kc-tip{
-        position:absolute; inset:0; z-index:31;
-        display:flex; align-items:center; justify-content:center;
-        background:rgba(6,18,10,.55);
-        opacity:0; transition:opacity .28s ease;
-        pointer-events:none;
-      }
-      .kc-tip.show{ opacity:1; }
-      .kc-tip-text{
-        font-size:23px; font-weight:800; letter-spacing:.3px;
-        text-align:center; line-height:1.35; padding:0 26px;
-        text-shadow:0 2px 10px rgba(0,0,0,.7);
-      }`;
+`;
       document.head.appendChild(st);
     }
 

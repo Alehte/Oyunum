@@ -331,6 +331,36 @@
      3) OYUN EKRANI
      ============================================================ */
 
+  /* 1. bolum ogreticisi: Kacis'in kisa bilgilendirme yazisi (kcShowTip) ile ayni mantik ve
+     ayni .kc-tip sinifi: ekran hafif kararir, yazi ortada; pointer-events yok, oyuncu altta oynayabilir. */
+  var ogrEl = null, ogrZ = 0;
+  function ogreticiGizle() {
+    clearTimeout(ogrZ);
+    if (!ogrEl) return;
+    var e = ogrEl; ogrEl = null;
+    e.classList.remove('show');
+    setTimeout(function () { e.remove(); }, 300);
+  }
+  function ogreticiGoster(baslik, alt, ms) {
+    ogreticiGizle();
+    var tahta = $('ssTahta'), wrap = tahta && tahta.parentNode;     /* .ss-board-wrap */
+    if (!wrap || !wrap.appendChild) return;
+    var e = document.createElement('div');
+    e.className = 'kc-tip';
+    var t = document.createElement('div');
+    t.className = 'kc-tip-text';
+    t.style.color = '#9CC4FF';
+    t.textContent = baslik;
+    var a = document.createElement('div');
+    a.className = 'kc-tip-alt';
+    a.textContent = alt;
+    e.appendChild(t); e.appendChild(a);
+    wrap.appendChild(e);
+    ogrEl = e;
+    requestAnimationFrame(function () { e.classList.add('show'); });
+    ogrZ = setTimeout(ogreticiGizle, (ms || 1500) + 280);
+  }
+
   function bolumBaslat(bolumNo) {
     oyun = global.SuSirala.OyunOlustur(bolumNo);
     secili = -1;
@@ -348,6 +378,9 @@
 
     if (global.slideForward) global.slideForward('ssHarita', 'ssOyun');
     if (global.AppGold) global.AppGold.render();
+    /* 1. bolum her acilista: baslik + tek satir */
+    if (bolumNo === 1) ogreticiGoster('Her renk kendi şişesine', 'Bir şişeye, sonra dökeceğin şişeye dokun.', 3200);
+    else ogreticiGizle();
   }
 
   function tahtaKur() {
@@ -557,6 +590,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
   /* ---------- Etkilesim ---------- */
 
   function tupTiklandi(i) {
+    ogreticiGizle();
     if (!oyun || oyun.kazandiMi()) return;
     /* Egilmis sise ne kaynak ne hedef olabilir */
     if (doken[i]) return;
@@ -915,6 +949,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
 
     var haritaya = $('ssHaritayaBtn');
     if (haritaya) haritaya.addEventListener('click', function () {
+      ogreticiGizle();
       var s = $('ssSonuc'); if (s) s.classList.remove('show');
       haritaCiz();
       if (global.slideBack) global.slideBack('ssOyun', 'ssHarita');
@@ -923,6 +958,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
 
   /* Oyun ekranindan oyun ekranina gecis (kaydirma olmadan) */
   function bolumBaslat2(bolumNo) {
+    ogreticiGizle();
     oyun = global.SuSirala.OyunOlustur(bolumNo);
     secili = -1; perdeModu = false; doken = {}; dolan = {}; akanSayisi = 0;
     var baslik = $('ssLevelTitle');
