@@ -349,5 +349,25 @@ dene('stil: .mo-ates CSS style.css\'te, JS stil enjekte etmiyor; hareketi azaltt
   assert(/Beş oyunda birden geçerli/.test(ekran) && !/Dört oyunda/.test(ekran));
 });
 
+dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS seffaf', () => {
+  const lum = h => (parseInt(h.substr(1, 2), 16) * 0.299 + parseInt(h.substr(3, 2), 16) * 0.587 + parseInt(h.substr(5, 2), 16) * 0.114);
+  TEMALAR.forEach(t => assert(lum(M.isikCoz(t.isik).karanlik) < 60, t.id + ' karanlik zemin acik'));
+  const css = oku('style.css');
+  assert(/\.mo-sahne\.mo-ates\{[^}]*background:transparent/.test(css) && /\.mo-ates svg\{[^}]*background:transparent/.test(css));
+});
+
+dene('ana ekran Karanlikta Suzul etiketi: acik renk, kontrast >= 4.5, zemin seffaf', () => {
+  const css = oku('style.css');
+  const m = css.match(/\.game-label\.theme-ates\{([^}]*)\}/);
+  assert(m, 'kural yok');
+  const r = m[1].match(/(?:^|[;\s])color:(#[0-9A-Fa-f]{6})/);
+  assert(r, 'duz renk yok');
+  const lin = h => [1, 3, 5].map(i => { const c = parseInt(h.substr(i, 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+  const L = h => { const [a, b, c] = lin(h); return 0.2126 * a + 0.7152 * b + 0.0722 * c; };
+  const oran = (L(r[1]) + 0.05) / (L('#0B1220') + 0.05);
+  assert(oran >= 4.5, 'kontrast ' + oran.toFixed(2));
+  assert(/background:none/.test(m[1]) && !/background-clip:text/.test(m[1]) && /text-shadow/.test(m[1]));
+});
+
 console.log(gecti + ' test gecti' + (process.exitCode ? ', HATA VAR' : '') +
   '; en dusuk oran: ' + sonuclar.slice(0, ana).reduce((a, b) => (b.oran < a.oran ? b : a)).oran.toFixed(2));

@@ -151,10 +151,10 @@ dene('listelerdeki her yol diskte tam bu adla var', () => {
   assert.strictEqual(new Set(HEPSI).size, HEPSI.length, 'listede tekrarlanan yol var');
 });
 
-dene('Ates Bocegi: iki dosya OYUNLAR icinde, SURUM 14, index.html ve core.js yukledigi her js listede', () => {
+dene('Ates Bocegi: iki dosya OYUNLAR icinde, SURUM 15, index.html ve core.js yukledigi her js listede', () => {
   const oyunlar = Array.from(ilk.ctx.OYUNLAR);
   ['js/atesBocegi.js', 'js/atesBocegiOyun.js'].forEach(y => assert.ok(oyunlar.includes(y), y + ' OYUNLAR icinde yok'));
-  assert.strictEqual(ilk.ctx.SURUM, '14');
+  assert.strictEqual(ilk.ctx.SURUM, '15');
   const kok = path.join(__dirname, '..');
   const kaynak = fs.readFileSync(path.join(kok, 'index.html'), 'utf8') + ' ' + fs.readFileSync(path.join(kok, 'js/core.js'), 'utf8');
   const yuklenen = new Set();
