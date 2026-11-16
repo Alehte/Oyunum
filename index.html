@@ -214,16 +214,16 @@
         </div>
         <div class="ab-isik" role="progressbar" aria-label="Işık" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i id="abIsik"></i></div>
         <div class="ab-alan" id="abAlan">
-          <canvas class="ab-tuval" id="abTuval" aria-label="Ateş Böceği oyun alanı"></canvas>
+          <canvas class="ab-tuval" id="abTuval" role="img" aria-label="Ateş Böceği oyun alanı"></canvas>
           <div class="ab-ipucu show" id="abIpucu"><b>Dokun ve başla</b><span>Basılı tut: yüksel<br>Bırak: süzül</span></div>
-          <div class="ab-ortu" id="abDuraklat">
+          <div class="ab-ortu" id="abDuraklat" role="dialog" aria-modal="true" aria-label="Duraklatıldı">
             <div class="ab-ortu-baslik">Duraklatıldı</div>
             <button id="abDevam">Devam</button>
             <button class="ikincil" id="abYeniden">Yeniden Başla</button>
           </div>
-          <div class="ab-ortu" id="abSonuc">
+          <div class="ab-ortu" id="abSonuc" role="dialog" aria-modal="true" aria-label="Koşu sonucu">
             <div class="ab-ortu-baslik" id="abSonBaslik"></div>
-            <div class="ab-sonalt" id="abSonAlt"></div>
+            <div class="ab-sonalt" id="abSonAlt" aria-live="polite"></div>
             <button id="abTekrar">Tekrar</button>
             <button class="ikincil" id="abAna">Ana ekran</button>
           </div>

@@ -189,7 +189,11 @@
   document.getElementById('ssoOyunBackBtn').addEventListener('click', () => slideBack('ssoOyun','ssoHarita'));
   // Ates Bocegi: eleman yoksa baglanmaz (index.html'e sonra eklenir)
   const cardAtes = document.getElementById('cardAtes'), atesBackBtn = document.getElementById('atesBackBtn');
-  if(cardAtes) cardAtes.addEventListener('click', () => oyunAc('ates', () => { slideForward('home','ates'); window.AtesBocegiOyun.start(); }));
+  // start() yalniz gecis kabul edildiyse; odak kartta kalirsa Bosluk tusu koşuyu sifirlamasin
+  if(cardAtes) cardAtes.addEventListener('click', () => {
+    cardAtes.blur();
+    oyunAc('ates', () => { if(slideForward('home','ates')) window.AtesBocegiOyun.start(); });
+  });
   if(atesBackBtn) atesBackBtn.addEventListener('click', () => {
     if(window.AtesBocegiOyun) window.AtesBocegiOyun.dur();
     slideBack('ates','home');

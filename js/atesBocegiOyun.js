@@ -62,6 +62,7 @@
   var kc = null, kctx = null, karanlikGrad = null, karanlikRenkStr = '';
   var katmanlar = [null, null, null, null];   // bolge -> [tuval, tuval, tuval]
   var sprBocek = null, sprToz = null, sprKivilcim = null;
+  var paletAnahtar = '';
   var gecis = 1, eskiBolge = 0, oncekiBolge = 0;       // arka plan capraz gecisi
   var izM = new Float32Array(IZ_ORNEK + 2), izY = new Float32Array(IZ_ORNEK + 2), izN = 0, izBas = 0;
   var parc = new Float32Array(PARCACIK_TAVAN * 6);   // x, y, vx, vy, yas, omur
@@ -263,8 +264,8 @@
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1, 'rgba(0,0,0,0)');
     karanlikRenkStr = rgba(pal.karanlik, KARANLIK_OPAKLIK);
-    k = durum ? durum.gorunenBolge : 0;
-    bolgeKur(k);
+    for (k = 0; k < katmanlar.length; k++) bolgeKur(k);     // hepsi onceden: bolge gecisinde takilma olmasin
+    paletAnahtar = JSON.stringify(pal);
     ekran.style.setProperty('--ab-vurgu', pal.vurgu);
     ekran.style.setProperty('--ab-isik', pal.isik);
     ekran.style.setProperty('--ab-karanlik', pal.karanlik);
@@ -273,7 +274,9 @@
   function boyutla() {
     var r = alan.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var yeniDpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (cssW && r.width === cssW && r.height === cssH && yeniDpr === dpr) return true;   // boyut degismedi: yeniden kurma
+    dpr = yeniDpr;
     cssW = r.width; cssH = r.height;
     olcek = Math.min(cssW / W, cssH / H);
     ox = (cssW - W * olcek) / 2; oy = (cssH - H * olcek) / 2;
@@ -546,16 +549,18 @@
     sonHud.puan = sonHud.rekor = sonHud.carpan = sonHud.isik = -1;
     puanEl.textContent = '0'; rekorEl.textContent = yaz(rekor); carpanEl.textContent = '×1';
     carpanEl.parentNode.classList.remove('aktif');
-    isikEl.style.transform = 'scaleX(1)';
+    isikEl.style.transform = 'scaleX(1)'; isikEl.parentNode.setAttribute('aria-valuenow', '100');
   }
 
   // ---------------------------------------------------------------
   // KAYIT — savunmaci okuma
   // ---------------------------------------------------------------
+  function AppKayitSurum() { return window.AppKayitGoc && window.AppKayitGoc.surum ? window.AppKayitGoc.surum : 3; }
   function sayi(v) { return typeof v === 'number' && isFinite(v) && v >= 0 ? v : 0; }
   function kayitOku() {
     var P = window.AppProgress, ab;
     if (!P) return { rekor: 0, kosu: 0, gun: '', gunJeton: 0 };
+    if (typeof P.surum === 'number' && P.surum > AppKayitSurum()) return null;   // daha yeni kayit: dokunma
     ab = P.atesBocegi;
     if (!ab || typeof ab !== 'object' || Array.isArray(ab)) { ab = { rekor: 0, kosu: 0, gun: '', gunJeton: 0 }; P.atesBocegi = ab; }
     ab.rekor = sayi(ab.rekor); ab.kosu = sayi(ab.kosu); ab.gunJeton = sayi(ab.gunJeton);
@@ -569,8 +574,12 @@
   function kosuBitti() {
     if (bitisIsleniyor) return;
     bitisIsleniyor = true;
-    var ab = kayitOku(), bg = bugun(), gunJeton = ab.gun === bg ? ab.gunJeton : 0;
-    var puan = Math.floor(durum.puan), toz = durum.toz, eskiRekor = ab.rekor;
+    var ab = kayitOku(), bg = bugun(), puan = Math.floor(durum.puan), toz = durum.toz;
+    if (!ab) {                       // desteklenmeyen (daha yeni) kayit surumu: yazma, odeme yok
+      sonSonuc = { puan: puan, toz: toz, eskiRekor: 0, yeniRekor: false, esik: { jeton: 0, adet: 0 }, kj: { jeton: 0, ham: 0, aktif: true }, toplam: 0, gunJeton: 0, yazilmadi: true };
+      return;
+    }
+    var gunJeton = ab.gun === bg ? ab.gunJeton : 0, eskiRekor = ab.rekor, oncekiKosu = ab.kosu;
     var esik = AB.esikOdulu(eskiRekor, puan, AYAR), kj = AB.kosuJetonu(puan, toz, gunJeton, AYAR);
     var toplam = esik.jeton + kj.jeton;
     ab.rekor = Math.max(eskiRekor, puan);
@@ -579,7 +588,7 @@
     if (toplam > 0 && window.AppGold) window.AppGold.add(toplam);
     else if (window.AppSaveProgress) window.AppSaveProgress({ atesBocegi: ab });
     rekor = ab.rekor;
-    sonSonuc = { puan: puan, toz: toz, eskiRekor: eskiRekor, yeniRekor: puan > eskiRekor, esik: esik, kj: kj, toplam: toplam, gunJeton: gunJeton };
+    sonSonuc = { puan: puan, toz: toz, eskiRekor: eskiRekor, yeniRekor: puan > eskiRekor && oncekiKosu > 0, esik: esik, kj: kj, toplam: toplam, gunJeton: gunJeton };
   }
 
   function jetonSatiri(ad, miktar, sinif) {
@@ -598,7 +607,8 @@
     if (s.esik.jeton > 0) alt += jetonSatiri('Rekor eşiği' + (s.esik.adet > 1 ? ' ×' + s.esik.adet : ''), s.esik.jeton, 'ab-kz-satir');
     if (s.toplam > 0) alt += jetonSatiri('Toplam', s.toplam, 'ab-kz-toplam');
     alt += '</div>';
-    if (!s.kj.aktif) alt += '<div class="ab-not">Koşu jetonu için en az ' + E.AKTIF_TOZ + ' toz ve ' + yaz(E.AKTIF_PUAN) + ' puan gerekir.</div>';
+    if (s.yazilmadi) alt += '<div class="ab-not">Bu kayıt sürümü desteklenmiyor; ödül verilmedi.</div>';
+    else if (!s.kj.aktif) alt += '<div class="ab-not">Koşu jetonu için en az ' + E.AKTIF_TOZ + ' toz ve ' + yaz(E.AKTIF_PUAN) + ' puan gerekir.</div>';
     else if (s.kj.ham > s.kj.jeton) alt += '<div class="ab-not">Günlük sınır aşıldı: ' + s.kj.ham + ' jetonun ' + s.kj.jeton + ' kadarı ödendi.</div>';
     sonAlt.innerHTML = alt;
     sonEl.classList.add('show');
@@ -626,7 +636,11 @@
         titret([30, 40, 60]);
         kosuBitti();
         var no = kosuNo;
-        setTimeout(function () { if (no === kosuNo && calisiyor) { sonucGoster(); rafDurdur(); } }, DUR_ONCE_MS);
+        setTimeout(function () {
+          if (no !== kosuNo || !calisiyor) return;
+          if (ekran.classList.contains('offstage')) { dur(); return; }     // ekran terk edildi: kart/ses yok
+          sonucGoster(); rafDurdur();
+        }, DUR_ONCE_MS);
       }
     }
   }
@@ -636,7 +650,7 @@
   function dongu(z) {
     var dt, n = 0, olaylar, saniye = z / 1000;
     rafId = requestAnimationFrame(dongu);
-    if (ekran.classList.contains('offstage')) { duraklat(); return; }
+    if (ekran.classList.contains('offstage')) { dur(); return; }
     if (!cssW && !boyutla()) return;
     dt = sonZaman ? Math.max(0, saniye - sonZaman) : 0;
     sonZaman = saniye;
@@ -672,7 +686,7 @@
     rafDurdur();
     kosuNo++;
     durum = AB.oyunOlustur(tohumUret());
-    rekor = Math.max(rekor, kayitOku().rekor);
+    var kk = kayitOku(); rekor = Math.max(rekor, kk ? kk.rekor : 0);
     pal = paletOku();
     birikim = 0; sonZaman = 0; kare = 0; basili = false; isaretciler = 0; tusBasili = false;
     bekle = true; duraklatildi = false; bitisIsleniyor = false; sonSonuc = null;
@@ -682,7 +696,7 @@
     sonEl.classList.remove('show'); durEl.classList.remove('show');
     ipucuEl.classList.add('show');
     hudSifirla();
-    if (cssW) gorselKur();
+    if (cssW && JSON.stringify(pal) !== paletAnahtar) gorselKur();
     calisiyor = true;
     rafId = requestAnimationFrame(dongu);
   }
@@ -772,7 +786,7 @@
     // market.js temayiYay: palet yeniden okunur, onbellekli katmanlar yeniden kurulur
     temaDegisti: function () {
       pal = paletOku();
-      if (cssW) gorselKur();
+      if (cssW && JSON.stringify(pal) !== paletAnahtar) gorselKur();
       if (calisiyor && durum && !rafId && cssW) ciz(0);
     },
     // AppReset: acik kosuyu at, HUD'u sifirla
