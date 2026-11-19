@@ -354,6 +354,8 @@ dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 
   const sar = /function sarmasikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
   assert(/u \? SARMASIK_GOVDE : ENGEL_DOLGU; c\.lineWidth = u \? 0\.7 : 0\.7 \+ 2 \* Math\.max\(0\.3, pxD\)/.test(sar), 'sarmasik koyu dis cizgi (>= 1 cihaz pikseli)');
   assert(/c\.fillStyle = UNLEM_RENK; c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 2 \* Math\.max\(0\.23, pxD \/ k\)/.test(OYUN), 'unlem koyu kontur (>= 1 cihaz pikseli)');
+  assert(/c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 2 \* Math\.max\(0\.06, pxD\)/.test(sar), 'sarmasik yaprak koyu kontur (>= 1 cihaz pikseli)');
+  assert(/c\.lineWidth = u \? 0\.3 : 0\.3 \+ 2 \* Math\.max\(0\.16, pxD\)/.test(sar), 'sarmasik filiz koyu bant (>= 1 cihaz pikseli)');
   const oz = /function ozIsikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
   const altCizgi = ince => new RegExp('c\\.strokeStyle = ENGEL_DOLGU; c\\.lineWidth = ' + ince + ' \\+ 2 \\* Math\\.max\\(0\\.2, pxD\\); c\\.stroke\\(\\);[^\\n]*\\n\\s*c\\.strokeStyle = UNLEM_RENK; c\\.lineWidth = ' + ince + '; c\\.stroke\\(\\);');
   assert(altCizgi('0\\.5').test(oz) && altCizgi('0\\.3').test(oz), 'siluet / uc cizgisi / kenar isareti koyu alt cizgi');

@@ -14,7 +14,7 @@ function ortam() {
   const o = { oyuk: 0, rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0, sesLog: [], titresim: [], log: null };
   const proxyCtx = () => new Proxy({}, {
     get(h, k) { if (k in h) return h[k]; return (...a) => { if (o.log) o.log.push([k, a]); return /Gradient/.test(k) ? { addColorStop() {} } : undefined; }; },
-    set(h, k, v) { if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
+    set(h, k, v) { if (k === 'globalAlpha' && o.alfaAc && o.log) o.log.push(['alpha', [v]]); if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
   });
   const els = {};
   const el = id => els[id] || (els[id] = (() => {
@@ -570,6 +570,44 @@ dene('feneri nabzi: azaltilmis harekette sabit, normalde degisir', () => {
     const v = new Set(); for (let i = 0; i < 8; i++) { v.add(rx()); o.kare(4); }
     assert.strictEqual(v.size === 1, az, 'az=' + az + ' farkli deger ' + v.size);
   });
+});
+
+dene('O1: bomba patlamasi her yone: parcacik dikey hizi hem pozitif hem negatif (yatay serit degil)', () => {
+  const o = ortam(); o.yeni();
+  o.durum.dilimler[0].bomba = { x: o.durum.mesafe + XB + 0.5, y: o.durum.y, alindi: 0 };
+  o.durum.isik = 1; o.durum.dokunulmaz = 0;
+  const ys = () => { o.log = []; o.kare(1); const p = o.log.filter(c => c[0] === 'fillRect' && c[1][2] === 0.6 && c[1][3] === 0.6).map(c => c[1][1]); o.log = null; return p; };
+  ys(); const a = ys(), b = ys();
+  assert.ok(a.length >= 4 && a.length === b.length, 'parcacik ' + a.length + '/' + b.length);
+  const dy = b.map((y, i) => y - a[i]);
+  assert.ok(dy.some(v => v > 0.05) && dy.some(v => v < -0.05), 'dy ' + dy.map(v => v.toFixed(2)).join(','));
+});
+
+dene('K1: azaltilmis harekette kanat cirpmasi ve bocek hale alfa nabzi sabit; normalde degisir', () => {
+  [true, false].forEach(az => {
+    const o = ortam(); o.azHareket = az; o.O.start(); o.bas(); o.kare(2);
+    const imza = () => { o.log = []; o.alfaAc = true; o.kare(1); o.alfaAc = false; const l = o.log; o.log = null;
+      const kanat = l.filter(c => c[0] === 'ellipse' && (Math.abs(c[1][2] - 1.7) < 1e-9 || Math.abs(c[1][2] - 1.5) < 1e-9));
+      const im = l.findIndex(c => c[0] === 'drawImage' && c[1].length === 5 && Math.abs(c[1][3] - M.R_GORSEL * 8) < 1e-9);
+      assert.ok(im > 0 && l[im - 1][0] === 'alpha', 'bocek hale alfa');
+      return JSON.stringify(kanat) + '|' + l[im - 1][1][0]; };
+    const v = new Set(); for (let i = 0; i < 6; i++) { v.add(imza()); o.kare(5); }
+    assert.strictEqual(v.size === 1, az, 'az=' + az + ' farkli imza ' + v.size);
+  });
+});
+
+dene('K3: dal sprite onbellegi 3 desen varyanti (e.x tabanli) ayri tuval; ayni varyant yeniden kullanilir', () => {
+  const o = ortam(); o.O.start(); o.kare(1);
+  const m = o.durum.mesafe;
+  const say = xs => { let n = 0; const orj = o.sb.document.createElement; o.sb.document.createElement = (...a) => { n++; return orj(...a); };
+    o.durum.dilimler[2].engeller = xs.map(x => ({ tur: 'dal', yon: 'ust', x: m + x, y: 0, w: 5, h: 33.3 })); o.kare(2); o.sb.document.createElement = orj; return n; };
+  assert.strictEqual(say([10, 11, 12]), 3, '3 varyant 3 tuval');
+  assert.strictEqual(say([13, 14, 15, 16, 30]), 0, 'ayni varyantlar yeniden kullanilir');
+});
+
+dene('K6: tozSon yuva aramasi bomba patlamasina ayrilmis son yuvalari almaz', () => {
+  const g = /function tozSon[\s\S]*?\n  \}/.exec(KAYNAK)[0];
+  assert.ok(/for \(i = 0; i < PARCACIK_TAVAN - PATLAMA_YUVA; i\+\+\)/.test(g), 'tozSon dongusu');
 });
 
 console.log(gecti + ' deneme gecti');
