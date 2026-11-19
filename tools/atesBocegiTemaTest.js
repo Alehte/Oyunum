@@ -520,7 +520,8 @@ dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS seff
   const lum = h => (parseInt(h.substr(1, 2), 16) * 0.299 + parseInt(h.substr(3, 2), 16) * 0.587 + parseInt(h.substr(5, 2), 16) * 0.114);
   TEMALAR.forEach(t => assert(lum(M.isikCoz(t.isik).karanlik) < 60, t.id + ' karanlik zemin acik'));
   const css = oku('style.css');
-  assert(/\.mo-sahne\.mo-ates\{[^}]*background:transparent/.test(css) && /\.mo-ates svg\{[^}]*background:transparent/.test(css));
+  assert(/\.mo-sahne\.mo-ates\{[^}]*background:#05080D; border-radius:6px/.test(css) && /\.mo-ates svg\{[^}]*background:transparent/.test(css), 'sahne sabit koyu CSS zemini + yuvarlak kose');
+  assert(!/class="mo-ates-zemin"/.test(oku('js/marketEkran.js')), 'zemin SVG dolgusu olmamali (otomatik karanlik modu ters cevirir)');
 });
 
 dene('ana ekran Karanlikta Suzul etiketi: acik renk, kontrast >= 4.5, zemin seffaf', () => {
@@ -648,6 +649,34 @@ dene('onizleme sahnesi gercek tarayicida koyu: 9 tema ortalama <= ' + ONIZ_ESIK.
   if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('\n'));
   assert.strictEqual(kotu.length, 0, kotu.map(o => o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('; '));
 });
+
+// ---- GERCEK market yolu: index.html + style.css + js/*.js, market envanteri (10 kart), CDP ile ekran goruntusu ----
+// Beyaz kare sebebi: Android Chrome "web icerigini karart" (otomatik karanlik mod) SVG <rect fill="#05080D"> dolgusunu
+// ters cevirip neredeyse beyaz yapiyordu (kart HTML arka plani koyu kalir, SVG dolgusu terslenir). Normal modda sorun yok;
+// bu yuzden hem normal hem otomatik karanlik modda olculur. Kutunun kose (4 px ic) ve kenar orta (1,5 px ic) pikselleri koyu olmali.
+function marketKartlariOlc(chrome, oto, port) {
+  const r = require('child_process').spawnSync(process.execPath, [path.join(KOK, 'tools', 'marketKartYakala.js'), chrome, oto ? '1' : '0', String(port)],
+    { encoding: 'utf8', maxBuffer: 1 << 28, timeout: 90000 });
+  assert(r.status === 0, 'marketKartYakala basarisiz: ' + String(r.stderr || r.error).slice(0, 300));
+  const o = JSON.parse(r.stdout), im = pngCoz(Buffer.from(o.png, 'base64'));
+  return o.kutular.map(k => {
+    const x0 = Math.round(k.x), y0 = Math.round(k.y), W = Math.round(k.w), H = Math.round(k.h);
+    const noktalar = [[4, 4], [W - 5, 4], [4, H - 5], [W - 5, H - 5], [Math.round(W / 2), 1], [Math.round(W / 2), H - 2], [1, Math.round(H / 2)]];
+    let en = 0;
+    noktalar.forEach(n => { const i = ((y0 + n[1]) * im.w + x0 + n[0]) * im.bpp; en = Math.max(en, im.px[i], im.px[i + 1], im.px[i + 2]); });
+    return { ad: k.ad, en, w: W, h: H };
+  });
+}
+[false, true].forEach((oto, mi) => dene('gercek market karti: Karanlikta Suzul onizleme kutusu kose/kenar pikselleri koyu (her kanal < 60), 10 kart, ' + (oto ? 'otomatik karanlik mod' : 'normal mod'), () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const olcum = marketKartlariOlc(chrome, oto, 9440 + mi);
+  assert.strictEqual(olcum.length, 10, 'kart sayisi ' + olcum.length);
+  olcum.forEach(o => assert(o.w === 58 && o.h === 58, o.ad + ' kutu boyutu ' + o.w + 'x' + o.h));
+  const kotu = olcum.filter(o => !(o.en < 60));
+  if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.ad + ' en parlak kanal ' + o.en).join('\n'));
+  assert.strictEqual(kotu.length, 0, kotu.map(o => o.ad + ' kanal ' + o.en).join('; '));
+}));
 
 console.log(gecti + ' test gecti' + (atlandi ? ' (' + atlandi + ' atlandi)' : '') + (process.exitCode ? ', HATA VAR' : '') +
   '; en dusuk oran: ' + sonuclar.slice(0, ana).reduce((a, b) => (b.oran < a.oran ? b : a)).oran.toFixed(2));

@@ -1838,10 +1838,10 @@
   [data-sise-tema][data-siluet].mo-siseler .ss-tup{--dudak-tasma:1.5px; --sivi-alt:2px;}
   .mo-siseler .ss-kapak{transition:none;}
   /* Ates Bocegi onizlemesi: sigmazsa yalniz bu sahne kuculur */
-  .mo-sahne.mo-ates{flex:0 1 58px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%; background:transparent;}
+  .mo-sahne.mo-ates{flex:0 1 58px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%; background:#05080D; border-radius:6px; overflow:hidden;}
+  /* zemin SVG dolgusu degil CSS arka plani: Chrome otomatik karanlik modu SVG dolgularini ters cevirip beyaz kare uretiyordu */
   @media (max-width:339px){ .mo-sahne.mo-ates{display:none;} }
   .mo-ates svg{width:100%; height:100%; display:block; background:transparent;}
-  .mo-ates-zemin{fill-opacity:.92;}      /* zemin baskin koyu; onizleme tonu yalniz hafif sezilir (olcum: tools/atesBocegiTemaTest.js) */
   .mo-ates-dal{fill:#0B0F14; stroke:#E9EDF2; stroke-width:1; stroke-opacity:.85; stroke-linejoin:round;}
   .mo-ates-iz.lav{animation:moAtesNabiz 1.6s ease-in-out infinite;}
   @keyframes moAtesNabiz{0%,100%{opacity:1;} 50%{opacity:.45;}}
