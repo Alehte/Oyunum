@@ -369,5 +369,118 @@ dene('ana ekran Karanlikta Suzul etiketi: acik renk, kontrast >= 4.5, zemin seff
   assert(/background:none/.test(m[1]) && !/background-clip:text/.test(m[1]) && /text-shadow/.test(m[1]));
 });
 
-console.log(gecti + ' test gecti' + (process.exitCode ? ', HATA VAR' : '') +
+// ---- Gercek tarayici olcumu: onizleme sahnesi koyu mu? (headless Chrome, tek cagri, 9 tema izgara) ----
+// Gercek kapsayici (.mk-onizleme zemini + tema ton katmani) ve style.css kurallariyla 120x100 hucrelere cizilir;
+// 58x58 sahne karesinin ortalama ve dort kose (6x6) goreli parlakligi (WCAG dogrusal, 0-1) olculur.
+// Koseler zemin rect yuvarlak kosesinin icinde (kart tonundan bagimsiz). HEAD sahnesi (ONIZ_HEAD=1 ile olculur): ort 0,067-0,089, kose 0,032-0,048;
+// duzeltme sonrasi: ort 0,036-0,046, kose 0,006-0,010. Esik ikisinin arasinda: ort 0,05; kose 0,02.
+// beyazimsi gorunum = yesil disk + beyaz dal + ton katmaninin toplami, bu yuzden hem ortalama hem kose sinirlanir.
+let atlandi = 0;
+const ONIZ_ESIK = { ort: 0.05, kose: 0.02 };
+function chromeBul() {
+  const adaylar = [process.env.CHROME_YOL, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].filter(Boolean);
+  if (process.env.CHROME_YOL && !fs.existsSync(process.env.CHROME_YOL)) console.log('       UYARI: CHROME_YOL gecersiz (' + process.env.CHROME_YOL + '), varsayilan yollar deneniyor');
+  return adaylar.find(a => fs.existsSync(a)) || null;
+}
+function pngCoz(buf) {
+  const zlib = require('zlib');
+  let o = 8, w, h, ct, id = [];
+  while (o < buf.length) {
+    const n = buf.readUInt32BE(o), t = buf.toString('latin1', o + 4, o + 8), d = buf.slice(o + 8, o + 8 + n);
+    if (t === 'IHDR') { w = d.readUInt32BE(0); h = d.readUInt32BE(4); ct = d[9]; assert(d[8] === 8 && d[12] === 0 && (ct === 2 || ct === 6), 'PNG bicimi desteklenmiyor'); }
+    if (t === 'IDAT') id.push(d);
+    o += 12 + n;
+  }
+  const bpp = ct === 6 ? 4 : 3, raw = zlib.inflateSync(Buffer.concat(id)), st = w * bpp, px = Buffer.alloc(h * st);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (st + 1)];
+    for (let x = 0; x < st; x++) {
+      const v = raw[y * (st + 1) + 1 + x], a = x >= bpp ? px[y * st + x - bpp] : 0, b = y ? px[(y - 1) * st + x] : 0, c = x >= bpp && y ? px[(y - 1) * st + x - bpp] : 0;
+      let r;
+      if (f === 0) r = v; else if (f === 1) r = v + a; else if (f === 2) r = v + b; else if (f === 3) r = v + ((a + b) >> 1);
+      else { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); r = v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c); }
+      px[y * st + x] = r & 255;
+    }
+  }
+  return { w, h, bpp, px };
+}
+function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD karsilastirmasi) onlar kullanilir
+  const os = require('os'), cp = require('child_process');
+  const { win, doc, ctx } = yukle(false);
+  const src = (kaynak ? kaynak.ekran : oku('js/marketEkran.js')).replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');
+  const hata = console.error; console.error = () => {};
+  try { vm.runInContext(src, ctx, { filename: 'marketEkran.js' }); } finally { console.error = hata; }
+  const css = kaynak ? kaynak.css : oku('style.css'), bas = css.indexOf('.mk-onizleme{position:relative'), son = '.mo-ates-iz.lav{animation:none;} }';
+  assert(bas > 0 && css.indexOf(son, bas) > 0, 'onizleme CSS blogu bulunamadi');
+  const kural = css.slice(bas, css.indexOf(son, bas) + son.length);
+  const temalar = win.AppMarket.temalar().filter(t => !t.varsayilan);
+  let hucre = '';
+  temalar.forEach(t => {
+    const k = doc.createElement(); win.MarketEkran.onizlemeKur(k, t);
+    const s = k.cocuklar[k.cocuklar.length - 1], tonVar = t.ton && t.ton.css;
+    hucre += '<div class="mk-onizleme' + (tonVar ? ' ton-var' : '') + '" style="' + (tonVar ? '--tema-ton:' + t.ton.css + ';' : '') + 'width:120px;height:100px;box-sizing:border-box">' +
+      '<div class="' + s.className + '">' + s.innerHTML + '</div></div>';
+  });
+  const dizin = fs.mkdtempSync(path.join(os.tmpdir(), 'ates-onizleme-'));
+  try {
+    fs.writeFileSync(path.join(dizin, 'a.html'), '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000}' +
+      '.g{display:grid;grid-template-columns:repeat(3,120px);grid-auto-rows:100px;width:360px;align-items:start}' + kural + '</style><div class="g">' + hucre + '</div>');
+    const r = cp.spawnSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', '--force-color-profile=srgb', '--window-size=360,300',
+      '--screenshot=' + path.join(dizin, 'a.png'), require('url').pathToFileURL(path.join(dizin, 'a.html')).href], { timeout: 90000, encoding: 'utf8' });
+    assert(r.status === 0 && fs.existsSync(path.join(dizin, 'a.png')), 'Chrome ekran goruntusu uretmedi (' + (r.error ? r.error.message : 'cikis ' + r.status) + ') ' + String(r.stderr || '').slice(0, 300));
+    const im = pngCoz(fs.readFileSync(path.join(dizin, 'a.png')));
+    assert(im.w === 360 && im.h >= 300, 'ekran goruntusu boyutu ' + im.w + 'x' + im.h);
+    const lin = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const lum = (x0, y0, w, h) => {
+      let s = 0;
+      for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) { const i = (y * im.w + x) * im.bpp; s += 0.2126 * lin(im.px[i]) + 0.7152 * lin(im.px[i + 1]) + 0.0722 * lin(im.px[i + 2]); }
+      return s / (w * h);
+    };
+    return temalar.map((t, i) => {
+      const bx = (i % 3) * 120 + 31, by = Math.floor(i / 3) * 100 + 21;   // 58 px sahne, 120x100 hucrede ortali
+      // koseler zemin rect'in yuvarlak kosesinin ICINDE (kenardan 11 px = en buyuk rx 9 + 2): rx'ten ve kart tonundan bagimsiz
+      const kose = [[11, 11], [41, 11], [11, 41], [41, 41]].map(c => lum(bx + c[0], by + c[1], 6, 6));
+      const ic = lum(bx + 29, by + 28, 3, 3);   // bocek karni merkezi (svg ~30,29.5): p.isik rengi
+      return { id: t.id, ort: lum(bx, by, 58, 58), kose: Math.max.apply(null, kose), ic };
+    });
+  } finally { try { fs.rmSync(dizin, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch (e) { /* gecici dizin silinemedi: test sonucunu etkilemez */ } }
+}
+dene('onizleme halo (Chrome disi, statik): merkez opaklik <= .35, r 11.6-14.5 (58 px sahnenin %20-25i), renk p.isik', () => {
+  const { win, doc, ctx } = yukle(false);
+  const src = oku('js/marketEkran.js').replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');
+  const hata = console.error; console.error = () => {};
+  try { vm.runInContext(src, ctx, { filename: 'marketEkran.js' }); } finally { console.error = hata; }
+  win.AppMarket.temalar().forEach(t => {
+    const k = doc.createElement(); win.MarketEkran.onizlemeKur(k, t);
+    const svg = k.cocuklar[k.cocuklar.length - 1].innerHTML, isik = M.isikCoz(t.isik).isik;
+    const g = /<radialGradient id="(moAtes\d+)p"><stop offset="0" stop-color="(#[0-9A-Fa-f]{6})" stop-opacity="([0-9.]+)"/.exec(svg);
+    assert(g, t.id + ': halo gradyani yok');
+    assert(+g[3] <= 0.35, t.id + ': halo merkez opaklik ' + g[3]);
+    assert.strictEqual(g[2].toUpperCase(), isik.toUpperCase(), t.id + ': halo rengi p.isik degil');
+    const c = new RegExp('<circle [^>]*r="([0-9.]+)" fill="url\\(#' + g[1] + 'p\\)"').exec(svg);
+    assert(c, t.id + ': halo circle yok');
+    assert(+c[1] >= 11.6 && +c[1] <= 14.5, t.id + ': halo r ' + c[1]);
+  });
+});
+
+dene('onizleme sahnesi gercek tarayicida koyu: 9 tema ortalama <= ' + ONIZ_ESIK.ort + ', kose <= ' + ONIZ_ESIK.kose + ' (headless Chrome)', () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok): CHROME_YOL ortam degiskeniyle chrome.exe yolunu verin; bu test BASARISIZ SAYILMADI'); atlandi++; return; }
+  if (process.env.ONIZ_HEAD) {   // tanilama: HEAD sahnesi (git show) ile olc, yalniz yazdir
+    const cp = require('child_process'), g = f => cp.execFileSync('git', ['show', 'HEAD:' + f], { cwd: KOK, encoding: 'utf8' });
+    onizlemeOlc(chrome, { ekran: g('js/marketEkran.js'), css: g('style.css') }).forEach(o => console.log('       HEAD ' + o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)));
+  }
+  const olcum = onizlemeOlc(chrome);
+  assert.strictEqual(olcum.length, 9);
+  // sahne gercekten cizildi mi: bocek karni parlak (isik rengi) olmali
+  const bos = olcum.filter(o => !(o.ic > 0.3));
+  assert.strictEqual(bos.length, 0, 'bocek karni parlak degil (sahne cizilmedi?): ' + bos.map(o => o.id + ' ' + o.ic.toFixed(3)).join('; '));
+  const kotu = olcum.filter(o => o.ort > ONIZ_ESIK.ort || o.kose > ONIZ_ESIK.kose);
+  if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('\n'));
+  assert.strictEqual(kotu.length, 0, kotu.map(o => o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('; '));
+});
+
+console.log(gecti + ' test gecti' + (atlandi ? ' (' + atlandi + ' atlandi)' : '') + (process.exitCode ? ', HATA VAR' : '') +
   '; en dusuk oran: ' + sonuclar.slice(0, ana).reduce((a, b) => (b.oran < a.oran ? b : a)).oran.toFixed(2));

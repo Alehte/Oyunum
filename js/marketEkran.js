@@ -196,18 +196,18 @@ window.MarketEkran = (function () {
   function atesSahnesi(ana, tema) {
     var sahne = kutu('mo-sahne mo-ates', ana);
     var p = M.isikCoz(tema.isik), id = 'moAtes' + (++ATES_SAYAC);
-    var zemin = hexKaristir('#24402F', p.isik, 0.12);
+    var zemin = hexKaristir('#162A1E', p.isik, 0.06);
     sahne.innerHTML =
       '<svg viewBox="0 0 58 58" aria-hidden="true" focusable="false">' +
       '<defs><radialGradient id="' + id + 'z"><stop offset=".72" stop-color="' + zemin + '"/><stop offset="1" stop-color="' + zemin + '" stop-opacity="0"/></radialGradient>' +
-      '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="' + p.isik + '" stop-opacity=".7"/><stop offset="1" stop-color="' + p.isik + '" stop-opacity="0"/></radialGradient></defs>' +
-      '<rect class="mo-ates-zemin" width="58" height="58" rx="9" fill="' + p.karanlik + '"/>' +
-      '<circle cx="29" cy="29" r="25" fill="url(#' + id + 'z)"/>' +
+      '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="' + p.isik + '" stop-opacity=".35"/><stop offset="1" stop-color="' + p.isik + '" stop-opacity="0"/></radialGradient></defs>' +
+      '<rect class="mo-ates-zemin" width="58" height="58" rx="6" fill="' + p.karanlik + '"/>' +
+      '<circle cx="29" cy="29" r="22" fill="url(#' + id + 'z)"/>' +
       '<g class="mo-ates-iz' + (p.animasyon ? ' ' + p.animasyon : '') + '">' + atesIzDamgalari(p.iz) + '</g>' +
-      '<circle cx="31" cy="29" r="10" fill="url(#' + id + 'p)"/>' +
+      '<circle cx="31" cy="29" r="13" fill="url(#' + id + 'p)"/>' +
       '<circle cx="39.5" cy="21.5" r="1.4" fill="' + p.toz + '"/><circle cx="43" cy="35" r="1.4" fill="' + p.toz + '"/><circle cx="37" cy="41.5" r="1.4" fill="' + p.toz + '"/>' +
-      '<ellipse cx="29.5" cy="26" rx="1.6" ry="4" fill="#fff" opacity=".55" transform="rotate(-30 29.5 26)"/>' +
-      '<ellipse cx="32.5" cy="25" rx="1.6" ry="4" fill="#fff" opacity=".45" transform="rotate(25 32.5 25)"/>' +
+      '<ellipse cx="29.5" cy="26" rx="1.6" ry="4" fill="#fff" opacity=".4" transform="rotate(-30 29.5 26)"/>' +
+      '<ellipse cx="32.5" cy="25" rx="1.6" ry="4" fill="#fff" opacity=".3" transform="rotate(25 32.5 25)"/>' +
       '<ellipse cx="30" cy="29.5" rx="4.4" ry="3.2" fill="' + p.isik + '"/>' +
       '<circle cx="35" cy="29" r="2" fill="#1A1410"/>' +
       '<path class="mo-ates-dal" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
