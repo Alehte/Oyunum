@@ -208,8 +208,10 @@ window.MarketEkran = (function () {
       '<circle cx="39.5" cy="21.5" r="1.4" fill="' + p.toz + '"/><circle cx="43" cy="35" r="1.4" fill="' + p.toz + '"/><circle cx="37" cy="41.5" r="1.4" fill="' + p.toz + '"/>' +
       '<ellipse cx="29.5" cy="26" rx="1.6" ry="4" fill="#fff" opacity=".4" transform="rotate(-30 29.5 26)"/>' +
       '<ellipse cx="32.5" cy="25" rx="1.6" ry="4" fill="#fff" opacity=".3" transform="rotate(25 32.5 25)"/>' +
-      '<ellipse cx="30" cy="29.5" rx="4.4" ry="3.2" fill="' + p.isik + '"/>' +
-      '<circle cx="35" cy="29" r="2" fill="#1A1410"/>' +
+      '<ellipse cx="29.5" cy="29.5" rx="4.6" ry="3" fill="#1A1410" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
+      '<ellipse cx="26.6" cy="29.5" rx="2.2" ry="1.7" fill="' + p.isik + '"/>' +
+      '<ellipse cx="31" cy="29.5" rx="3" ry="2.4" fill="#2E2219" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
+      '<circle cx="35" cy="29" r="2" fill="#1A1410" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
       '<path class="mo-ates-dal" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
       '</svg>';
   }

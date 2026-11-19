@@ -502,4 +502,74 @@ dene('performans: kare basina cizim cagrisi ust siniri (yogun sahne: dal/ag/kus/
   assert.ok(en < 800, 'cagri ' + en);
 });
 
+function yogunSahne(o) {
+  const d = o.durum, m = d.mesafe; d.puan = 3000;
+  d.dilimler[2].engeller = [{ tur: 'dal', yon: 'ust', x: m + 20, y: 0, w: 5, h: 30 }, { tur: 'dal', yon: 'alt', x: m + 20, y: 70, w: 5, h: 30 }, { tur: 'dal', yon: 'ust', x: m + 10, y: 0, w: 5, h: 45 }, { tur: 'dal', yon: 'alt', x: m + 10, y: 60, w: 5, h: 40 }, { tur: 'dal', yon: 'ust', x: m + 46, y: 0, w: 5, h: 35 }, { tur: 'dusen', x: m + 42, y: 0, w: 5, h: 25, faz: 1 }];
+  d.dokunulmaz = 0; d.isik = 1;
+}
+const yolSay = l => l.filter(c => c[0] === 'lineTo' || c[0] === 'quadraticCurveTo' || c[0] === 'bezierCurveTo' || c[0] === 'arc').length;
+
+dene('O2: dallar onbellekli: kare basina yol segmenti sinirli (5 dal + dusen dal sahnesi; onceki surum 280, simdi 18; sinir < 100)', () => {
+  const o = ortam(); o.O.start(); o.kare(1); yogunSahne(o); o.kare(3);
+  let en = 0; for (let i = 0; i < 10; i++) en = Math.max(en, yolSay(ciziliyor(o)));
+  console.log('       kare basina yol segmenti (lineTo+quadraticCurveTo+bezierCurveTo+arc): ' + en);
+  assert.ok(en < 100, 'segment ' + en);
+});
+
+dene('O2: dal onbellegi kare basina yeni tuval uretmez; sinirli (<= 24 dal tuvali)', () => {
+  const o = ortam(); o.O.start(); o.kare(1); yogunSahne(o); o.kare(3);
+  let n = 0; const orj = o.sb.document.createElement; o.sb.document.createElement = (...a) => { n++; return orj(...a); };
+  o.kare(30);
+  assert.strictEqual(n, 0, 'kare basina tuval uretimi: ' + n);
+  // cok farkli yukseklikte dal: tuval sayisi sinirli (en cok 24 dal + degisimde yeniden kullanim)
+  n = 0;
+  for (let k = 0; k < 60; k++) { o.durum.dilimler[2].engeller = [{ tur: 'dal', yon: 'ust', x: o.durum.mesafe + 20, y: 0, w: 5, h: 10 + k * 1.3 }]; o.kare(1); }
+  assert.ok(n <= 24, 'dal tuvali ' + n);
+  o.sb.document.createElement = orj;
+});
+
+dene('K5: sarmasik yutan toz ~0,25 sn solarak kaybolur (azaltilmis harekette aninda)', () => {
+  [false, true].forEach(az => {
+    const o = ortam(); o.azHareket = az; o.yeni();
+    const m = o.durum.mesafe, x1 = m + XB + 25, s = o.durum.dilimler[0];
+    s.sarmasik = { yon: 'ust', x1, x2: x1 + 3, sutunlar: [sutunlu(x1, 60, 'ust')], faz: 1, sure: 99, ilerleme: 0 };
+    s.engeller = []; s.toz = [{ x: x1 + 1.5, y: 30, alindi: 0, yutuldu: 0 }];
+    const toz = () => ciziliyor(o).filter(c => c[0] === 'drawImage' && c[1].length === 5 && Math.abs(c[1][3] - M.R_TOZ_GORSEL * 6.4) < 1e-6 && Math.abs(c[1][2] - (30 - M.R_TOZ_GORSEL * 3.2)) < 1e-6).length;
+    const sayilar = []; for (let i = 0; i < 30; i++) sayilar.push(toz());
+    assert.ok(s.toz[0].yutuldu, 'yutuldu');
+    if (az) assert.ok(sayilar.every(x => x === 0), 'az hareket: aninda yok');
+    else { assert.ok(sayilar.slice(0, 3).some(x => x > 0), 'solma gorunmeli'); assert.ok(sayilar.slice(24).every(x => x === 0), '0,25 sn sonra yok: ' + sayilar.join('')); }
+  });
+});
+
+dene('K3: bomba patlama parcaciklari dunyayla kayar (ortalama x hareketi ~ -dunya hizi)', () => {
+  const o = ortam(); o.yeni();
+  o.durum.dilimler[0].bomba = { x: o.durum.mesafe + XB + 0.5, y: o.durum.y, alindi: 0 };
+  o.durum.isik = 1; o.durum.dokunulmaz = 0;
+  const pos = () => { o.log = []; o.kare(1); const p = o.log.filter(c => c[0] === 'fillRect' && c[1][2] === 0.6 && c[1][3] === 0.6).map(c => c[1][0]); o.log = null; return p; };
+  pos(); const a = pos(), b = pos();
+  assert.ok(a.length >= 4 && a.length === b.length, 'parcacik ' + a.length + '/' + b.length);
+  const ort = b.reduce((s, x, i) => s + (x - a[i]), 0) / b.length, hiz = AB.zorluk(0).hiz;
+  assert.ok(ort < -0.7 * hiz / 60, 'ortalama dx ' + ort + ' hiz ' + hiz);
+});
+
+dene('K4: olum sonmesinde lav izi yeni parcacik uretmez (sonme sonuna dogru parcacik kalmaz)', () => {
+  const o = ortam(); o.sb.AppMarket = { isikCoz: p => p, aktif: () => ({ isik: '#FFA64A', toz: '#FFD98A', vurgu: '#7CF0A0', karanlik: '#120604', iz: { renk: '#FF6A2A', renk2: '#FFD07A', sekil: 'akkor' }, animasyon: 'lav' }) };
+  o.yeni(); o.kare(90);
+  o.durum.isik = 0.0001; o.durum.dokunulmaz = 0; o.kare(3);
+  assert.ok(o.durum.bitti, 'olum');
+  o.kare(40);
+  o.log = []; o.kare(1); const say = o.log.filter(c => c[0] === 'fillRect' && c[1][2] === 0.6 && c[1][3] === 0.6).length; o.log = null;
+  assert.strictEqual(say, 0, 'sonme sirasinda kalan parcacik ' + say);
+});
+
+dene('feneri nabzi: azaltilmis harekette sabit, normalde degisir', () => {
+  [true, false].forEach(az => {
+    const o = ortam(); o.azHareket = az; o.O.start(); o.kare(1);
+    const rx = () => { const l = ciziliyor(o).filter(c => c[0] === 'ellipse' && c[1][0] === -1.95); assert.strictEqual(l.length, 1); return l[0][1][2]; };
+    const v = new Set(); for (let i = 0; i < 8; i++) { v.add(rx()); o.kare(4); }
+    assert.strictEqual(v.size === 1, az, 'az=' + az + ' farkli deger ' + v.size);
+  });
+});
+
 console.log(gecti + ' deneme gecti');

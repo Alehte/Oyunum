@@ -329,19 +329,36 @@ dene('B4 derinlik katmanlari (uzak soluk mavi, yakin koyu siluet, huzme/sis band
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
+dene('uzak nokta (arka plan ates bocegi) tozdan ayrisir: yaricap*3 < R_TOZ_GORSEL, zemine kontrasti tozdan belirgin dusuk', () => {
+  const h = require(path.join(KOK, 'js', 'atesBocegi.js')).AYAR.hareket, r = [];
+  OYUN.replace(/uzakNokta\(c, [^,]+, [^,]+, ([0-9.]+), nokta, ([0-9.]+)\)/g, (m, a, b) => { r.push([+a, +b]); return m; });
+  assert(r.length >= 3, 'uzakNokta cagrilari');
+  r.forEach(q => assert(q[0] * 3 < h.R_TOZ_GORSEL, 'nokta yaricap ' + q[0]));
+  const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x), kotu = [];
+  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => BICIMLER.forEach(b => {
+    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), nokta = mix(zem, mix(zem, rgb(t.p.vurgu), KATMAN.mantarKap), 0.8);   // alfa 0,8 (en yogun)
+    const on = oran(nokta, zem, b), ot = oran(rgb(t.p.toz), zem, b); izle('uzak nokta/zemin', on);
+    if (!(on <= ot * 0.5)) kotu.push(t.id + ' b' + bi + ' ' + b + ' nokta ' + on.toFixed(2) + ' toz ' + ot.toFixed(2));
+  })));
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
 dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 bicim: >= 3,0 YA DA koyu dis kontur (kodda var, >= ~1 px) ve kontur x tehlike >= 3,0', () => {
   // Secim: renkleri degistirmek yerine (toz/tehlike ayrimi ve tema paletleri bozulmasin) koyu dis kontur zorunlu.
-  // Bomba: sprite'ta ENGEL_DOLGU 0,7 genis kontur altta, acik kenar 0,26 ustte -> dis bant 0,22 birim (>= 1 px, olcek >= 4,6).
-  // Sarmasik: ENGEL_DOLGU 1,3 genis cizgi altta, yesil 0,7 ustte -> 0,3 birim. Unlem: ENGEL_DOLGU 0,46 kontur -> 0,23 birim.
+  // Bomba: sprite'ta ENGEL_DOLGU (0,26 + 2*bant) genis kontur altta, acik kenar 0,26 ustte; bant = max(0,22, 1 cihaz pikseli).
+  // Sarmasik: ENGEL_DOLGU (0,7 + 2*max(0,3, pxD)) altta, yesil 0,7 ustte. Unlem: ENGEL_DOLGU kontur 2*max(0,23, pxD/k).
+  // Silüet / uc cizgisi / kenar isareti: ENGEL_DOLGU alt cizgi (ince + 2*max(0,2, pxD)) altta, UNLEM_RENK ince cizgi ustte, alfa 0,75.
   const UZAK_MAVI = sabit(OYUN, 'UZAK_MAVI'), dolgu = rgb(ENGEL_DOLGU), mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
   const kaynakBomba = /function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0];
-  assert(/x\.strokeStyle = ENGEL_DOLGU; x\.lineWidth = 0\.7; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = BOMBA_KENAR; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur');
-  assert(((0.7 - 0.26) / 2) * 4.6 >= 1.0, 'bomba kontur >= 1 px');
+  assert(/var bant = Math\.max\(0\.22, pxD\), dis = 0\.26 \+ 2 \* bant/.test(kaynakBomba) && /x\.strokeStyle = ENGEL_DOLGU; x\.lineWidth = dis; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = BOMBA_KENAR; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur (>= 1 cihaz pikseli)');
   const sar = /function sarmasikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
-  assert(/u \? SARMASIK_GOVDE : ENGEL_DOLGU; c\.lineWidth = u \? 0\.7 : 1\.3/.test(sar), 'sarmasik koyu dis cizgi');
-  assert(((1.3 - 0.7) / 2) * 4.6 >= 1.0, 'sarmasik kontur >= 1 px');
-  assert(/c\.fillStyle = UNLEM_RENK; c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 0\.46/.test(OYUN), 'unlem koyu kontur');
-  assert(0.46 / 2 * 4.6 >= 1.0, 'unlem kontur >= 1 px');
+  assert(/u \? SARMASIK_GOVDE : ENGEL_DOLGU; c\.lineWidth = u \? 0\.7 : 0\.7 \+ 2 \* Math\.max\(0\.3, pxD\)/.test(sar), 'sarmasik koyu dis cizgi (>= 1 cihaz pikseli)');
+  assert(/c\.fillStyle = UNLEM_RENK; c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 2 \* Math\.max\(0\.23, pxD \/ k\)/.test(OYUN), 'unlem koyu kontur (>= 1 cihaz pikseli)');
+  const oz = /function ozIsikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
+  const altCizgi = ince => new RegExp('c\\.strokeStyle = ENGEL_DOLGU; c\\.lineWidth = ' + ince + ' \\+ 2 \\* Math\\.max\\(0\\.2, pxD\\); c\\.stroke\\(\\);[^\\n]*\\n\\s*c\\.strokeStyle = UNLEM_RENK; c\\.lineWidth = ' + ince + '; c\\.stroke\\(\\);');
+  assert(altCizgi('0\\.5').test(oz) && altCizgi('0\\.3').test(oz), 'siluet / uc cizgisi / kenar isareti koyu alt cizgi');
+  const alfalar = (oz.match(/c\.globalAlpha = 0\.[0-9]+ \* \(1 - p\); (?:c\.setLineDash|c\.beginPath)/g) || []).map(m => +/= (0\.[0-9]+)/.exec(m)[1]);
+  assert(alfalar.length === 2 && alfalar.every(a => a >= 0.7), 'siluet / kenar isareti alfa >= 0,7: ' + alfalar.join(','));
   const kotu = [], konturGereken = {}; let n = 0;
   const tehlike = { BOMBA_KENAR, BOMBA_CEKIRDEK, UNLEM_RENK, SARMASIK_GOVDE, SARMASIK_YAPRAK };
   TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
@@ -358,6 +375,14 @@ dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 
         const o = oran(c, zeminler[zn], b); n++; izle('O-3 tehlike/katman (kontursuz)', o);
         if (o < 3.0) konturGereken[ad + ' x ' + zn] = 1;      // kontur sayesinde okunur
       });
+    }));
+  }));
+  // alfa dahil: zemin uzerine koyu alt cizgi (alfa 0,75), onun uzerine UNLEM_RENK cizgi (alfa 0,75); cizgi / alt cizgi >= 3,0
+  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
+    const zem = karistir(ton, t.p.isik, ISIK_KARISIM);
+    [zem, mix(zem, [1, 1, 1], 0.15), mix(zem, rgb(UZAK_MAVI), KATMAN.uzak), mix(zem, [0, 0, 0], KATMAN.yakin)].forEach(z => BICIMLER.forEach(b => {
+      const alt = mix(z, dolgu, 0.75), cizgi = mix(alt, rgb(UNLEM_RENK), 0.75), o = oran(cizgi, alt, b); izle('O1 siluet cizgi/koyu alt cizgi (alfa dahil)', o);
+      if (o < 3.0) kotu.push('siluet ' + t.id + ' b' + bi + ' ' + b + ' ' + o.toFixed(2));
     }));
   }));
   assert.strictEqual(n, 6000, 'oran sayisi ' + n);       // 5 renk x 10 palet x 4 bolge x 3 bicim x 10 zemin/katman
@@ -582,7 +607,7 @@ function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD
       const bx = (i % 3) * 120 + 31, by = Math.floor(i / 3) * 100 + 21;   // 58 px sahne, 120x100 hucrede ortali
       // koseler zemin rect'in yuvarlak kosesinin ICINDE (kenardan 11 px = en buyuk rx 9 + 2): rx'ten ve kart tonundan bagimsiz
       const kose = [[11, 11], [41, 11], [11, 41], [41, 41]].map(c => lum(bx + c[0], by + c[1], 6, 6));
-      const ic = lum(bx + 29, by + 28, 3, 3);   // bocek karni merkezi (svg ~30,29.5): p.isik rengi
+      const ic = lum(bx + 25, by + 28, 3, 3);   // bocek feneri (karnin arka yarisi, svg ~26,5 29,5): p.isik rengi
       return { id: t.id, ort: lum(bx, by, 58, 58), kose: Math.max.apply(null, kose), ic };
     });
   } finally { try { fs.rmSync(dizin, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch (e) { /* gecici dizin silinemedi: test sonucunu etkilemez */ } }
@@ -614,9 +639,9 @@ dene('onizleme sahnesi gercek tarayicida koyu: 9 tema ortalama <= ' + ONIZ_ESIK.
   }
   const olcum = onizlemeOlc(chrome);
   assert.strictEqual(olcum.length, 9);
-  // sahne gercekten cizildi mi: bocek karni parlak (isik rengi) olmali
+  // sahne gercekten cizildi mi: bocek feneri parlak (isik rengi) olmali
   const bos = olcum.filter(o => !(o.ic > 0.3));
-  assert.strictEqual(bos.length, 0, 'bocek karni parlak degil (sahne cizilmedi?): ' + bos.map(o => o.id + ' ' + o.ic.toFixed(3)).join('; '));
+  assert.strictEqual(bos.length, 0, 'bocek feneri parlak degil (sahne cizilmedi?): ' + bos.map(o => o.id + ' ' + o.ic.toFixed(3)).join('; '));
   const kotu = olcum.filter(o => o.ort > ONIZ_ESIK.ort || o.kose > ONIZ_ESIK.kose);
   if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('\n'));
   assert.strictEqual(kotu.length, 0, kotu.map(o => o.id + ' ort ' + o.ort.toFixed(3) + ' kose ' + o.kose.toFixed(3)).join('; '));

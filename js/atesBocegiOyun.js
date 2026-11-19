@@ -69,7 +69,8 @@
   var kanatFaz = 0, adimSayaci = 0;
 
   // olcu (css px + cihaz px)
-  var dpr = 1, cssW = 0, cssH = 0, olcek = 1, ox = 0, oy = 0, S = 1;
+  var dpr = 1, cssW = 0, cssH = 0, olcek = 1, ox = 0, oy = 0, S = 1, pxD = 1;   // pxD: 1 cihaz pikseli (dunya birimi)
+  var DAL_TAVAN = 24, DAL_PAY = 0.3, dalAnahtar = [], dalTuval = [], dalSira = [], dalSayac = 0;   // dal sprite onbellegi (sinirli LRU)
   // kare basina ayirma olmasin diye hazir nesneler
   var kc = null, kctx = null, karanlikGrad = null, karanlikRenkStr = '';
   var katmanlar = [null, null, null, null];   // bolge -> [tuval, tuval, tuval]
@@ -332,17 +333,18 @@
   // Sprite yarisi = R_BOMBA, merkez (R, R). Cekirdek her karede ayri cizilir (nabiz).
   function bombaSprite() {
     var R = M.R_BOMBA, r = Math.max(2, Math.ceil(R * S)), c = yeniTuval(r * 2, r * 2), x = c.getContext('2d'), i, a, k = r / R;
+    var bant = Math.max(0.22, pxD), dis = 0.26 + 2 * bant, uc = Math.min(R * 0.74, R - dis / 2 - 0.02);   // koyu dis kontur bandi >= 1 cihaz pikseli; uc kenar kalinligi dahil <= R_BOMBA
     x.scale(k, k); x.translate(R, R);
     x.lineJoin = 'round'; x.lineCap = 'round';
     x.fillStyle = ENGEL_DOLGU; x.strokeStyle = BOMBA_KENAR; x.lineWidth = 0.26;
     x.beginPath();
     for (i = 0; i < BOMBA_DIKEN * 2; i++) {                       // dikenli dis hat: kenar kalinligi dahil en uc <= R_BOMBA
       a = i * Math.PI / BOMBA_DIKEN - Math.PI / 2;
-      var rr = i % 2 ? R * 0.55 : R * 0.74;
+      var rr = i % 2 ? R * 0.55 : uc;
       if (i) x.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); else x.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
     }
     x.closePath(); x.fill();
-    x.strokeStyle = ENGEL_DOLGU; x.lineWidth = 0.7; x.stroke();                                // koyu dis kontur (>= 1 px): acik kenar her zeminde ayrisir
+    x.strokeStyle = ENGEL_DOLGU; x.lineWidth = dis; x.stroke();                                // koyu dis kontur (>= 1 px): acik kenar her zeminde ayrisir
     x.strokeStyle = BOMBA_KENAR; x.lineWidth = 0.26; x.stroke();
     x.lineWidth = 0.14; x.beginPath();                            // catlak cizgileri
     x.moveTo(-R * 0.45, -R * 0.2); x.lineTo(-R * 0.15, -R * 0.05); x.moveTo(R * 0.4, R * 0.25); x.lineTo(R * 0.12, R * 0.12);
@@ -370,6 +372,7 @@
     var k;
     if (cssW <= 0 || cssH <= 0) return;
     katmanlar = [null, null, null, null];
+    for (k = 0; k < DAL_TAVAN; k++) { dalAnahtar[k] = -1; dalSira[k] = 0; dalTuval[k] = null; }   // olcek / dpr / tema degisti: dal onbellegi temizlenir
     sprBocek = parilti(M.R_GORSEL * 4, pal.isik);
     sprToz = parilti(M.R_TOZ_GORSEL * 3.2, pal.toz);
     sprKivilcim = parilti(M.R_KIVILCIM_GORSEL * 3, pal.vurgu);
@@ -398,7 +401,7 @@
     cssW = r.width; cssH = r.height;
     olcek = Math.min(cssW / W, cssH / H);
     ox = (cssW - W * olcek) / 2; oy = (cssH - H * olcek) / 2;
-    S = olcek * dpr;
+    S = olcek * dpr; pxD = 1 / S;
     tuval.width = Math.round(cssW * dpr); tuval.height = Math.round(cssH * dpr);
     gorselKur();
     return true;
@@ -407,6 +410,24 @@
   // ---------------------------------------------------------------
   // CIZIM
   // ---------------------------------------------------------------
+  // Dal sprite'i: sabit (w, h, yon) icin bir kez cizilir; kare basina yol komutu uretilmez. h 0,5 birime yuvarlanir (cizim e.h'ye gerilir).
+  function dalSprite(w, h, tavan) {
+    var hq = Math.max(1, Math.round(h * 2) / 2), key = (Math.round(hq * 2) * 64 + Math.round(w * 4)) * 2 + (tavan ? 1 : 0), i, yer = 0, en = 1e12, c, x, pw, ph, bw = w + 2 * DAL_PAY, bh = hq + 2 * DAL_PAY;
+    dalSayac++;
+    for (i = 0; i < DAL_TAVAN; i++) if (dalAnahtar[i] === key) { dalSira[i] = dalSayac; return dalTuval[i]; }
+    for (i = 0; i < DAL_TAVAN; i++) if (dalSira[i] < en) { en = dalSira[i]; yer = i; }
+    pw = Math.max(1, Math.ceil(bw * S)); ph = Math.max(1, Math.ceil(bh * S));
+    c = dalTuval[yer]; if (!c) c = dalTuval[yer] = yeniTuval(pw, ph);
+    c.width = pw; c.height = ph;                                  // yeniden boyutlama canvas'i temizler
+    x = c.getContext('2d');
+    x.scale(pw / bw, ph / bh); x.translate(DAL_PAY, DAL_PAY);
+    x.lineWidth = KENAR_PX / olcek; x.lineJoin = 'round'; x.lineCap = 'round'; x.fillStyle = ENGEL_DOLGU; x.strokeStyle = ENGEL_KENAR;
+    dalCiz(x, 0, 0, w, hq, tavan);
+    dalAnahtar[yer] = key; dalSira[yer] = dalSayac;
+    return c;
+  }
+  function dalCizSprite(c, e, tavan) { c.drawImage(dalSprite(e.w, e.h, tavan), e.x - DAL_PAY, e.y - DAL_PAY, e.w + 2 * DAL_PAY, e.h + 2 * DAL_PAY); }
+
   // Dikenli dal: kabuk dokulu, hafif egri govde, egri dikenler, budak. tavan: bagli uc ustte, serbest uc altta.
   // Cizim zarfi = carpma zarfi (x..x+w, y..y+h); dikenler yan sinira (x, x+w) kadar uzanir.
   function dalCiz(c, x, y, w, h, tavan) {
@@ -496,7 +517,7 @@
 
   function engelCiz(c, e) {
     var a, mx, yy, k, lw;
-    if (e.tur === 'dal') dalCiz(c, e.x, e.y, e.w, e.h, e.yon === 'ust');
+    if (e.tur === 'dal') dalCizSprite(c, e, e.yon === 'ust');
     else if (e.tur === 'ag') agCiz(c, e);
     else if (e.tur === 'kus') kusCiz(c, e);
     else if (e.tur === 'dusen') {
@@ -512,7 +533,7 @@
       c.lineWidth = lw;
       a = e.faz === 1 && !azHareketOn ? Math.sin(zaman * 60) * 0.052 : 0;                      // +-3 derece
       c.save(); c.translate(e.x + e.w / 2, e.y); c.rotate(a); c.translate(-(e.x + e.w / 2), -e.y);
-      dalCiz(c, e.x, e.y, e.w, e.h, true);
+      dalCizSprite(c, e, true);
       c.restore();
     }
   }
@@ -578,7 +599,7 @@
   }
 
   function parcacikGuncelle(dt, c) {
-    var i, o, a, hiz = hizOnbellek, uret = pal.iz.sekil === 'akkor';   // yuvalar lav izi ve bomba patlamasi icin ortak (toplam <= 24)
+    var i, o, a, hiz = hizOnbellek, uret = pal.iz.sekil === 'akkor' && !durum.bitti;   // yuvalar lav izi ve bomba patlamasi icin ortak (toplam <= 24)
     if (azHareketOn || dt <= 0) return;
     if (uret) parcBirikim += dt * PARCACIK_HIZ;
     for (i = 0; i < PARCACIK_TAVAN; i++) {
@@ -594,12 +615,28 @@
       parc[o] += parc[o + 2] * dt; parc[o + 1] += parc[o + 3] * dt; parc[o + 4] += dt;
       if (parc[o + 4] >= parc[o + 5]) continue;
       a = 1 - parc[o + 4] / parc[o + 5];
+      if (parc[o + 6] === 2) {                                // yutulan toz: ~0,25 sn alfa sonmesi
+        c.globalAlpha = a * 0.8; c.drawImage(sprToz, parc[o] - M.R_TOZ_GORSEL * 3.2, parc[o + 1] - M.R_TOZ_GORSEL * 3.2, M.R_TOZ_GORSEL * 6.4, M.R_TOZ_GORSEL * 6.4);
+        continue;
+      }
       c.globalAlpha = a * 0.9;
       c.fillStyle = parc[o + 6] ? (i & 1 ? BOMBA_CEKIRDEK : BOMBA_KENAR) : (i & 1 ? pal.iz.renk : pal.iz.renk2);
       c.fillRect(parc[o] - 0.3, parc[o + 1] - 0.3, 0.6, 0.6);
     }
     c.globalAlpha = 1;
     if (parcBirikim > 2) parcBirikim = 2;
+  }
+
+  // Sarmasik tozu yuttu: toz ~0,25 sn solarak kaybolur (havuzun bos yuvasi; yuva yoksa aninda). Azaltilmis harekette yok.
+  function tozSon(x, y) {
+    var i, o;
+    if (azHareketOn) return;
+    for (i = PARCACIK_TAVAN - 1; i >= 0; i--) {
+      o = i * 7;
+      if (parc[o + 4] < parc[o + 5]) continue;
+      parc[o] = x; parc[o + 1] = y; parc[o + 2] = -hizOnbellek; parc[o + 3] = 0; parc[o + 4] = 0; parc[o + 5] = 0.25; parc[o + 6] = 2;
+      return;
+    }
   }
 
   // Bomba toplandi: bos yuvalara en cok 8 parcacik (sinir 24; yuva yoksa daha az). Azaltilmis harekette yok.
@@ -611,7 +648,7 @@
       if (parc[o + 4] < parc[o + 5]) continue;
       a = n * Math.PI / 4 + Math.random() * 0.5; n++;
       parc[o] = x; parc[o + 1] = y;
-      parc[o + 2] = Math.cos(a) * (18 + Math.random() * 14) - hizOnbellek * 0.3; parc[o + 3] = Math.sin(a) * (18 + Math.random() * 14);
+      parc[o + 2] = Math.cos(a) * (18 + Math.random() * 14) - hizOnbellek;     // dunyayla birlikte kayar parc[o + 3] = Math.sin(a) * (18 + Math.random() * 14);
       parc[o + 4] = 0; parc[o + 5] = PARCACIK_OMUR * (0.5 + Math.random() * 0.4); parc[o + 6] = 1;
     }
   }
@@ -635,7 +672,7 @@
       n = Math.max(2, Math.ceil(len / 2.2));
       sal = azHareketOn ? 0 : 0.15;
       for (u = 0; u < 2; u++) {                                       // koyu dis cizgi + yesil govde
-        c.strokeStyle = u ? SARMASIK_GOVDE : ENGEL_DOLGU; c.lineWidth = u ? 0.7 : 1.3; c.lineCap = 'round';
+        c.strokeStyle = u ? SARMASIK_GOVDE : ENGEL_DOLGU; c.lineWidth = u ? 0.7 : 0.7 + 2 * Math.max(0.3, pxD); c.lineCap = 'round';
         c.beginPath(); c.moveTo(cx, kok);
         for (j = 1; j <= n; j++) c.lineTo(sarmasikX(cx, j, n, i, sal), kok + yon * len * j / n);
         c.stroke();
@@ -693,12 +730,17 @@
           kx = e.x - mesafe; uc = ust ? e.y + e.h : e.y; kok = ust ? 0 : H; disarda = kx > W;
           a = azHareketOn ? 1 : 0.8 + 0.2 * Math.sin(zaman * 14);
           if (disarda) {                                              // kenar isareti: ufuktaki sutunun uc seviyesi (faz 1 ve 2)
-            c.globalAlpha = 0.7 * (1 - p); c.strokeStyle = UNLEM_RENK; c.lineWidth = 0.5;
-            c.beginPath(); c.moveTo(W - 2.4, uc); c.lineTo(W, uc); c.stroke();
+            c.globalAlpha = 0.75 * (1 - p); c.beginPath(); c.moveTo(W - 2.4, uc); c.lineTo(W, uc);
+            c.strokeStyle = ENGEL_DOLGU; c.lineWidth = 0.5 + 2 * Math.max(0.2, pxD); c.stroke();     // koyu alt cizgi
+            c.strokeStyle = UNLEM_RENK; c.lineWidth = 0.5; c.stroke();
           } else if (kx + e.w > -2) {                                 // hayalet silüet: tam boy zarf, faz 1-3 boyunca (carpma zarfi = ciz)
-            c.globalAlpha = 0.5 * (1 - p); c.strokeStyle = UNLEM_RENK; c.lineWidth = 0.3; c.setLineDash(SILUET_CIZGI);
-            c.beginPath(); c.rect(kx, Math.min(kok, uc), e.w, Math.abs(uc - kok)); c.stroke(); c.setLineDash(SILUET_YOK);
-            c.lineWidth = 0.5; c.beginPath(); c.moveTo(kx - 0.6, uc); c.lineTo(kx + e.w + 0.6, uc); c.stroke();   // uc isareti
+            c.globalAlpha = 0.75 * (1 - p); c.setLineDash(SILUET_CIZGI);
+            c.beginPath(); c.rect(kx, Math.min(kok, uc), e.w, Math.abs(uc - kok));
+            c.strokeStyle = ENGEL_DOLGU; c.lineWidth = 0.3 + 2 * Math.max(0.2, pxD); c.stroke();    // koyu alt cizgi
+            c.strokeStyle = UNLEM_RENK; c.lineWidth = 0.3; c.stroke(); c.setLineDash(SILUET_YOK);
+            c.beginPath(); c.moveTo(kx - 0.6, uc); c.lineTo(kx + e.w + 0.6, uc);                  // uc isareti
+            c.strokeStyle = ENGEL_DOLGU; c.lineWidth = 0.5 + 2 * Math.max(0.2, pxD); c.stroke();
+            c.strokeStyle = UNLEM_RENK; c.lineWidth = 0.5; c.stroke();
           }
           if (sa.faz !== 1) continue;
           if (disarda && j !== en) continue;                          // ekran disi sutunlar tek unlemi paylasir
@@ -707,7 +749,7 @@
           if (x < -3) continue;
           k = azHareketOn ? 1 : 1 + 0.14 * Math.sin(zaman * 14);
           c.save(); c.translate(x, y); c.scale(k, k);
-          c.globalAlpha = a * (1 - p); c.fillStyle = UNLEM_RENK; c.strokeStyle = ENGEL_DOLGU; c.lineWidth = 0.46; c.lineJoin = 'round';
+          c.globalAlpha = a * (1 - p); c.fillStyle = UNLEM_RENK; c.strokeStyle = ENGEL_DOLGU; c.lineWidth = 2 * Math.max(0.23, pxD / k); c.lineJoin = 'round';
           c.beginPath(); c.moveTo(0, -2.6); c.lineTo(2.5, 1.7); c.lineTo(-2.5, 1.7); c.closePath(); c.fill(); c.stroke();   // ucgen uyari levhasi
           c.fillStyle = ENGEL_DOLGU; c.fillRect(-0.28, -1.1, 0.56, 1.7); c.beginPath(); c.arc(0, 1.0, 0.33, 0, 6.2832); c.fill();   // unlem
           c.restore();
@@ -725,12 +767,12 @@
   }
   var BOCEK_KONTUR = 'rgba(255,255,255,0.35)';
   function bocekCiz(c, dt, p) {
-    var d = durum, blink = d.dokunulmaz > 0 && (Math.floor(d.t * 12) & 1) === 0, kanat, kanat2, egim, g = sonmeCarpan(p), nb, sw, fe;
+    var d = durum, blink = d.dokunulmaz > 0 && (Math.floor(d.t * 12) & 1) === 0, kanat, kanat2, egim, g = sonmeCarpan(p), nb, sw;
     kanatFaz += dt * (basili ? 88 : 31);
     if (blink && !d.bitti) return;
     kanat = Math.sin(kanatFaz) * 0.6; kanat2 = Math.sin(kanatFaz + 1.1) * 0.6;
     egim = Math.max(-0.5, Math.min(0.5, d.vy * 0.012));
-    nb = 0.5 + 0.5 * Math.sin(zaman * 5);                        // fener nabzi
+    nb = azHareketOn ? 1 : 0.5 + 0.5 * Math.sin(zaman * 5);      // fener nabzi (azaltilmis harekette sabit)
     sw = azHareketOn ? 0 : Math.sin(zaman * 3.2) * 0.25;         // anten salinimi
     c.save();
     c.translate(XB, d.y); c.rotate(egim);
@@ -977,7 +1019,7 @@
       else if (o.tur === 'bomba') { ton(110, 38, 0.36, 'sine', 0.15); ton(190, 70, 0.14, 'triangle', 0.06); titret([45, 25, 45]); bombaPatlat(o.x - durum.mesafe, o.y); }
       else if (o.tur === 'sarmasikUyari') { dizi([[880, .07, .09, 0], [880, .07, .09, 120]], 'square'); }
       else if (o.tur === 'sarmasik') { ton(280, 150, 0.2, 'triangle', 0.1); ton(120, 80, 0.16, 'sine', 0.08); titret([25, 20, 25]); }
-      /* 'yutuldu': bilerek sessiz (cok toz ayni anda yutulur; gorsel yeterli) */
+      else if (o.tur === 'yutuldu') tozSon(o.x - durum.mesafe, o.y);     // sessiz (cok toz ayni anda yutulur); gorsel: alfa sonmesi
       else if (o.tur === 'ag') { ton(300, 200, 0.12, 'sine', 0.07); titret(18); }
       else if (o.tur === 'bolge') {
         eskiBolge = oncekiBolge; oncekiBolge = o.bolge;

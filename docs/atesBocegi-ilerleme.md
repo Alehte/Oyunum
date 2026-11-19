@@ -1,13 +1,11 @@
 Yapıldı: ad, kart/etiket, market beyaz zemin, ışık sönme, Dokun ve başla animasyonu, Su Sırala öğretici.
 Yapılmadı (sonraki oturum): hareket yumuşatma, toplama yarıçapı/mıknatıs, bomba, dikenli dal hasarı (yarım bar), tozsuz bölümler, sarmaşık tuzağı, böcek modeli ve genel görsel iyileştirme (%25 büyütme dahil), denetim.
 
-## 2026-11-19 oturumu (docs/gorev-karanliktaSuzul.md) — kota nedeniyle durdu
+## 2026-11-19 oturumu (docs/gorev-karanliktaSuzul.md)
 Yapıldı:
-- AŞAMA 0: market önizleme koyulaştırıldı + headless Chrome piksel testi (commit c0db16a).
-- AŞAMA A (çekirdek + arayüz): hareket rampası, mıknatıs + R_TOPLA 4,2, R_GORSEL 3,0, bomba, dal hasarı 0,5, tozsuz bölümler, sarmaşık + uyarı/silüet, çakışma kuralı, testler. Kararlar tasarım §11'de. 12 test paketinin hepsi yeşil (adalet 17/17).
-- Ekonomi: kullanıcı onayı — sabitlere dokunulmadı (mıknatıs puanı artırıyor, kabul).
-Yapılmadı (sonraki oturum):
-- AŞAMA A ikinci bütün denetimi (çekirdek+UI) yarıda kesildi; yeniden çalıştırılmalı.
-- sw.js SURUM 15 → 16 ve tools/swTest.js'teki sabit '15' güncellemesi.
-- AŞAMA B4 görsel iyileştirme (böcek modeli, engeller, arka planlar, toz, bomba daha okunaklı — şu an ~9 px, sarmaşık).
-- AŞAMA D: iki tur bağımsız denetim, tüm testler, commit, rapor.
+- AŞAMA 0: market önizleme koyulaştırıldı + headless Chrome piksel testi (c0db16a).
+- AŞAMA A: hareket rampası, mıknatıs + R_TOPLA 4,2, R_GORSEL 3,0, bomba, dal hasarı 0,5, tozsuz bölümler, sarmaşık + uyarı/silüet, çakışma kuralı, testler (2aecb4b). Kararlar tasarım §11.
+- AŞAMA B4: böcek modeli, engeller, bölge katmanları, toz, bomba, sarmaşık görselleri; sw.js SURUM 16 (f18977a).
+- AŞAMA D: iki tur bağımsız denetim; bulgular düzeltildi (silüet konturu, dal sprite önbelleği, yutulan toz sönmesi, market böceği, küçükler).
+- Ekonomi: kullanıcı onayıyla sabitlere dokunulmadı (mıknatıs puanı artırıyor).
+Cihazda bakılacak: süzülme hissi; bomba okunaklılığı; sarmaşık silüeti; market önizlemesi (Sedef, Buz); düşük cihazda fps.
