@@ -28,6 +28,8 @@ function dilim(engeller, toz, kivilcim) {
            engeller: engeller || [], toz: toz || [], kivilcim: kivilcim || null };
 }
 function adimla(d, n, basili) { const o = []; for (let i = 0; i < n; i++) o.push(...AB.adim(d, basili)); return o; }
+// Zemin olumu (12.1) konusu olmayan uzun kosularda: her adim oncesi zemin korumasi acik tutulur (isik = 1 gibi).
+const korumali = d => { d.zeminKoruma = 1; return d; };
 const say = (olaylar, tur) => olaylar.filter(o => o.tur === tur).length;
 
 console.log('Ayar');
@@ -249,16 +251,20 @@ dene('rampa: basma/birakma gecisinde ivme sicramaz, hedefe yaklasir, hiz sinirla
   for (let i = 0; i < 60; i++) { e.y = 50; AB.adim(e, true); }
   assert.ok(Math.abs(e.ay + Ay) < 0.01 * Ay, '0,5 sn sonra ay ' + e.ay);
 });
-dene('tavan/zemin kistirmasi, sinirda vy = 0, hasar yok', () => {
+dene('tavan kistirmasi sersemletir, zemin (koruma icinde) kistirir; sinirda vy = 0, hasar yok (12.1)', () => {
   const d = bosDurum(); d.y = 50;
-  let o = adimla(d, 240, true); assert.strictEqual(d.y, 4); assert.strictEqual(d.vy, 0);
-  o = o.concat(adimla(d, 480, false)); assert.strictEqual(d.y, 96); assert.strictEqual(d.vy, 0);
+  let o = [], n = 0;
+  while (!say(o, 'sersem') && n < 400) { o = o.concat(AB.adim(d, true)); n++; }
+  assert.strictEqual(say(o, 'sersem'), 1); assert.strictEqual(d.y, A.dunya.Y_UST); assert.strictEqual(d.vy, 0);
+  d.sersem = 0;
+  for (let i = 0; i < 480; i++) o = o.concat(AB.adim(korumali(d), false));
+  assert.strictEqual(d.y, A.dunya.Y_ALT); assert.strictEqual(d.vy, 0); assert.strictEqual(d.bitti, 0);
   assert.strictEqual(say(o, 'hasar'), 0); assert.ok(d.isik > 1 - 0.03 * 6);
 });
 
 console.log('Determinizm');
 function girdi(i) { return ((i * 7919) % 97) < 45; }
-function kos(tohum, n, g) { const d = AB.oyunOlustur(tohum); for (let i = 0; i < n; i++) AB.adim(d, g(i)); return d; }
+function kos(tohum, n, g) { const d = AB.oyunOlustur(tohum); for (let i = 0; i < n; i++) AB.adim(korumali(d), g(i)); return d; }
 dene('ayni tohum + ayni girdi: 10.000 adim JSON esit', () => {
   const a = JSON.stringify(kos(12345, 10000, girdi)), b = JSON.stringify(kos(12345, 10000, girdi));
   assert.strictEqual(a, b);
@@ -272,7 +278,7 @@ dene('farkli kare hizi taklidi (ayni adim sayisi) ayni sonuc', () => {
       let adimSay = 0;
       while (birikim >= DT && n < 6000) {
         if (adimSay === 12) { birikim = 0; break; }
-        AB.adim(d, girdi(n)); n++; birikim -= DT; adimSay++;
+        AB.adim(korumali(d), girdi(n)); n++; birikim -= DT; adimSay++;
       }
     }
     return JSON.stringify(d);
@@ -282,7 +288,8 @@ dene('farkli kare hizi taklidi (ayni adim sayisi) ayni sonuc', () => {
 });
 dene('durum alanlari; durumda islev yok', () => {
   const d = AB.oyunOlustur(5);
-  ['t', 'mesafe', 'puan', 'y', 'vy', 'ay', 'isik', 'dokunulmaz', 'zincir', 'zincirSure', 'toz', 'bolge', 'gorunenBolge', 'bitti', 'dilimler', 'tohum', 'uretici']
+  ['t', 'mesafe', 'puan', 'y', 'vy', 'ay', 'isik', 'dokunulmaz', 'zincir', 'zincirSure', 'toz', 'bolge', 'gorunenBolge', 'bitti', 'dilimler', 'tohum', 'uretici',
+   'sersem', 'zeminKoruma', 'sebep']
     .forEach(k => assert.ok(k in d, k));
   assert.ok(Array.isArray(d.dilimler) && d.dilimler.length > 0);
   (function gez(o, yol) {
@@ -293,12 +300,12 @@ dene('durum alanlari; durumda islev yok', () => {
 dene('JSON gidis-donusu: geri yuklenen durum 8000 adim boyunca ayni', () => {
   const a = AB.oyunOlustur(4242);
   a.puan = 5200;                                  // yeni mekanikler (tozsuz/bomba/sarmasik) devrede
-  for (let i = 0; i < 4000; i++) { a.isik = 1; AB.adim(a, girdi(i)); }
+  for (let i = 0; i < 4000; i++) { a.isik = 1; AB.adim(korumali(a), girdi(i)); }
   const b = JSON.parse(JSON.stringify(a));
   assert.deepStrictEqual(b, kopya(a));
   const turler = {};
   for (let i = 4000; i < 12000; i++) {
-    a.isik = 1; b.isik = 1;
+    a.isik = 1; b.isik = 1; korumali(a); korumali(b);
     const ob = AB.adim(b, girdi(i));
     assert.deepStrictEqual(ob, AB.adim(a, girdi(i)));
     ob.forEach(o => { turler[o.tur] = 1; });
@@ -306,7 +313,7 @@ dene('JSON gidis-donusu: geri yuklenen durum 8000 adim boyunca ayni', () => {
   }
   assert.strictEqual(JSON.stringify(b), JSON.stringify(a));
   assert.ok(a.uretici.n > 50);
-  ['sarmasikUyari', 'tozsuzDilim', 'bombaDilim', 'sarmasikFaz'].forEach(k => assert.ok(turler[k], k + ' sinanmadi'));
+  ['sarmasikUyari', 'tozsuzDilim', 'bombaDilim', 'sarmasikFaz', 'sersem', 'uyandi'].forEach(k => assert.ok(turler[k], k + ' sinanmadi'));
 });
 
 console.log('Uretici');
@@ -320,7 +327,7 @@ dene('bolge sabitken dilim dizisi girdiden bagimsiz', () => {
     // uretim aninda kaydet (miknatis sonradan bocege yakin tozu kaydirir)
     const kaydet = () => d.dilimler.forEach(s => { if (!(s.no in dizi)) dizi[s.no] = JSON.stringify([s.x, s.c, s.ust, s.alt, s.tur, s.engeller.map(e => [e.tur, e.x, e.h, e.w]), s.toz.map(t => [t.x, t.y]), s.kivilcim && [s.kivilcim.x, s.kivilcim.y]]); });
     kaydet();
-    for (let i = 0; i < 20000; i++) { d.isik = 1; d.puan = 0; AB.adim(d, g(i)); kaydet(); }
+    for (let i = 0; i < 20000; i++) { d.isik = 1; d.puan = 0; AB.adim(korumali(d), g(i)); kaydet(); }
     return dizi;
   };
   const a = kayit(() => false), b = kayit(() => true), c = kayit(girdi);
@@ -337,7 +344,7 @@ dene('determinizm (b): bolge + puan sabitken (6200) dilim dizisi girdiden bagims
           s.sarmasik && [s.sarmasik.yon, s.sarmasik.sutunlar.map(c => [c.x, c.y, c.h])]]);
       });
     kaydet();
-    for (let i = 0; i < 20000; i++) { d.isik = 1; d.puan = 6200; d.bolge = AB.bolgeNo(6200); AB.adim(d, g(i)); kaydet(); }
+    for (let i = 0; i < 20000; i++) { d.isik = 1; d.puan = 6200; d.bolge = AB.bolgeNo(6200); AB.adim(korumali(d), g(i)); kaydet(); }
     return dizi;
   };
   const a = kayit(() => false), b = kayit(() => true), c = kayit(girdi);
@@ -524,12 +531,12 @@ dene('dusen dal: tetik, sallanma, dusus, durma', () => {
   const e = { tur: 'dusen', x: XB + tetik + 3, y: 0, w: 5, h: 8, sarmasik: 20, faz: 0, sure: 0 };
   d.dilimler = [dilim([e])];
   let n = 0;
-  while (e.faz === 0 && n < 1000) { AB.adim(d, false); n++; }
+  while (e.faz === 0 && n < 1000) { AB.adim(korumali(d), false); n++; }
   assert.strictEqual(e.faz, 1); assert.ok(e.x - (d.mesafe + XB) <= tetik + 1e-9);
-  let s = 0; while (e.faz === 1) { AB.adim(d, false); s++; }
+  let s = 0; while (e.faz === 1 && s < 1000) { AB.adim(korumali(d), false); s++; }
   yakin(s * DT, A.uretici.DUSEN_UYARI, DT + 1e-9, 'sallanma');
   assert.strictEqual(e.y, 0);
-  let f = 0; while (e.faz === 2) { AB.adim(d, false); f++; }
+  let f = 0; while (e.faz === 2 && f < 1000) { AB.adim(korumali(d), false); f++; }
   assert.strictEqual(e.faz, 3); assert.strictEqual(e.y, 20); yakin(f * DT, 20 / 60, DT + 1e-9, 'dusus');
 });
 dene('dusen dala carpma: hasar 0,34', () => {
@@ -573,15 +580,20 @@ dene('miknatis: R_MIKNATIS icindeki toz bocege kayar ve toplanir; disindaki kipi
   let n = 0; while (!yakinT.alindi && n < 60) { d.y = 50; d.vy = 0; AB.adim(d, false); n++; }
   assert.strictEqual(yakinT.alindi, 1); assert.ok(n < 30, n + ' adim');
 });
-dene('miknatis AFK yuksekliginden (tavan/zemin) tozu cekmez', () => {
+dene('miknatis duvara degen bocege tozu cekmez: tavanda temas adimi (sersem), zeminde koruma icinde', () => {
   const u = A.uretici, enUst = u.MERKEZ_MIN - u.TOZ_SAPMA, enAlt = u.MERKEZ_MAX + u.TOZ_SAPMA;
-  [[A.dunya.Y_UST, true, enUst], [A.dunya.Y_ALT, false, enAlt]].forEach(([yb, bas, ty]) => {
-    const d = bosDurum(); d.y = yb; d.vy = 0;
-    const t = { x: XB + 3, y: ty, alindi: 0, yutuldu: 0 };
-    d.dilimler = [dilim([], [t])];
-    const o = adimla(d, 120, bas);
-    assert.strictEqual(say(o, 'toz'), 0); assert.strictEqual(t.x, XB + 3); assert.strictEqual(t.y, ty);
-  });
+  // tavan: temas adiminda sersemleme baslar (miknatis kapali); en yakin toz cekilmez
+  const d = bosDurum(); d.y = A.dunya.Y_UST; d.vy = -A.hareket.VY_YUKARI; d.ay = -A.hareket.A_YUKSEL;
+  const t = { x: XB + 3, y: enUst, alindi: 0, yutuldu: 0 };
+  d.dilimler = [dilim([], [t])];
+  const o = AB.adim(d, true);
+  assert.strictEqual(say(o, 'sersem'), 1); assert.strictEqual(say(o, 'toz'), 0); assert.strictEqual(t.x, XB + 3); assert.strictEqual(t.y, enUst);
+  // zemin: koruma icinde kistirilmis bocek, 120 adim boyunca
+  const z = bosDurum(); z.y = A.dunya.Y_ALT; z.vy = 0;
+  const tz = { x: XB + 3, y: enAlt, alindi: 0, yutuldu: 0 };
+  z.dilimler = [dilim([], [tz])];
+  const oz = []; for (let i = 0; i < 120; i++) oz.push(...AB.adim(korumali(z), false));
+  assert.strictEqual(say(oz, 'toz'), 0); assert.strictEqual(tz.x, XB + 3); assert.strictEqual(tz.y, enAlt); assert.strictEqual(z.bitti, 0);
 });
 dene('miknatis: gerideki dilimin cekilen tozu donmaz (dilim atlanmaz)', () => {
   const d = bosDurum(); d.y = 50; d.vy = 0;
@@ -598,6 +610,168 @@ dene('miknatis yutulan ve alinan tozu cekmez', () => {
   const o = adimla(d, 40, false);
   assert.strictEqual(say(o, 'toz'), 0); assert.strictEqual(y1.x, XB + 3); assert.strictEqual(a1.x, XB + 5);
   assert.strictEqual(y1.alindi, 0, 'yutulan toz toplanmaz');
+});
+
+console.log('Tavan sersemlemesi ve zemin olumu (12.1)');
+const MH = A.hareket, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;
+const SERSEM_ADIM = Math.round(MH.SERSEM_SURE / DT), KORUMA_ADIM = Math.round(MH.ZEMIN_KORUMA / DT);
+// tavana degen (tam hizla yukari) bocek: tek adimda sersemler
+function sersemDurum() {
+  const d = bosDurum(); d.y = Y_UST + 0.1; d.vy = -MH.VY_YUKARI; d.ay = -MH.A_YUKSEL;
+  const o = AB.adim(d, true);
+  assert.strictEqual(say(o, 'sersem'), 1, 'sersem olayi');
+  return d;
+}
+dene('bozuk ayar: SERSEM_SURE > DOKUNULMAZ / <= 0', () => {
+  let a = ayarKopya(); a.hareket.SERSEM_SURE = 1.2; assert.ok(AB.ayarDogrula(a).some(h => /SERSEM_SURE/.test(h)));
+  a = ayarKopya(); a.hareket.SERSEM_SURE = 0; assert.ok(AB.ayarDogrula(a).length > 0);
+});
+dene('bozuk ayar: uyanma orani 0 / 1, zemine cok yakin uyanma (T_MIN gecikmeli oyuncu zemine deger)', () => {
+  [0, 1, 0.02, 0.05].forEach(r => { const a = ayarKopya(); a.hareket.SERSEM_UYANMA_ORAN = r; assert.ok(AB.ayarDogrula(a).length > 0, 'oran ' + r); });
+  const a = ayarKopya(); a.hareket.SERSEM_UYANMA_ORAN = 0.12;          // yUyan 84,96: T_MIN gecikmesiyle zemine deger
+  assert.ok(AB.ayarDogrula(a).some(h => /T_MIN gecikmeli/.test(h)), JSON.stringify(AB.ayarDogrula(a)));
+});
+dene('bozuk ayar: ZEMIN_KORUMA 0, kivilcim zemine fren payindan yakin', () => {
+  let a = ayarKopya(); a.hareket.ZEMIN_KORUMA = 0; assert.ok(AB.ayarDogrula(a).length > 0);
+  a = ayarKopya(); a.uretici.KIVILCIM_Y_MAX = 91; assert.ok(AB.ayarDogrula(a).some(h => /kivilcim frenle/.test(h)), JSON.stringify(AB.ayarDogrula(a)));
+});
+dene('sabitler: SERSEM_SURE 0,8-1,0 sn, uyanma yuksekligi zeminin %20-30 ustunde, koruma ~0,5 sn', () => {
+  assert.ok(MH.SERSEM_SURE >= 0.8 && MH.SERSEM_SURE <= 1.0, 'SERSEM_SURE ' + MH.SERSEM_SURE);
+  const alan = Y_ALT - Y_UST, ust = (Y_ALT - AB.uyanmaY) / alan;
+  assert.ok(ust >= 0.2 && ust <= 0.3, 'oran ' + ust);
+  yakin(AB.uyanmaY, Y_ALT - MH.SERSEM_UYANMA_ORAN * alan, 1e-12);
+  assert.ok(MH.ZEMIN_KORUMA >= 0.4 && MH.ZEMIN_KORUMA <= 0.6);
+  // uyanan bocek T_MIN gecikmeyle basarsa zemine degmez (koruma olmadan da)
+  assert.ok(AB.uyanmaY + AB.uyanmaDususu(A.adalet.T_MIN) < Y_ALT);
+});
+dene('tavana degme: sersem olayi, hasar yok, isik yalniz sizar, zincir ve dokunulmazlik degismez', () => {
+  const d = bosDurum(); d.y = Y_UST + 0.1; d.vy = -MH.VY_YUKARI; d.ay = -MH.A_YUKSEL; d.zincir = 7; d.zincirSure = 5; d.dokunulmaz = 0;
+  const once = d.isik, o = AB.adim(d, true);
+  assert.deepStrictEqual(o.map(x => x.tur), ['sersem']); assert.ok(Number.isFinite(o[0].x) && o[0].y === Y_UST);
+  yakin(d.sersem, MH.SERSEM_SURE, 1e-12); assert.strictEqual(d.y, Y_UST); assert.strictEqual(d.vy, 0); assert.strictEqual(d.ay, 0);
+  yakin(d.isik, once - AB.zorluk(0).sizinti * DT, 1e-12, 'ekstra isik cezasi yok');
+  assert.strictEqual(d.zincir, 7); assert.strictEqual(d.dokunulmaz, 0);
+  const o2 = adimla(d, SERSEM_ADIM + 5, false);
+  assert.strictEqual(say(o2, 'hasar') + say(o2, 'ag'), 0); assert.strictEqual(d.zincir, 7, 'zincir korunur');
+});
+dene('sersemlik suresi SERSEM_SURE (adim olarak), uyanma yuksekligi uyanmaY, yol monoton ve en asagiya inmez', () => {
+  const d = sersemDurum();
+  let n = 0, o = [], y = d.y, enHizli = 0;
+  while (!say(o, 'uyandi') && n < 1000) {
+    o = AB.adim(d, false); n++;
+    assert.ok(d.y >= y - 1e-12 && d.y <= AB.uyanmaY + 1e-12, 'yol ' + d.y); enHizli = Math.max(enHizli, (d.y - y) / DT); y = d.y;
+  }
+  assert.strictEqual(n, SERSEM_ADIM, 'sersem adim ' + n);
+  yakin(d.y, AB.uyanmaY, 1e-9, 'uyanma y'); assert.ok(d.y < Y_ALT - 0.2 * (Y_ALT - Y_UST));
+  assert.strictEqual(d.sersem, 0); assert.strictEqual(d.vy, 0); assert.strictEqual(d.ay, 0); yakin(d.zeminKoruma, MH.ZEMIN_KORUMA, 1e-12);
+  const ort = (AB.uyanmaY - Y_UST) / MH.SERSEM_SURE;
+  assert.ok(enHizli <= 1.5 * ort + 1, 'en buyuk suzulme hizi ' + enHizli + ' ort ' + ort);
+  const u = o.find(x => x.tur === 'uyandi'); assert.ok(Number.isFinite(u.x) && u.y === d.y);
+});
+dene('sersemken girdi etkisiz: basili / birakili / karisik ayni durum dizisi', () => {
+  const izle = g => { const d = sersemDurum(), iz = []; for (let i = 0; i < SERSEM_ADIM; i++) { AB.adim(d, g(i)); iz.push([d.y, d.vy, d.ay, d.sersem]); } return JSON.stringify(iz); };
+  const a = izle(() => true), b = izle(() => false), c = izle(girdi);
+  assert.strictEqual(a, b); assert.strictEqual(a, c);
+  // uyandiktan sonra girdi yeniden calisir
+  const d = sersemDurum(); adimla(d, SERSEM_ADIM, true); const y0 = d.y; adimla(d, 30, true); assert.ok(d.y < y0, 'uyaninca basmak yukseltir');
+});
+dene('hangisi once: sersemlik uyanma yuksekligine erken varilirsa orada biter', () => {
+  const d = bosDurum(); d.y = AB.uyanmaY - 2; d.sersem = MH.SERSEM_SURE;       // (yapay) alcakta baslayan sersemlik
+  let n = 0, o = []; while (!say(o, 'uyandi') && n < 1000) { o = AB.adim(d, false); n++; }
+  assert.ok(n < SERSEM_ADIM, n + ' adim'); yakin(d.y, AB.uyanmaY, 1e-12); assert.strictEqual(d.sersem, 0);
+});
+dene('sersemken toz dogrudan temasla (R_TOPLA) toplanir, isik artar; miknatis cekmez; uyaninca miknatis yeniden calisir', () => {
+  const d = sersemDurum(); d.isik = 0.5;
+  for (let i = 0; i < 40; i++) AB.adim(d, false);                         // yolun ortasina in
+  const by = d.y, bx = d.mesafe + XB;
+  const temas = { x: bx + 0.2, y: by + 1, alindi: 0, yutuldu: 0 };                        // R_TOPLA icinde
+  const uzak = { x: bx + 3, y: by - 6, alindi: 0, yutuldu: 0 };                           // R_TOPLA disi, R_MIKNATIS ici
+  assert.ok(Math.hypot(3, 6) > MH.R_TOPLA + 1 && Math.hypot(3, 6) < MH.R_MIKNATIS);
+  d.dilimler = [dilim([], [temas, uzak])];
+  const isik0 = d.isik, o = AB.adim(d, false);
+  assert.strictEqual(say(o, 'toz'), 1); assert.strictEqual(temas.alindi, 1); assert.ok(d.sersem > 0);
+  yakin(d.isik, isik0 + A.isik.TOZ - AB.zorluk(d.mesafe).sizinti * DT, 1e-6, 'isik artmali');
+  assert.strictEqual(uzak.x, bx + 3); assert.strictEqual(uzak.y, by - 6, 'miknatis sersemken cekmemeli');
+  assert.strictEqual(uzak.alindi, 0);
+  // uyanis: ayni goreli konumdaki toz bu kez cekilir
+  const e = sersemDurum(); adimla(e, SERSEM_ADIM, false); assert.strictEqual(e.sersem, 0);
+  const ex = e.mesafe + XB, t2 = { x: ex + 3, y: e.y - 6, alindi: 0, yutuldu: 0 };
+  e.dilimler = [dilim([], [t2])]; AB.adim(korumali(e), false);
+  assert.ok(t2.x !== ex + 3 || t2.y !== e.y - 6, 'uyaninca miknatis calismali');
+});
+dene('sersemken kivilcim dogrudan temasla alinir; engele carpma normal kuralla hasar verir (sersemlik surer)', () => {
+  const d = sersemDurum(); for (let i = 0; i < 40; i++) AB.adim(d, false);
+  const bx = d.mesafe + XB;
+  d.dilimler = [dilim([], [], { x: bx + 0.3, y: d.y + 1, alindi: 0 })];
+  assert.strictEqual(say(AB.adim(d, false), 'kivilcim'), 1);
+  const k = sersemDurum(); for (let i = 0; i < 40; i++) AB.adim(k, false);
+  k.dilimler = [dilim([{ tur: 'dal', x: k.mesafe + XB - 1, y: 0, w: 4, h: 100 }])]; k.zincir = 5;
+  const once = k.isik, o = AB.adim(k, false);
+  assert.strictEqual(say(o, 'hasar'), 1); assert.ok(k.isik < once - A.isik.DAL_HASAR + 1e-6); assert.strictEqual(k.zincir, 0); assert.ok(k.sersem > 0, 'sersemlik surer');
+});
+dene('zemin olumu: temas aninda zemin + bitti (sebep zemin), sonra girdi kilitli (adim bos, durum donuk)', () => {
+  const d = bosDurum(); d.y = Y_ALT - 0.1; d.vy = MH.VY_ASAGI; d.ay = MH.G_SUZUL;
+  let o = [], n = 0; while (!d.bitti && n < 200) { o = AB.adim(d, false); n++; }
+  assert.strictEqual(n, 1, 'ilk temasta');
+  assert.deepStrictEqual(o.map(x => x.tur), ['zemin', 'bitti']); assert.strictEqual(o[1].sebep, 'zemin');
+  assert.ok(Number.isFinite(o[0].x) && o[0].y === Y_ALT);
+  assert.strictEqual(d.bitti, 1); assert.strictEqual(d.sebep, 'zemin'); assert.strictEqual(d.y, Y_ALT);
+  const kopyaD = JSON.stringify(d);
+  assert.deepStrictEqual(AB.adim(d, true), []); assert.deepStrictEqual(AB.adim(d, false), []); assert.strictEqual(JSON.stringify(d), kopyaD);
+  // isikla bitis da sebep tasir
+  const e = bosDurum(); e.y = 50; e.isik = 0.0001; const oe = AB.adim(e, false);
+  assert.strictEqual(oe.find(x => x.tur === 'bitti').sebep, 'isik'); assert.strictEqual(e.sebep, 'isik');
+});
+dene('zemin: hic basmayan bocek zeminde bekleyerek yasamaz (baslangictan ~2 sn icinde zemin olumu)', () => {
+  const d = AB.oyunOlustur(5); let n = 0;
+  while (!d.bitti && n < 2400) { AB.adim(d, false); n++; }
+  assert.strictEqual(d.sebep, 'zemin'); assert.ok(n * DT > 1 && n * DT < 2.5, (n * DT) + ' sn');
+});
+dene('baslangic: anlik olum yok (y = Y_BASLA, sersem/koruma 0); ilk 0,5 sn basili ya da birakili bitmez', () => {
+  [true, false].forEach(b => {
+    const d = AB.oyunOlustur(9);
+    assert.strictEqual(d.y, A.dunya.Y_BASLA); assert.strictEqual(d.sersem, 0); assert.strictEqual(d.zeminKoruma, 0); assert.strictEqual(d.sebep, '');
+    const o = adimla(d, 60, b);
+    assert.strictEqual(d.bitti, 0); assert.strictEqual(say(o, 'zemin') + say(o, 'sersem'), 0);
+  });
+});
+dene('uyanma korumasi: ZEMIN_KORUMA icinde zemine degmek oldurmez (kistirilir), sure dolunca oldurur', () => {
+  const d = sersemDurum(); adimla(d, SERSEM_ADIM, false); assert.strictEqual(d.sersem, 0);
+  d.y = Y_ALT - 0.01; d.vy = MH.VY_ASAGI; d.ay = MH.G_SUZUL;      // uyanir uyanmaz zemine (yapay)
+  let n = 0, o = [];
+  for (; n < KORUMA_ADIM; n++) { o = AB.adim(d, false); assert.strictEqual(d.bitti, 0, 'koruma icinde olum, adim ' + n); assert.strictEqual(d.y, Y_ALT); }
+  assert.strictEqual(d.zeminKoruma, 0);
+  o = AB.adim(d, false);
+  assert.strictEqual(d.bitti, 1); assert.strictEqual(d.sebep, 'zemin'); assert.strictEqual(say(o, 'zemin'), 1);
+});
+dene('uyanma korumasi: koruma icinde zeminden basarak kalkan bocek yasar; uyanip hic basmayan koruma bitince olur', () => {
+  const d = sersemDurum(); adimla(d, SERSEM_ADIM, false);
+  d.y = Y_ALT - 0.01; d.vy = MH.VY_ASAGI; d.ay = MH.G_SUZUL;
+  adimla(d, 10, false); const o = adimla(d, 120, true);
+  assert.strictEqual(d.bitti, 0); assert.ok(d.y < Y_ALT - 5); assert.strictEqual(say(o, 'zemin'), 0);
+  // dogal akis: uyandiktan sonra birakili -> koruma (0,5 sn) bittikten sonra zemine varir ve olur
+  const e = sersemDurum(); adimla(e, SERSEM_ADIM, false);
+  let n = 0; while (!e.bitti && n < 2400) { AB.adim(e, false); n++; }
+  assert.strictEqual(e.sebep, 'zemin'); assert.ok(n > KORUMA_ADIM, 'koruma bitmeden zemine vardi: ' + n);
+  // T_MIN gecikmeyle basan oyuncu zemine degmez
+  const f = sersemDurum(); adimla(f, SERSEM_ADIM, false);
+  let enAlt = 0; for (let i = 0; i < 240; i++) { AB.adim(f, i >= Math.round(A.adalet.T_MIN / DT)); enAlt = Math.max(enAlt, f.y); }
+  assert.strictEqual(f.bitti, 0); assert.ok(enAlt < Y_ALT, 'en alt ' + enAlt);
+  yakin(enAlt, AB.uyanmaY + AB.uyanmaDususu(A.adalet.T_MIN), 0.05, 'uyanmaDususu gercek adimla ayni');
+});
+dene('fren mesafesi gercek adimla ayni (zemine/tavana dogru tam hizdan ters tam girdi)', () => {
+  const d = bosDurum(); d.y = 50; d.vy = MH.VY_ASAGI; d.ay = MH.G_SUZUL;
+  let y0 = d.y, n = 0; while (n++ < 600) { AB.adim(d, true); if (d.vy <= 0) break; }
+  yakin(d.y - y0, AB.frenMesafesi(1), 0.3, 'asagi');
+  const e = bosDurum(); e.y = 50; e.vy = -MH.VY_YUKARI; e.ay = -MH.A_YUKSEL; y0 = e.y; n = 0;
+  while (n++ < 600) { AB.adim(e, false); if (e.vy >= 0) break; }
+  yakin(y0 - e.y, AB.frenMesafesi(-1), 0.5, 'yukari');
+});
+dene('JSON gidis-donusu sersemken ve koruma icinde: ayni devam', () => {
+  const a = sersemDurum(); adimla(a, 50, false);
+  const b = JSON.parse(JSON.stringify(a));
+  for (let i = 0; i < 200; i++) assert.deepStrictEqual(AB.adim(b, girdi(i)), AB.adim(a, girdi(i)));
+  assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
 });
 
 console.log('Bomba');
@@ -721,19 +895,20 @@ dene('zincir zaman asimi 1,5 sn', () => {
 });
 dene('mesafe puani: her 4 birimde 1', () => {
   const d = bosDurum(); d.y = 50;
-  adimla(d, 1200, false);
+  for (let i = 0; i < 1200; i++) AB.adim(korumali(d), false);
+  assert.strictEqual(d.bitti, 0); assert.ok(d.mesafe > 230);
   assert.strictEqual(d.puan, Math.floor(d.mesafe / 4));
 });
 dene('bolge: agirlik bolgesi puanla hemen, gorunenBolge nefes varinca', () => {
   const d = AB.oyunOlustur(77);
-  for (let i = 0; i < 1200; i++) { d.isik = 1; AB.adim(d, girdi(i)); }
+  for (let i = 0; i < 1200; i++) { d.isik = 1; AB.adim(korumali(d), girdi(i)); }
   assert.strictEqual(d.gorunenBolge, 0); assert.ok(d.puan < 500);
   d.puan = 500;
   let o = AB.adim(d, false), n = 0;
   assert.strictEqual(d.bolge, 1); assert.strictEqual(d.gorunenBolge, 0); assert.strictEqual(say(o, 'bolge'), 0);
   let nefes = null;
   while (n++ < 4000) {
-    d.isik = 1; o = AB.adim(d, false);
+    d.isik = 1; o = AB.adim(korumali(d), false);
     if (!nefes) nefes = d.dilimler.find(s => s.nefes) || null;
     if (say(o, 'bolge')) break;
   }
@@ -776,7 +951,7 @@ dene('hasar ile bitis tek bitti', () => {
 dene('dilimler 2W ileriye kadar uretilir, arkadakiler atilir', () => {
   const d = AB.oyunOlustur(31);
   for (let i = 0; i < 6000; i++) {
-    d.isik = 1; AB.adim(d, girdi(i));
+    d.isik = 1; AB.adim(korumali(d), girdi(i));
     const son = d.dilimler[d.dilimler.length - 1], ilk = d.dilimler[0];
     assert.ok(son.x > d.mesafe + XB + 2 * A.dunya.W);
     assert.ok(ilk.x + ilk.w >= d.mesafe - 1 - AB.zorluk(d.mesafe).hiz * DT);

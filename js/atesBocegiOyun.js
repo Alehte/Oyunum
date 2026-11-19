@@ -38,6 +38,11 @@
   var SONME_SN = 0.85;                // isik sonme suresi (sn); sonra sonuc karti
   var SONME_AZ_SN = 0.3;              // azaltilmis hareket: kisa ve sade
   var SONME_YAVAS = 0.5;              // sonerken dunyanin kalan kayma hizi (ilk andaki hizin orani)
+  // Zemin olumu (tasarim 12.1, Mario tarzi): dunya donar; bocek kisa yukari sicrar, ters doner, isigi yavasca
+  // sonerken asagi, ekran disina duser; sonra normal sonuc karti. Azaltilmis harekette SONME_AZ_SN sade sonme.
+  var ZEMIN_OLUM_SN = 1.3, ZEMIN_SICRAMA = 7, ZEMIN_SICRAMA_SN = 0.3;   // toplam sure, sicrama yuksekligi (birim) ve tepeye varis
+  // Sersemlik efekti: bocegin ustunde donen yildiz halkasi (renk temadan: pal.vurgu); azaltilmis harekette donmez.
+  var SERSEM_YILDIZ = 3, SERSEM_HALKA_RX = 2.6, SERSEM_HALKA_RY = 0.8, SERSEM_YILDIZ_R = 0.75, SERSEM_DONUS = 6;   // rad/sn
 
   var YERLESIK = {
     isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D',
@@ -62,6 +67,7 @@
   var calisiyor = false, duraklatildi = false, bekle = true, bitisIsleniyor = false;
   var kosuNo = 0;                     // her yeni kosu / durdurma ile artar
   var sonme = -1;                     // isik sonme suresi (sn); -1: baslamadi ya da bitti
+  var olumTur = '';                   // '' | 'isik' | 'zemin' (cekirdek bitti olayinin sebebi; zeminde dusus animasyonu)
   var basili = false, isaretciler = 0, tusBasili = false;
   var rekor = 0, sonSonuc = null;
   var hizOnbellek = 24, hizSayac = 0;
@@ -768,15 +774,19 @@
   }
   var BOCEK_KONTUR = 'rgba(255,255,255,0.35)';
   function bocekCiz(c, dt, p) {
-    var d = durum, blink = d.dokunulmaz > 0 && (Math.floor(d.t * 12) & 1) === 0, kanat, kanat2, egim, g = sonmeCarpan(p), nb, sw;
-    if (!azHareketOn) kanatFaz += dt * (basili ? 88 : 31);       // azaltilmis harekette kanat cirpmasi donuk
+    var d = durum, blink = d.dokunulmaz > 0 && (Math.floor(d.t * 12) & 1) === 0, kanat, kanat2, egim, g = sonmeCarpan(p), nb, sw, ters = 1;
+    if (!azHareketOn) kanatFaz += dt * (basili && !(d.sersem > 0) ? 88 : 31);       // azaltilmis harekette kanat cirpmasi donuk; sersemken girdi etkisiz
     if (blink && !d.bitti) return;
     kanat = Math.sin(kanatFaz) * 0.6; kanat2 = Math.sin(kanatFaz + 1.1) * 0.6;
     egim = Math.max(-0.5, Math.min(0.5, d.vy * 0.012));
     nb = azHareketOn ? 1 : 0.5 + 0.5 * Math.sin(zaman * 5);      // fener nabzi (azaltilmis harekette sabit)
     sw = azHareketOn ? 0 : Math.sin(zaman * 3.2) * 0.25;         // anten salinimi
+    if (zeminDusus()) {                                          // sicrarken sirt ustu doner (dikey takla), sonra ters duser
+      ters = Math.cos(Math.PI * Math.min(1, dususT() / ZEMIN_SICRAMA_SN)); if (Math.abs(ters) < 0.05) ters = ters < 0 ? -0.05 : 0.05;
+      egim = 0;
+    }
     c.save();
-    c.translate(XB, d.y); c.rotate(egim);
+    c.translate(XB, bocekY()); c.rotate(egim); if (ters !== 1) c.scale(1, ters);
     c.globalAlpha = (azHareketOn ? 0.85 : 0.75 + 0.2 * Math.sin(zaman * 5)) * g;
     c.drawImage(sprBocek, -M.R_GORSEL * 4, -M.R_GORSEL * 4, M.R_GORSEL * 8, M.R_GORSEL * 8);
     c.scale(M.R_GORSEL / 2.4, M.R_GORSEL / 2.4);                  // asagidaki sabit olculer 2,4 yaricapina gore; gorsel buyudukce birlikte olceklenir
@@ -803,6 +813,25 @@
     c.beginPath(); c.arc(1.35, 0, 0.5, 0, 6.2832); c.fill(); c.stroke();                                               // bas
     c.fillStyle = bocekParlak; c.globalAlpha = 0.85 * g;
     c.beginPath(); c.arc(1.55, -0.24, 0.1, 0, 6.2832); c.moveTo(1.65, 0.24); c.arc(1.55, 0.24, 0.1, 0, 6.2832); c.fill();   // gozler
+    c.restore();
+  }
+
+  // Sersemlik (12.1): bocegin basinin ustunde halka + donen yildizlar (tema vurgu rengi). Azaltilmis harekette
+  // yildizlar sabit konumda ve donmeden cizilir.
+  function sersemCiz(c) {
+    var d = durum, i, a, x, y, yt, taban, on;
+    if (!(d.sersem > 0) || d.bitti) return;
+    yt = d.y - M.R_GORSEL - 1.2; taban = azHareketOn ? -Math.PI / 2 : zaman * SERSEM_DONUS;
+    c.save();
+    c.globalAlpha = 0.35; c.strokeStyle = pal.vurgu; c.lineWidth = 0.18;
+    c.beginPath(); c.ellipse(XB, yt, SERSEM_HALKA_RX, SERSEM_HALKA_RY, 0, 0, 6.2832); c.stroke();
+    c.fillStyle = pal.vurgu;
+    for (i = 0; i < SERSEM_YILDIZ; i++) {
+      a = taban + i * 6.2832 / SERSEM_YILDIZ; x = XB + Math.cos(a) * SERSEM_HALKA_RX; y = yt + Math.sin(a) * SERSEM_HALKA_RY;
+      on = Math.sin(a) >= 0;                                    // halkanin onundeki yildiz parlak, arkadaki soluk
+      c.globalAlpha = on ? 0.95 : 0.55;
+      yildizCiz(c, x, y, SERSEM_YILDIZ_R * (on ? 1 : 0.8), azHareketOn ? 0 : zaman * 4 + i);
+    }
     c.restore();
   }
 
@@ -850,7 +879,7 @@
         c.globalAlpha = 1; c.fillStyle = pal.toz; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL, 0, 6.2832); c.fill();
         c.globalAlpha = 0.8; c.fillStyle = BOCEK_KANAT; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL * 0.5, 0, 6.2832); c.fill();      // sicak cekirdek
         mx = x - XB; my = t.y - durum.y; md = mx * mx + my * my;
-        if (md < rm2 && md > 1) {                                                                                                       // miknatisla cekiliyor: kisa kuyruk
+        if (md < rm2 && md > 1 && !(durum.sersem > 0)) {                                                                                // miknatisla cekiliyor: kisa kuyruk (sersemken miknatis kapali)
           md = Math.sqrt(md); c.globalAlpha = 0.4; c.strokeStyle = pal.toz; c.lineWidth = M.R_TOZ_GORSEL;
           c.beginPath(); c.moveTo(x, t.y); c.lineTo(x + mx / md * 2.4, t.y + my / md * 2.4); c.stroke();
         }
@@ -867,12 +896,23 @@
     izCiz(c);
     parcacikGuncelle(dt, c);
     bocekCiz(c, dt, p);
+    sersemCiz(c);
   }
 
   // Sonme ilerlemesi 0..1: kosu surerken 0; olumden sonra sure dolunca 1 (karanlik tamamen coker)
   function sonmeIlerleme() {
     if (!durum || !durum.bitti) return 0;
-    return sonme < 0 ? 1 : Math.min(1, sonme / (azHareketOn ? SONME_AZ_SN : SONME_SN));
+    return sonme < 0 ? 1 : Math.min(1, sonme / sonmeSuresi());
+  }
+  function sonmeSuresi() { return azHareketOn ? SONME_AZ_SN : (olumTur === 'zemin' ? ZEMIN_OLUM_SN : SONME_SN); }
+  function zeminDusus() { return olumTur === 'zemin' && !azHareketOn && !!durum && !!durum.bitti; }
+  function dususT() { return sonme < 0 ? sonmeSuresi() : sonme; }
+  // Bocegin cizim yuksekligi: kosu surerken cekirdegin y'si; zemin olumunde sicrama + dusus egrisi
+  // y(t) = y0 - v0 t + g t^2 / 2 (tepe ZEMIN_SICRAMA_SN'de, ZEMIN_SICRAMA yukarida), ekran disina iner.
+  function bocekY() {
+    if (!zeminDusus()) return durum.y;
+    var t = dususT(), v0 = 2 * ZEMIN_SICRAMA / ZEMIN_SICRAMA_SN, g = v0 / ZEMIN_SICRAMA_SN;
+    return durum.y - v0 * t + g * t * t / 2;
   }
   // Isik carpani: yumusakca 1 -> 0; titreme yalniz azaltilmis hareket kapaliyken
   function sonmeCarpan(p) {
@@ -884,14 +924,14 @@
   }
 
   function karanlikCiz(p) {
-    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / W;
+    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / W, by = bocekY();
     kctx.setTransform(1, 0, 0, 1, 0, 0);
     kctx.globalCompositeOperation = 'source-over';
     kctx.fillStyle = p > 0 ? rgba(pal.karanlik, KARANLIK_OPAKLIK + (1 - KARANLIK_OPAKLIK) * p) : karanlikRenkStr;
     kctx.fillRect(0, 0, kc.width, kc.height);
     if (R > 0.01) {
       kctx.globalCompositeOperation = 'destination-out';
-      kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, durum.y * ks);
+      kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, by * ks);
       kctx.fillStyle = karanlikGrad;
       kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
       kctx.globalCompositeOperation = 'source-over';
@@ -1027,11 +1067,16 @@
         gecis = azHareketOn ? 1 : 0;
         dizi([[392, .12, .09, 0], [523, .12, .09, 100], [659, .2, .09, 200]], 'triangle');
       }
+      else if (o.tur === 'sersem') { ton(640, 320, 0.12, 'triangle', 0.08); ton(900, 700, 0.18, 'sine', 0.04); titret(20); }   // tavana carpma: hafif "tok"
+      else if (o.tur === 'uyandi') { ton(500, 760, 0.08, 'sine', 0.05); }
+      else if (o.tur === 'zemin') { ton(330, 660, 0.12, 'square', 0.06); }                 // zemine degme: kisa sicrama sesi (olum sesi bitti'de)
       else if (o.tur === 'bitti') {
         titret([30, 40, 60]);
+        olumTur = o.sebep === 'zemin' ? 'zemin' : 'isik';
+        basili = false; isaretciler = 0; tusBasili = false;   // girdi kilidi (aktifMi zaten bitti'de girdiyi yutar)
         kosuBitti();                 // odul + kayit tek kez (bitisIsleniyor); sonuc karti sonme bitince dongude gelir
         sonme = 0;
-        ton(520, 55, (azHareketOn ? SONME_AZ_SN : SONME_SN) + 0.1, 'sine', 0.09);     // sonme sesi
+        ton(520, 55, sonmeSuresi() + 0.1, 'sine', 0.09);     // sonme sesi
       }
     }
   }
@@ -1060,9 +1105,9 @@
       if (gecis < 1) gecis = Math.min(1, gecis + dt / BOLGE_GECIS);
       if ((hizSayac++ & 7) === 0) hizOnbellek = AB.zorluk(durum.mesafe).hiz;
     }
-    if (durum.bitti && sonme >= 0) {                 // isik sonuyor: dunya yavaslayip donar, sonra sonuc karti
-      var sure = azHareketOn ? SONME_AZ_SN : SONME_SN, oran = Math.min(1, sonme / sure);
-      if (!azHareketOn) durum.mesafe += hizOnbellek * dt * SONME_YAVAS * (1 - oran) * (1 - oran);
+    if (durum.bitti && sonme >= 0) {                 // isik sonuyor: dunya yavaslayip donar (zemin olumunde hemen donar), sonra sonuc karti
+      var sure = sonmeSuresi(), oran = Math.min(1, sonme / sure);
+      if (!azHareketOn && olumTur !== 'zemin') durum.mesafe += hizOnbellek * dt * SONME_YAVAS * (1 - oran) * (1 - oran);
       sonme += dt;
       if (sonme >= sure) {
         sonme = -1;
@@ -1095,7 +1140,7 @@
     gecis = 1; eskiBolge = oncekiBolge = durum.gorunenBolge; izN = 0; izBas = 0; adimSayaci = 0;
     hizOnbellek = AB.zorluk(0).hiz; hizSayac = 0; parcBirikim = 0;
     parc.fill(0); kanatFaz = 0; azHareketOn = azHareket();
-    sonme = -1;
+    sonme = -1; olumTur = '';
     sonEl.classList.remove('show'); durEl.classList.remove('show');
     ipucuEl.classList.remove('show'); void ipucuEl.offsetWidth; ipucuEl.classList.add('show');     // belirme animasyonu her kosuda yeniden
     hudSifirla();

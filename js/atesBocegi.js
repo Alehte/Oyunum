@@ -10,6 +10,8 @@
 // TASARIM 11 (Karanlikta Suzul): dilimde tozsuz (0/1), bomba ({x, y, alindi} | null), sarmasik
 //           ({yon, x1, x2, sutunlar[{x, y, w, h, tx, ty}], faz 0-3, sure, ilerleme} | null); tozda yutuldu (0/1).
 //           Miknatis tozun x/y'sini adim'da kaydirir. Olaylar: bomba, sarmasik, sarmasikUyari, yutuldu (x, y).
+// TASARIM 12.1: durumda sersem (kalan sn), zeminKoruma (kalan sn), sebep ('' | 'isik' | 'zemin'). Olaylar: sersem,
+//           uyandi, zemin (x, y); bitti olayi sebep tasir.
 (function (kok, fabrika) {
   if (typeof module === 'object' && module.exports) module.exports = fabrika();
   else kok.AtesBocegi = fabrika();
@@ -32,7 +34,12 @@
       R_GORSEL: 3.0, R_CARPMA: 1.6, R_TOPLA: 4.2,    // gorsel %25 buyudu, carpma ayni (11.2, 11.3)
       R_MIKNATIS: 7.5, MIKNATIS_HIZ: 20,             // yalniz toz bocege kayar (11.2); < HIZ_TABAN: gerideki tozu kovalamaz
       R_BOMBA: 1.6,                                  // bomba cizim = carpma yaricapi; R_TOPLA/miknatis uygulanmaz
-      R_TOZ_GORSEL: 1.1, R_KIVILCIM_GORSEL: 2.2      // cizim; oran >= 1,8 (tasarim 6)
+      R_TOZ_GORSEL: 1.1, R_KIVILCIM_GORSEL: 2.2,     // cizim; oran >= 1,8 (tasarim 6)
+      // Tavan sersemlemesi ve zemin olumu (tasarim 12.1). Tavana degince SERSEM_SURE sn girdi etkisiz; bocek
+      // Y_UST'ten uyanma yuksekligine (Y_ALT - SERSEM_UYANMA_ORAN * (Y_ALT - Y_UST)) yumusak (smoothstep) suzulur,
+      // orada durgun uyanir; sure dolunca ya da o yukseklige varinca (hangisi once). Uyaninca ZEMIN_KORUMA sn
+      // zemin olumu kapali (zemine degerse kistirilir). Zemine degmek (koruma disinda) kosuyu bitirir.
+      SERSEM_SURE: 0.9, SERSEM_UYANMA_ORAN: 0.25, ZEMIN_KORUMA: 0.5
     },
     adalet: {
       T_MIN: 0.6, KUS_EK: 0.25, PAY_R: 2,
@@ -135,12 +142,26 @@
     if (!(tCikis <= ad.T_IVME)) h.push('V_GUVENLI T_IVME icinde kazanilamiyor (rampa dahil ' + tCikis.toFixed(4) + ' sn)');
     if (!(m.T_RAMPA > 0)) h.push('T_RAMPA <= 0');
     if (!(m.R_CARPMA <= m.R_GORSEL)) h.push('R_GORSEL < R_CARPMA');
-    // toplama (11.2): miknatis tavanda/zeminde bekleyen AFK oyuncuya en yakin tozu (merkez siniri - sapma) cekemez
+    // toplama (11.2, 12.1): duvara degen bocek (tavanda sersemlemenin basladigi an, zeminde uyanma korumasi
+    // icinde kistirilmis) en yakin tozu (merkez siniri - sapma) miknatisla cekemez, kivilcimi toplayamaz;
+    // duvara yaslanmak toz/kivilcim getirmez. (Eski AFK varsayimi: tavanda/zeminde beklemek artik mumkun degil.)
     if (!(m.R_TOPLA <= m.R_MIKNATIS)) h.push('R_TOPLA > R_MIKNATIS');
     if (!(m.R_MIKNATIS < u.MERKEZ_MIN - u.TOZ_SAPMA - d.Y_UST && m.R_MIKNATIS < d.Y_ALT - (u.MERKEZ_MAX + u.TOZ_SAPMA)))
-      h.push('miknatis AFK yuksekliginden tozu cekebilir');
+      h.push('miknatis duvara (tavan/zemin) degen bocege tozu cekebilir');
     if (!(m.MIKNATIS_HIZ > 0)) h.push('MIKNATIS_HIZ <= 0');
-    if (!(u.KIVILCIM_Y_MIN - d.Y_UST > m.R_TOPLA && d.Y_ALT - u.KIVILCIM_Y_MAX > m.R_TOPLA)) h.push('AFK tavanda/zeminde kivilcim toplayabilir');
+    if (!(u.KIVILCIM_Y_MIN - d.Y_UST > m.R_TOPLA && d.Y_ALT - u.KIVILCIM_Y_MAX > m.R_TOPLA)) h.push('duvara (tavan/zemin) degen bocek kivilcim toplayabilir');
+    // tavan sersemlemesi ve zemin olumu (12.1)
+    var yUyan = d.Y_ALT - m.SERSEM_UYANMA_ORAN * (d.Y_ALT - d.Y_UST);
+    if (!(m.SERSEM_SURE > 0 && m.SERSEM_SURE <= i.DOKUNULMAZ)) h.push('SERSEM_SURE (0, DOKUNULMAZ] disinda (sersemken en cok bir hasar)');
+    if (!(m.SERSEM_UYANMA_ORAN > 0 && m.SERSEM_UYANMA_ORAN < 1 && yUyan > d.Y_UST && yUyan < d.Y_ALT)) h.push('uyanma yuksekligi (Y_UST, Y_ALT) disinda');
+    if (!(yUyan >= u.MERKEZ_MIN && yUyan <= u.MERKEZ_MAX)) h.push('uyanma yuksekligi bosluk merkezi araliginda degil');
+    if (!(yUyan + m.R_CARPMA < u.SERIT_ALT)) h.push('uyanma yuksekligi zemin seridinde');
+    if (!(m.ZEMIN_KORUMA > 0 && m.ZEMIN_KORUMA <= 1)) h.push('ZEMIN_KORUMA (0, 1] disinda');
+    // uyanan (durgun) bocek T_MIN gecikmeyle tepki verse de zemine degmez: koruma yalniz ek pay
+    var dUyan = uyanmaDususu(m, d.DT, ad.T_MIN);
+    if (!(yUyan + dUyan < d.Y_ALT)) h.push('uyaninca T_MIN gecikmeli oyuncu zemine degiyor (' + (yUyan + dUyan).toFixed(2) + ')');
+    // tam hizla zemine yakin kivilcima giden bocek fren payiyla zemine degmez
+    if (!(d.Y_ALT - u.KIVILCIM_Y_MAX > frenMesafesi(m, d.DT, 1))) h.push('zemine yakin kivilcim frenle zemine degdirir');
     // esikler (11.8): baslangic puanlari ayri ve sirali; cakisma serbestligi hepsinden sonra
     if (!(u.TOZSUZ_PUAN < u.BOMBA_PUAN && u.BOMBA_PUAN < u.SARMASIK_PUAN && u.SARMASIK_PUAN < u.CAKISMA_SERBEST)) h.push('esik puanlari ayri/sirali degil');
     if (!(u.CAKISMA_ARA >= 1)) h.push('CAKISMA_ARA < 1');
@@ -201,6 +222,31 @@
     }
     return Infinity;
   }
+  // Fren mesafesi (12.1): duvara dogru tam hizla ve tam ivmeyle giden bocek ters tam girdiyle durana kadar
+  // (rampa dahil, adim() butunlemesi) ne kadar daha ilerler. yon: 1 = zemine (asagi), -1 = tavana (yukari).
+  function frenMesafesi(m, dt, yon) {
+    var k = 1 - Math.exp(-dt / m.T_RAMPA), asagi = yon > 0, n, y = 0;
+    var ay = asagi ? m.G_SUZUL : -m.A_YUKSEL, vy = asagi ? m.VY_ASAGI : -m.VY_YUKARI, hedef = asagi ? -m.A_YUKSEL : m.G_SUZUL;
+    for (n = 0; n < 1200; n++) {
+      ay += (hedef - ay) * k; vy += ay * dt;
+      if (vy < -m.VY_YUKARI) vy = -m.VY_YUKARI; else if (vy > m.VY_ASAGI) vy = m.VY_ASAGI;
+      if (asagi ? vy <= 0 : vy >= 0) break;
+      y += vy * dt;
+    }
+    return Math.abs(y);
+  }
+  // Uyanma dususu (12.1): uyanma yuksekliginde durgun (vy = ay = 0) uyanan bocek tepki suresi boyunca birakili
+  // kalir, sonra basar; zemine dogru en cok ne kadar iner.
+  function uyanmaDususu(m, dt, tepki) {
+    var k = 1 - Math.exp(-dt / m.T_RAMPA), ay = 0, vy = 0, y = 0, n, adim = Math.round(tepki / dt);
+    for (n = 0; n < 2400; n++) {
+      ay += ((n < adim ? m.G_SUZUL : -m.A_YUKSEL) - ay) * k; vy += ay * dt;
+      if (vy < -m.VY_YUKARI) vy = -m.VY_YUKARI; else if (vy > m.VY_ASAGI) vy = m.VY_ASAGI;
+      y += vy * dt;
+      if (n >= adim && vy <= 0) break;
+    }
+    return y;
+  }
   var hatalar = ayarDogrula(AYAR);
   if (hatalar.length) throw new Error('AtesBocegi.AYAR gecersiz: ' + hatalar.join('; '));
 
@@ -251,6 +297,10 @@
     return vy >= 0 ? y : -Infinity;
   }
   function cikisSuresi(v) { return benzet(M, D.DT, 0, 0, v); }
+  // Tavan sersemlemesi / zemin olumu (12.1). Kacis seviyeleri duvara fren payi kadar yakin olamaz: tam hizla
+  // varan oyuncu durana kadar tavana (sersemler) ya da zemine (olur) degmesin.
+  var Y_UYAN = D.Y_ALT - M.SERSEM_UYANMA_ORAN * (D.Y_ALT - D.Y_UST);
+  var FREN_UST = frenMesafesi(M, D.DT, -1), FREN_ALT = frenMesafesi(M, D.DT, 1);
 
   // ---------------------------------------------------------------
   // URETICI (3.4, 3.5)
@@ -334,7 +384,7 @@
     var uc = -Infinity, i, ic = M.R_CARPMA + AD.PAY_KACIS;
     for (i = 0; i < hedefler.length; i++) if (s * hedefler[i].y > uc) uc = s * hedefler[i].y;
     var Y = s * uc, sonX = k.b - M.R_CARPMA;
-    if (Y < D.Y_UST || Y > D.Y_ALT || xArka > sonX) return null;
+    if (Y < D.Y_UST + FREN_UST || Y > D.Y_ALT - FREN_ALT || xArka > sonX) return null;
     var lo = k.c2 - k.g2 / 2 + ic, hi = k.c2 + k.g2 / 2 - ic, mes = Math.max(0, lo - Y, Y - hi);
     if (mes > 0 && mes > AD.V_GUVENLI * ((sonX - xArka) / k.hiz - 2 * AD.T_IVME)) return null;
     var uz = k.b - k.a, xe = Math.max(xGor + k.hiz * AD.T_MIN, k.a + M.R_CARPMA);
@@ -555,6 +605,7 @@
     var d = {
       t: 0, mesafe: 0, puan: 0, y: D.Y_BASLA, vy: 0, ay: 0, isik: I.BASLANGIC, dokunulmaz: 0,
       zincir: 0, zincirSure: 0, toz: 0, bolge: 0, gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
+      sersem: 0, zeminKoruma: 0, sebep: '',          // 12.1: kalan sersemlik / zemin korumasi (sn); bitis sebebi 'isik' | 'zemin'
       uretici: ureticiVerisi(tohum)
     };
     doldur(d);
@@ -578,15 +629,44 @@
     var cx = kistir(bx, e.x, e.x + e.w), cy = kistir(by, e.y, e.y + e.h);
     return (bx - cx) * (bx - cx) + (by - cy) * (by - cy) <= r * r;
   }
+  // Sersem suzulme egrisi (smoothstep): durgun baslar (tavanda vy = 0), durgun uyanir; ortalama hiz
+  // (Y_UYAN - Y_UST) / SERSEM_SURE, en buyuk hiz bunun 1,5 kati.
+  function sersemEgri(u) { return u * u * (3 - 2 * u); }
   function adim(d, basili) {
     if (d.bitti) return [];
     var olay = [], dt = D.DT, i, j, s, e, t;
-    // hareket: ivme rampasi (ay hedefe birinci dereceden yaklasir, 11.1), sonra yari ortuk Euler
-    d.ay += ((basili ? -M.A_YUKSEL : M.G_SUZUL) - d.ay) * RAMPA_K;
-    d.vy += d.ay * dt;
-    if (d.vy < -M.VY_YUKARI) d.vy = -M.VY_YUKARI; else if (d.vy > M.VY_ASAGI) d.vy = M.VY_ASAGI;
-    d.y += d.vy * dt;
-    if (d.y < D.Y_UST) { d.y = D.Y_UST; d.vy = 0; } else if (d.y > D.Y_ALT) { d.y = D.Y_ALT; d.vy = 0; }
+    if (d.sersem > 0) {
+      // Tavan sersemlemesi (12.1): girdi etkisiz; Y_UYAN'a dogru egri boyunca suzulur. Sure dolunca ya da
+      // Y_UYAN'a varinca (hangisi once) durgun uyanir, ZEMIN_KORUMA baslar. Isik normal sizar, zincir korunur.
+      var u0 = 1 - d.sersem / M.SERSEM_SURE, y0 = d.y;
+      d.sersem -= dt; if (d.sersem < 1e-9) d.sersem = 0;
+      d.y = Math.min(Y_UYAN, d.y + (Y_UYAN - D.Y_UST) * (sersemEgri(1 - d.sersem / M.SERSEM_SURE) - sersemEgri(u0)));
+      d.vy = (d.y - y0) / dt; d.ay = 0;
+      if (d.sersem === 0 || d.y >= Y_UYAN) {
+        d.sersem = 0; d.vy = 0; d.ay = 0; d.zeminKoruma = M.ZEMIN_KORUMA;
+        olay.push({ tur: 'uyandi', x: d.mesafe + D.X_BOCEK, y: d.y });
+      }
+    } else {
+      // hareket: ivme rampasi (ay hedefe birinci dereceden yaklasir, 11.1), sonra yari ortuk Euler
+      d.ay += ((basili ? -M.A_YUKSEL : M.G_SUZUL) - d.ay) * RAMPA_K;
+      d.vy += d.ay * dt;
+      if (d.vy < -M.VY_YUKARI) d.vy = -M.VY_YUKARI; else if (d.vy > M.VY_ASAGI) d.vy = M.VY_ASAGI;
+      d.y += d.vy * dt;
+      if (d.y < D.Y_UST) {
+        // tavan: hasar degil; sersemleme baslar (isik cezasi yok, zincir korunur)
+        d.y = D.Y_UST; d.vy = 0; d.ay = 0; d.sersem = M.SERSEM_SURE;
+        olay.push({ tur: 'sersem', x: d.mesafe + D.X_BOCEK, y: d.y });
+      } else if (d.y > D.Y_ALT) {
+        d.y = D.Y_ALT; d.vy = 0;
+        if (!(d.zeminKoruma > 0)) {
+          // zemin olumu: temas aninda kosu biter (girdi kilitlenir); dunya bu adimda ilerlemez
+          d.bitti = 1; d.sebep = 'zemin';
+          olay.push({ tur: 'zemin', x: d.mesafe + D.X_BOCEK, y: d.y }, { tur: 'bitti', sebep: 'zemin' });
+          return olay;
+        }
+      }
+      if (d.zeminKoruma > 0) { d.zeminKoruma -= dt; if (d.zeminKoruma < 1e-9) d.zeminKoruma = 0; }
+    }
     // dunya
     var zr = zorluk(d.mesafe), eski = Math.floor(d.mesafe / P.MESAFE_BIRIM);
     d.mesafe += zr.hiz * dt; d.t += dt;
@@ -653,11 +733,12 @@
       }
       d.zincir = 0; d.zincirSure = 0; d.dokunulmaz = I.DOKUNULMAZ;
       // Olumcul hasar ayni adimdaki tozla iptal olmaz.
-      if (d.isik <= 0) { d.isik = 0; d.bitti = 1; olay.push({ tur: 'bitti' }); return olay; }
+      if (d.isik <= 0) { d.isik = 0; d.bitti = 1; d.sebep = 'isik'; olay.push({ tur: 'bitti', sebep: 'isik' }); return olay; }
     }
     // Toz: miknatis (11.2) R_MIKNATIS icindeki alinmamis/yutulmamis tozu bocege MIKNATIS_HIZ ile kaydirir
     // (dunya koordinati, deterministik); sonra R_TOPLA icindeyse alinir. Kivilcim cekilmez.
-    var rm = M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt;
+    // Sersemken (12.1) miknatis kapali: yalniz dogrudan temas (R_TOPLA) toplar.
+    var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt;
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
       // Toz ve kivilcim dilimin onunde (x < s.x), x'e gore sirali: uzaktakileri atla. Cekilen toz yalniz bocege
@@ -697,7 +778,7 @@
       if (s.x > bx) break;
       if (s.nefes && s.bolge !== d.gorunenBolge && s.x + s.w + M.R_CARPMA >= bx) { d.gorunenBolge = s.bolge; olay.push({ tur: 'bolge', bolge: s.bolge }); }
     }
-    if (d.isik <= 0) { d.isik = 0; d.bitti = 1; olay.push({ tur: 'bitti' }); }
+    if (d.isik <= 0) { d.isik = 0; d.bitti = 1; d.sebep = 'isik'; olay.push({ tur: 'bitti', sebep: 'isik' }); }
     return olay;
   }
 
@@ -725,6 +806,8 @@
     AYAR: AYAR, ayarDogrula: ayarDogrula, rngOlustur: rngOlustur,
     zorluk: zorluk, minYaricap: minYaricap, isikYaricapi: isikYaricapi,
     kacisSuresi: kacisSuresi, kacisMesafesi: kacisMesafesi, cikisSuresi: cikisSuresi,
+    uyanmaY: Y_UYAN, frenMesafesi: function (yon) { return frenMesafesi(M, D.DT, yon); },
+    uyanmaDususu: function (tepki) { return uyanmaDususu(M, D.DT, tepki); },
     bolgeNo: bolgeNo, carpan: carpan,
     ureticiOlustur: ureticiOlustur, dilimZarfi: dilimZarfi,
     oyunOlustur: oyunOlustur, adim: adim,

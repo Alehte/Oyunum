@@ -477,3 +477,59 @@ Hepsinde `zincir = 0`, `dokunulmaz = 1,0` sn.
 - Tehlike renkleri sabittir (`BOMBA_*`, `UNLEM_RENK`, `SARMASIK_*`; tema değiştiremez) ve hepsi koyu dış konturla (`ENGEL_DOLGU`, en az 1 cihaz pikseli) çizilir; kontrast testi renk × kontur ≥ 3 ve kontur varlığını denetler.
 - Dikenli dal ekran dışı tuvalde önbelleğe alınır (anahtar w, h, yön; en çok 24 tuval). Kare başına yol segmenti ve çizim çağrısı oyun testinde sınırlıdır.
 - Uzak ateş böceği noktaları tozdan küçük ve sönük kalır (tema testi).
+
+## 12. Karanlıkta Süzül 2. tur (docs/gorev-karanliktaSuzul2.md, 2026-11-20)
+
+Bu bölüm 3.1'deki "Tavana/zemine değmek hasar vermez" kuralının ve 3.4 kural 5'teki AFK gerekçesinin yerine geçer. Sayılar `AtesBocegi.AYAR.hareket`'tedir.
+
+### 12.1 Tavan sersemlemesi ve zemin ölümü
+
+**Sabitler**
+
+| Sabit | Değer | Anlam |
+|---|---|---|
+| `SERSEM_SURE` | **0,9** sn | Tavana değince girdi etkisiz kalan süre (108 adım) |
+| `SERSEM_UYANMA_ORAN` | **0,25** | Uyanma yüksekliği zeminin `0,25·(Y_ALT − Y_UST)` yukarısı: `Y_UYAN = 96 − 0,25·92 = 73` birim (zeminden 23 birim yukarı) |
+| `ZEMIN_KORUMA` | **0,5** sn | Uyandıktan sonra zemin ölümü kapalı (60 adım) |
+
+Türetilen (AYAR'dan hesaplanır, `ayarDogrula` denetler): ortalama süzülme hızı `(73 − 4)/0,9 = 76,7` b/sn, en büyük 115 b/sn (eğrinin ortası); fren mesafeleri `FREN_ALT = 5,23`, `FREN_UST = 11,31` birim; uyanma düşüşü (durgun uyanıp `T_MIN` = 0,6 sn bırakılı kalan, sonra basan oyuncu) 17,90 birim, yani en alt nokta 90,9 < 96.
+
+**Kurallar (çekirdek, `adim`)**
+- *Tavan:* bütünlemeden sonra `y < Y_UST` → `y = Y_UST`, `vy = ay = 0`, `sersem = SERSEM_SURE`, olay `sersem {x, y}`. Hasar değildir: ışık cezası yok (yalnız normal sızıntı), **zincir ve zincir süresi korunur** (ceza yok denildiği için; zincir yalnız hasarla ve süre dolunca sıfırlanır), `dokunulmaz` değişmez.
+- *Sersemken:* girdi okunmaz. `y`, `Y_UST`'ten `Y_UYAN`'a smoothstep eğrisiyle (`u²(3 − 2u)`, `u` = geçen/`SERSEM_SURE`) artımlı ilerler; `vy` adım farkıdır, `ay = 0`. Süre dolunca **ya da** `Y_UYAN`'a varınca (hangisi önce) `vy = ay = 0` ile durgun uyanır, `zeminKoruma = ZEMIN_KORUMA`, olay `uyandi`. Normal akışta ikisi aynı adımda olur (sersemlik hep tavanda başlar); "hangisi önce" yapay durumlar için de tanımlıdır.
+- *Sersemken toplama:* toz ve kıvılcım yalnız doğrudan temasla (`R_TOPLA`) alınır, ışık normal artar; **mıknatıs kapalı** (çekme yarıçapı `R_TOPLA`'ya iner, toz kıpırdamaz; UI mıknatıs kuyruğunu çizmez).
+- *Sersemken engeller:* çarpışma normal kurallarla işler (hasar, zincir sıfırı, `dokunulmaz`); sersemlik sürer. `SERSEM_SURE ≤ DOKUNULMAZ` olduğundan sersemlik başına en çok bir hasar.
+- *Zemin:* `y > Y_ALT` → `y = Y_ALT`, `vy = 0`; `zeminKoruma > 0` ise yalnız kıstırılır, değilse koşu biter: `bitti = 1`, `sebep = 'zemin'`, olaylar `zemin {x, y}` + `bitti {sebep: 'zemin'}`, dünya o adımda ilerlemez, sonraki `adim` boş döner (giriş kilidi). Işıkla biten koşu `sebep = 'isik'` taşır. Koruma her adımda `DT` azalır: uyanıştan sonraki 60 adımda zemine değmek öldürmez, 61. adımda öldürür.
+- *Başlangıç:* `y = Y_BASLA = 50`, `sersem = zeminKoruma = 0`, `sebep = ''`. "Dokun ve başla" öncesi UI adım atmaz; hiç basmayan oyuncu ~1,7 sn'de zemine varır (anında ölüm yok). Zeminde bekleyerek hayatta kalmak artık yok; hep basılı tutan oyuncu tavan → 73 → tavan döngüsüne girer (döngü 0,9 + 1,9 sn) ve şerit dallarıyla/ışıkla biter.
+- Durum alanları `sersem`, `zeminKoruma`, `sebep` düz sayıdır/dizgedir; JSON gidiş-dönüşü sersemken ve koruma içinde aynen sürer. Kayıt (AppProgress) şeması değişmedi.
+
+**Üretici (sapma, adalet için gerekli):** bomba ve sarmaşık kaçış seviyesi `Y` artık `[Y_UST + FREN_UST, Y_ALT − FREN_ALT] = [15,31, 90,77]` içinde olmalı (eskiden `[Y_UST, Y_ALT]`): kaçışa tam hızla varan oyuncu durana kadar tavana (sersemlik) ya da zemine (ölüm) değmesin. Bağlayan yalnız tavan yanı (yaydaki en yüksek bomba 16 → yukarı kaçış 12,3). Etki: 300 tohum × 600 dilimde bomba 8410 → 8252 (−%1,9), sarmaşık 5087 → 4985 (rng kayması).
+
+**`ayarDogrula` değişmezleri (eski AFK varsayımlarının yerine)**
+- Mıknatıs/kıvılcım: duvara değen böcek (tavanda sersemliğin başladığı adım, zeminde koruma içinde kıstırılmış) en yakın tozu çekemez, kıvılcımı toplayamaz (sayılar 11.2'deki gibi; anlam güncellendi).
+- `0 < SERSEM_SURE ≤ DOKUNULMAZ`; `0 < SERSEM_UYANMA_ORAN < 1`, `Y_UST < Y_UYAN < Y_ALT`; `Y_UYAN ∈ [MERKEZ_MIN, MERKEZ_MAX]` (boşluk merkezlerinin bulunabildiği bant); `Y_UYAN + R_CARPMA < SERIT_ALT` (zemin şeridinde uyanılmaz); `0 < ZEMIN_KORUMA ≤ 1`.
+- **Uyanma güvenliği:** `Y_UYAN + uyanmaDususu(T_MIN) < Y_ALT` (90,9 < 96): `T_MIN` gecikmeli oyuncu koruma olmadan da zemine değmez; koruma yalnız ek paydır.
+- **Kıvılcım freni:** `Y_ALT − KIVILCIM_Y_MAX > FREN_ALT` (6 > 5,23): zemine en yakın kıvılcıma tam hızla giden oyuncu frenle zemine değmez.
+
+**Seçimin ölçümü (SERSEM_SURE)** — Bot A (ideal) 150 tohum × 6000 birimde her 3–6 sn'de bir bilerek tavana çarptı (~3750 sersemlik/aday); sersemken girdi rastgele, uyandıktan sonra `r` sn bırakılı, sonra Bot A:
+
+| `SERSEM_SURE` | sersemken hasar/sersemlik | uyanıştan 1,5 sn hasar (r = 0,25 / 0,6) | zemin ölümü | en az zemin payı (r = 0,25 / 0,6) |
+|---|---|---|---|---|
+| 0,80 | 0,31 | 0,36 / 0,45 | 0 | 6,2 / 4,84 |
+| 0,85 | 0,33 | 0,35 / 0,44 | 0 | 7,9 / 4,84 |
+| 0,90 | 0,35 | 0,36 / 0,43 | 0 | 6,5 / 4,84 |
+| 0,95 | 0,38 | 0,35 / 0,43 | 0 | 6,6 / 4,84 |
+| 1,00 | 0,37 | 0,35 / 0,44 | 0 | 7,1 / 4,84 |
+
+Uyanış durumu (73'te durgun) süreden bağımsız olduğu için toparlanma payı ve haksız ölüm oranı (0) süreyle değişmez; süre yalnız sersemken geçilen dünyayı (`hiz·SERSEM_SURE` = 22–40 birim) ve dolayısıyla sersemken çarpma olasılığını (0,31 → 0,37) etkiler. **0,9** ortadır: efekt okunacak kadar uzun, iniş 0,8'deki 86 b/sn ortalamadan yavaş, sersemken çarpma 0,8'e göre yalnız +0,04. Koruma (0,5 sn) ölçümde hiç devreye girmedi (durgun uyanan, bırakılı kalan böcek zemine 0,95 sn'de varır); güvenlik ağıdır. Kalıcı ölçüm adalet testindeki **Bot S**'dedir (60 tohum, `T_MIN` gecikmeli uyanış: 0 zemin ölümü, en az zemin payı > 0).
+
+**Adalet testi** — Bot A, B, B gerçek ışık, uzun A/B (1000 + 100 tohum): 0 çarpışma, 0 bomba, **0 tavan (sersemlik), 0 zemin**; Bot D (kıvılcım) 0 zemin, %100 çarpışmasız. Bot C hiç basmaz: ≤ 3 sn'de zemin ölümü (ölçülen en uzun 1,71 sn), toz < 10, jeton 0. Bot C hep basılı: ≤ 40 sn'de ışıkla biter (ölçülen en uzun 15,2 sn), sersemlik döngüsü, jeton 0. **Ölçüt sapması:** sersemken toz doğrudan temasla toplandığı için hep basılı bot 1000 tohumun 2'sinde 11–12 toz topladı (eski ölçüt toz < 10); koşu jetonu yine aktif olmaz, çünkü puan en çok 164 (`AKTIF_PUAN` = 300). C1 ölçütü bu yüzden "toz < 10" yerine "koşu jetonu aktif değil". Bot S yukarıda.
+
+**UI (`js/atesBocegiOyun.js`)**
+- Sersemlik efekti: başın üstünde soluk halka + 3 yıldız (`pal.vurgu`, temadan), yıldızlar halka üzerinde döner; arkadaki yıldız soluk. Azaltılmış harekette sabit konum, dönme yok. Tavan sesi + kısa titreşim; sersemken kanat çırpması basılı tutulsa da yavaş (girdi etkisiz görünür).
+- Zemin ölümü (Mario tarzı): `bitti` olayında giriş kilitlenir (`basili` sıfırlanır; `aktifMi` zaten bitti'de girdiyi yutar), dünya donar. Böcek `ZEMIN_SICRAMA = 7` birim, `ZEMIN_SICRAMA_SN = 0,3` sn'de tepeye sıçrar ve bu sırada dikey takla atarak sırt üstü döner, sonra aynı parabolle aşağı, ekran dışına düşer (~0,84 sn); ışık çemberi böceği izler ve `ZEMIN_OLUM_SN = 1,3` sn boyunca söner. Sonra mevcut sonuç kartı ve jeton akışı aynen (ödeme ölüm anında, tek kez). Azaltılmış harekette sıçrama/düşüş yok, `SONME_AZ_SN` (0,3 sn) sade sönme.
+
+**Sapmalar / açık noktalar**
+- Görev "yavaşça aşağı süzülür" ve "0,8–1,0 sn sonra zeminin %25 yukarısında uyanır" diyor; ikisi birlikte ortalama 69–86 b/sn iniş ister (normal süzülme `VY_ASAGI = 30`). Smoothstep eğrisi başı ve sonu yumuşatır (durgun başlar, durgun uyanır) ama ortası hızlıdır; cihazda his kontrolü gerekir. Daha yavaş iniş için ya süre uzamalı ya uyanma yüksekliği yükselmeli.
+- Tavana çarpmanın pratik bedeli ışık değil konumdur: 73'te uyanan oyuncu sıradaki boşluğa çoğu zaman yetişemez (ölçümde sersemlik başına toplam ~0,7 çarpma).
+- Bitiş kartı başlığı zemin ölümünde de "Işık Söndü"dür (akış aynen korundu).

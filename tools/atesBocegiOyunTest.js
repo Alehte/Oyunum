@@ -4,6 +4,8 @@
 // isik sonme: karanlik cokmeden kart gelmez, yeniden baslat/geri ile cift kart ve cift odeme olmaz.
 // Karanliktasuzul: geri tusu yollari dur() cagirir (core.js kaynak + davranis), yutulan toz cizilmez,
 // bomba/sarmasik her fazda cizim ve olay hatasiz, bomba/unlem karanlik katmanin ustunde cizilir.
+// 2. tur (tasarim 12.1): tavan sersem efekti (halka + yildiz, azaltilmis harekette sabit), zemin olumu animasyonu
+// (giris kilidi, sicrama + dusus, dunya donuk, sonra normal sonuc karti; azaltilmis harekette sade).
 // Calistirma:  node tools/atesBocegiOyunTest.js
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
@@ -608,6 +610,94 @@ dene('K3: dal sprite onbellegi 3 desen varyanti (e.x tabanli) ayri tuval; ayni v
 dene('K6: tozSon yuva aramasi bomba patlamasina ayrilmis son yuvalari almaz', () => {
   const g = /function tozSon[\s\S]*?\n  \}/.exec(KAYNAK)[0];
   assert.ok(/for \(i = 0; i < PARCACIK_TAVAN - PATLAMA_YUVA; i\+\+\)/.test(g), 'tozSon dongusu');
+});
+
+console.log('Karanliktasuzul 2. tur: tavan sersemlemesi ve zemin olumu (tasarim 12.1)');
+const DUNYA = AB.AYAR.dunya;
+const sabit = ad => +new RegExp('\\b' + ad + ' = ([0-9.]+)').exec(KAYNAK)[1];
+const HALKA_RX = sabit('SERSEM_HALKA_RX'), HALKA_RY = sabit('SERSEM_HALKA_RY'), ZEMIN_OLUM_SN = sabit('ZEMIN_OLUM_SN');
+// tavana tam hizla degdir: bir sonraki adimda sersemlik baslar
+function tavanaCarp(o) { o.durum.y = DUNYA.Y_UST + 0.05; o.durum.vy = -M.VY_YUKARI; o.durum.ay = -M.A_YUKSEL; o.durum.dokunulmaz = 0; o.kare(1); }
+function zemineCarp(o) { o.birak(); o.durum.y = DUNYA.Y_ALT - 0.05; o.durum.vy = M.VY_ASAGI; o.durum.ay = M.G_SUZUL; o.durum.zeminKoruma = 0; o.durum.isik = 1; o.kare(1); }
+const halka = l => l.filter(c => c[0] === 'ellipse' && c[1][2] === HALKA_RX && c[1][3] === HALKA_RY);
+// halka cizimini izleyen ilk SERSEM_YILDIZ moveTo cagrisi = yildizlarin ilk koseleri
+function yildizlar(l) { const i = l.findIndex(c => c[0] === 'ellipse' && c[1][2] === HALKA_RX && c[1][3] === HALKA_RY); return i < 0 ? [] : l.slice(i).filter(c => c[0] === 'moveTo').slice(0, 3).map(c => c[1]); }
+
+dene('sersem efekti: tavana carpinca bocek ustunde halka + 3 yildiz (tema vurgu rengi), ses; sersemlik bitince yok', () => {
+  const o = ortam(); o.yeni(); const ses0 = o.sesLog.length;
+  tavanaCarp(o);
+  assert.ok(o.durum.sersem > 0, 'sersem');
+  assert.ok(o.sesLog.slice(ses0).some(x => x[0] === 'tone' && x[1] === 640 && x[2] === 'triangle'), 'tavan sesi');
+  const l = ciziliyor(o);
+  assert.strictEqual(halka(l).length, 1, 'halka');
+  const ys = yildizlar(l); assert.strictEqual(ys.length, 3, 'yildiz');
+  assert.ok(Math.abs(halka(l)[0][1][1] - (o.durum.y - M.R_GORSEL - 1.2)) < 1e-9, 'halka bocegin basinin ustunde');
+  assert.ok(/function sersemCiz[\s\S]*?pal\.vurgu[\s\S]*?\n  \}/.test(KAYNAK), 'renk temadan (pal.vurgu)');
+  o.kare(Math.ceil(M.SERSEM_SURE * 60) + 2);
+  assert.strictEqual(o.durum.sersem, 0, 'uyandi'); assert.strictEqual(halka(ciziliyor(o)).length, 0, 'uyaninca efekt yok');
+  assert.strictEqual(o.durum.bitti, 0);
+});
+dene('sersem efekti: normal harekette yildizlar doner, azaltilmis harekette sabit (donme yok)', () => {
+  [false, true].forEach(az => {
+    const o = ortam(); o.azHareket = az; o.yeni(); tavanaCarp(o);
+    const imza = new Set();
+    for (let i = 0; i < 5; i++) {
+      const l = ciziliyor(o), y = halka(l)[0][1][1];
+      imza.add(JSON.stringify(yildizlar(l).map(p => [+(p[0]).toFixed(6), +(p[1] - y).toFixed(6)])));   // halkaya gore (bocek suzulurken iner)
+    }
+    assert.strictEqual(imza.size === 1, az, 'az=' + az + ' farkli ' + imza.size);
+  });
+});
+dene('sersemken basili tutmak kanat cirpmasini hizlandirmaz (girdi etkisiz), miknatis kuyrugu cizilmez', () => {
+  assert.ok(/kanatFaz \+= dt \* \(basili && !\(d\.sersem > 0\) \? 88 : 31\)/.test(KAYNAK), 'kanat hizi sersemken birakili gibi');
+  assert.ok(/md < rm2 && md > 1 && !\(durum\.sersem > 0\)/.test(KAYNAK), 'miknatis kuyrugu sersemken yok');
+});
+dene('zemin olumu: temas aninda giris kilitli, odeme tek, dunya donar; once yukari sicrama, sonra ekran disina dusus; sonra sonuc karti', () => {
+  const o = ortam(); o.yeni(); o.durum.puan = 2600; o.durum.toz = 30;
+  zemineCarp(o);
+  assert.strictEqual(o.durum.bitti, 1); assert.strictEqual(o.durum.sebep, 'zemin');
+  assert.strictEqual(o.goldAdd.length, 1, 'odeme olumde bir kez'); assert.ok(!o.el('abSonuc').cl.has('show'), 'kart hemen gelmez');
+  const t0 = o.durum.t, m0 = o.durum.mesafe, y0 = o.durum.y;
+  o.bas(); o.el('abDurBtn').dinle.click();                             // girdi kilitli: adim yok, duraklatma yok
+  assert.strictEqual(o.durum.t, t0); assert.ok(!o.el('abDuraklat').cl.has('show'));
+  const ys = [];
+  for (let i = 0; i < 70; i++) {
+    const l = ciziliyor(o), tr = l.find(c => c[0] === 'translate' && c[1][0] === XB);
+    if (tr) ys.push(tr[1][1]);
+    assert.strictEqual(o.durum.t, t0, 'cekirdek adimi yok'); assert.strictEqual(o.durum.mesafe, m0, 'dunya donuk');
+    if (i < 60) assert.ok(!o.el('abSonuc').cl.has('show'), 'animasyon bitmeden kart ' + i);
+  }
+  const enUst = Math.min(...ys), iTepe = ys.indexOf(enUst);
+  assert.ok(enUst < y0 - 5, 'yukari sicrama ' + enUst); assert.ok(iTepe > 3 && iTepe < 30, 'tepe karesi ' + iTepe);
+  assert.ok(ys.slice(iTepe).every((y, i, a) => i === 0 || y >= a[i - 1] - 1e-9), 'tepeden sonra hep asagi');
+  assert.ok(ys[ys.length - 1] > H + 3 * M.R_GORSEL, 'ekran disina dustu ' + ys[ys.length - 1]);
+  o.kare(Math.ceil(ZEMIN_OLUM_SN * 60) - 60);
+  assert.ok(o.el('abSonuc').cl.has('show'), 'animasyon sonrasi normal sonuc karti'); assert.strictEqual(o.goldAdd.length, 1);
+  assert.ok(/Söndü|Rekor/.test(o.el('abSonBaslik').innerHTML), 'mevcut bitis basligi');
+});
+dene('zemin olumu: ters donus (dikey takla) ve isik sonerek kuculur; isik olumu eski akista (sicrama yok)', () => {
+  const o = ortam(); o.yeni(); zemineCarp(o);
+  const sc = []; for (let i = 0; i < 30; i++) { const l = ciziliyor(o); const s = l.find(c => c[0] === 'scale' && c[1][0] === 1 && c[1][1] < 0); if (s) sc.push(s[1][1]); }
+  assert.ok(sc.length > 0 && Math.min(...sc) <= -0.99, 'sirt ustu ters');
+  const p = ortam(); p.yeni(); p.olum(500, 5);
+  const ys = []; for (let i = 0; i < 20; i++) { const l = ciziliyor(p), tr = l.find(c => c[0] === 'translate' && c[1][0] === XB); if (tr) ys.push(tr[1][1]); }
+  assert.ok(ys.every(y => y === p.durum.y), 'isik olumunde bocek yerinde soner');
+});
+dene('zemin olumu azaltilmis harekette sade: sicrama/dusus yok, kisa sonme (30 kare icinde kart)', () => {
+  const o = ortam(); o.azHareket = true; o.yeni(); zemineCarp(o);
+  const ys = []; for (let i = 0; i < 10; i++) { const l = ciziliyor(o), tr = l.find(c => c[0] === 'translate' && c[1][0] === XB); if (tr) ys.push(tr[1][1]); }
+  assert.ok(ys.length && ys.every(y => y === DUNYA.Y_ALT), 'yerinde');
+  o.kare(20); assert.ok(o.el('abSonuc').cl.has('show'));
+});
+dene('zemin olumu sonrasi yeni kosu temiz: olum turu sifirlanir, bocek yerinde cizilir, Dokun ve basla oncesi olum yok', () => {
+  const o = ortam(); o.yeni(); zemineCarp(o); o.kare(90);
+  assert.ok(o.el('abSonuc').cl.has('show'));
+  o.el('abTekrar').dinle.click(); o.kare(120);                    // dokunmadan bekle: adim yok, olum yok
+  assert.strictEqual(o.durum.t, 0); assert.strictEqual(o.durum.bitti, 0); assert.ok(o.el('abIpucu').cl.has('show'));
+  const l = ciziliyor(o), tr = l.find(c => c[0] === 'translate' && c[1][0] === XB);
+  assert.strictEqual(tr[1][1], DUNYA.Y_BASLA);
+  o.bas(); o.kare(30); assert.strictEqual(o.durum.bitti, 0); assert.ok(o.durum.t > 0.3);
+  assert.strictEqual(o.sb.AppProgress.atesBocegi.kosu, 1, 'yalniz ilk kosu kayitli');
 });
 
 console.log(gecti + ' deneme gecti');
