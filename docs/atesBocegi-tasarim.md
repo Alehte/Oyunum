@@ -409,3 +409,65 @@ Aşağıdakiler bu dosyadaki ilgili satırların yerine geçer; sayılar `AtesBo
 - **Bot B (8.2) tozu da görür:** ışık çemberine giren engelden o dilimin boşluğunu, giren tozdan tozun konumunu öğrenir; ikisini `T_MIN` sonra kullanır. Ek olarak **Bot D** kıvılcımı kovalar; çarpışmasız alma oranı ≥ %95 aranır.
 - **Görünen bölge:** `durum.bolge` üretici ağırlıkları içindir ve puanla hemen değişir (olay yok). Yeni alan `durum.gorunenBolge` arka plan ve `SIS` içindir; nefes dilimi böceğe varınca değişir ve `bolge` olayı o an çıkar. `isikYaricapi(isik, hiz, durum.gorunenBolge)` kullanılır.
 - **API ayrıntıları:** `ureticiOlustur(tohum)` → `{veri, sonraki(bolge)}`; `durum.uretici` düz veridir (rng durumu sayı), durum JSON gidiş-dönüşünden sonra aynen sürer. Dilimde `bolge` alanı vardır. Olaylarda `toz`/`kivilcim`/`hasar`/`ag` için `x, y` vardır. Ölümcül hasar aynı adımdaki tozla iptal olmaz.
+
+## 11. Karanlıkta Süzül iyileştirmeleri (docs/gorev-karanliktaSuzul.md, 2026-11-19)
+
+Bu bölüm önceki bölümlerin ilgili satırlarının yerine geçer. Bütün sayılar `AtesBocegi.AYAR`'dadır; burada yazanlar başlangıç değeridir, uygulama sırasında adalet testi gereği değişirse AYAR ve bu bölüm birlikte güncellenir.
+
+### 11.1 Hareket (süzülme hissi)
+- `A_YUKSEL` 260 → **170**, `G_SUZUL` 150 → **120**, `VY_YUKARI` 62 → **40**, `VY_ASAGI` 40 → **30** (b/sn², b/sn).
+- **İvme rampası:** uygulanan ivme `ay` hedef ivmeye birinci dereceden yaklaşır: `ay += (hedef − ay) · (1 − e^(−DT/T_RAMPA))`, `T_RAMPA = 0,07` sn. `ay` durumda tutulur (JSON'a çevrilebilir). Basma/bırakma anında ani ivme sıçraması olmaz.
+- `V_GUVENLI` 20 kalır. `T_IVME` = duruştan `V_GUVENLI`'ye, zayıf yönde (`min(A_YUKSEL, G_SUZUL)`), rampa dahil çıkış süresi; kapalı biçim yerine gerçek bütünlemeyle sayısal hesaplanır, `ayarDogrula` bunu denetler. Başlangıç değeri **0,24** sn (eski 0,15). Kural 3 sınırı `z = 0`'da ≈ 21, `z = 1`'de ≈ 8 birim: dikey istek, yavaşlayan harekete göre kendiliğinden küçülür; adalet garantisi aynı kalır.
+- *Uygulama:* sayısal çıkış süresi **0,2333** sn (`cikisSuresi(20)`, ≤ 0,24). Kural 3 sınırı `z = 0`'da **21,2**, `z = 1`'de **8,2**. Kıvılcım bacakları (kural 7, bölüm 10) `T_IVME`'siz kaldı: Bot D çarpışmasız alma oranı %95'in üstünde; `T_IVME` düşülseydi yüksek hızda hiç kıvılcım konamazdı.
+
+### 11.2 Toplama kolaylığı
+- `R_TOPLA` 3,2 → **4,2** (toz ve kıvılcım).
+- **Mıknatıs (yalnız toz):** böceğe `R_MIKNATIS = 7,5` birimden yakın alınmamış toz, böceğe doğru `MIKNATIS_HIZ = 26` b/sn ile kayar (dünya koordinatında, deterministik). Değişmez: `R_MIKNATIS < MERKEZ_MIN − TOZ_SAPMA − Y_UST` (= 12); tavanda/zeminde bekleyen AFK oyuncu tozu çekemez.
+- Gerekçe: yalnız yarıçap büyütmek uzaktaki tozun "dokunmadan" kaybolmasına yol açar; mıknatıs tozun böceğe aktığını gösterir, bağışlayıcılığı görünür kılar. Yarıçapı ölçülü büyütmek, mıknatısa rağmen yolu bilerek terk edenin tozu kaçırmasını korur (sarmaşık tasarımı buna dayanır).
+- **Bomba ve engeller hariç:** bomba kendi görsel yarıçapıyla (`R_BOMBA`) ve böceğin `R_CARPMA`'sıyla çarpışır; mıknatıs bombayı çekmez. Engel hitbox'larına dokunulmaz.
+- *Uygulama (denetim sonrası):* `MIKNATIS_HIZ` 26 → **20**; değişmez `MIKNATIS_HIZ < HIZ_TABAN` (böceğin geride bıraktığı toz böceği kovalamaz). Çekilen toz, dilimi geride kalsa da çekilmeye devam eder (dilim atlanmaz, toz havada donmaz).
+- *Uygulama:* `R_BOMBA` = **1,6** (çarpma mesafesi 3,2 < `R_TOPLA` 4,2). `ayarDogrula` ek olarak `R_TOPLA ≤ R_MIKNATIS`, `R_CARPMA ≤ R_GORSEL` ve AFK'nin tavanda/zeminde kıvılcım toplayamamasını (`KIVILCIM_Y_MIN − Y_UST > R_TOPLA`) denetler.
+
+### 11.3 Böcek görsel boyutu
+- `R_GORSEL` 2,4 → **3,0** (%25). `R_CARPMA` 1,6 aynı kalır.
+
+### 11.4 Hasarlar
+| Olay | Işık kaybı |
+|---|---|
+| Dikenli dal (`tur: 'dal'`) | **0,50** (`DAL_HASAR`, bar kapasitesinin yarısı) |
+| Kuş, düşen dal | 0,34 (`HASAR`, değişmedi) |
+| Örümcek ağı | 0,17 (değişmedi) |
+| Bomba | **0,25** (`BOMBA_HASAR`) |
+| Sarmaşık | **0,20** (`SARMASIK_HASAR`) |
+
+Hepsinde `zincir = 0`, `dokunulmaz = 1,0` sn.
+
+### 11.5 Bomba
+- Puan **≥ 1200**'den sonra üretilen, nefes/açılış/tozsuz/sarmaşık olmayan dilimlerde olasılık **0,20**. Toz yayının iç tozlarından birinin (ilk ve son değil) yerine konur.
+- Kendi ışığıyla yanıp söner: ekrana girdiği an (`x − bx ≤ W − X_BOCEK`) görünür sayılır. Kaçış adaleti: yaydan kaçmak için gereken dikey sapma (`R_BOMBA + R_CARPMA + pay`) görünür olduktan `T_MIN` sonra, gerçek hareket fiziğiyle (duruştan, zayıf yön) yetişmiyorsa o dilime bomba konmaz.
+- Görsel: tozdan farklı **şekil** (dikenli/çatlaklı koyu küre + sabit açık kenar), **sabit tehlike rengi** (tema değiştiremez), yanıp sönme ve hafif titreme, toplanınca ayrı ses. Renk körlüğünde şekille ayrışır; kontrast testi kapsar.
+- *Uygulama (kaçış modeli, bkz. 11.9):* oyuncu ekrana girişten `T_MIN` sonra ve önceki dilimin arkasından (`a + R_CARPMA`) önce kaçamaz. Bomba, 11.9'daki **her olası oyuncu durumu** (yükseklik × ivme) için en az bir yana (`R_BOMBA + R_CARPMA + PAY_KACIS`, `PAY_KACIS = 0,5`) yetişilebiliyorsa ve her iki yanın kaçış seviyesinden sonraki boşluğa kural 3 hızıyla (`2·T_IVME` durup dönme payı) bağlanılabiliyorsa konur; oyuncu yanını kendi durumuna göre seçer. İç tozlar sırayla denenir. Bomba dilimlerinde kıvılcım yok. Etkin oran nominal 0,20'nin altındadır (adalet testinde bilgi satırına yazılır).
+
+### 11.6 Tozsuz bölümler
+- Puan **≥ 800**'den sonra. Bir pencere **2–3 dilim** (≈ 2,5–5,7 sn) sürer; bu dilimlerde toz ve kıvılcım yoktur. İki pencere arası en az **8 dilim**. Başlama olasılığı dilim başına `0,05 + 0,01·floor((puan − 800)/1000)`, en çok **0,10**.
+- Engeller pencerede de 3.4 kurallarına uyar. Işık ekonomisi: Bot B gerçek ışıkla en az 0,25 ışıkta kalmalı (8.2 ek kuralı aynen).
+- *Uygulama:* tozsuz dilimde yolu gösteren toz yoktur; ışık tabanında `T_MIN` gecikmeli oyuncu boşluğu varıştan ancak ~0,2 sn önce öğrenir ve o ana kadar bildiği son noktada bekler. Üretici her dilimden sonra bir **tutma aralığı** `[tA, tU]` izler: dilim merkezi, yayının son tozu (dilimi göremeyen oyuncu, ör. asılı düşen dal, son rehberinde bekler), tehlike kaçış seviyeleri (dilimin bandına kıstırılmış); tozsuz dilimde önceki aralıkla birleşir. Tozsuz dilimin merkezi, bu aralığın tamamı yeni boşluğun serbest bandında (`R_CARPMA + PAY_KACIS` payıyla) kalacak şekilde seçilir (kural 3'ten sıkı); uygun merkez yoksa dilim tozsuz olmaz. Bomba/sarmaşık kaçış modelinin başlangıç yüksekliği de bu aralığın tehlike ucunu hesaba katar. Uygun merkezin her zaman bulunduğunu `ayarDogrula` garanti eder (`TOZ_SAPMA` + kosinüs eğrisinin son tozdaki açığı ≤ tozsuz bandı; pencere hiç kısalmaz) ve yedek dalın da şeritle birlikte aralıkta kaldığını (`MERKEZ_MAX + TOZ_SAPMA ≤ SERIT_ALT − R_CARPMA − PAY_KACIS`, simetriği). Pencere bomba/sarmaşık diliminin hemen ardından başlamaz. Işık değişmezi: `TOZSUZ_MAX · TARA_TABAN · (SIZINTI_TABAN + SIZINTI_Z) < TOZSUZ_ISIK_MAX = 0,35` (şu an 0,285). Nefes pencereyi duraklatır (nefeste toz var). Tozsuz, bomba ve sarmaşık dilimlerinde kıvılcım olmadığı için `KIVILCIM_OLASILIK` **0,08 → 0,10** (kıvılcım oranı ≥ %3 testi).
+
+### 11.7 Sarmaşık tuzağı
+- Puan **≥ 2000**'den sonra, uygun dilimlerde olasılık **0,12**. Toz yayının iç tozlarının hizasında **2–3 sütun** (genişlik 3), yayın yakın duvarı (tavan/zemin) tarafından büyür, tozu `SARMASIK_TASMA = 1` birim geçer; o tozlar sarmaşık büyümeye başlayınca "yutulur" (toplanamaz, söner).
+- Zaman çizgisi (böceğin sarmaşığın ön kenarına varışına göre): uyarı (titreşen ünlem, kendi ışığıyla görünür; ekran dışındaysa sağ kenara kıstırılır) varıştan **1,05 sn** önce başlar ve **0,70 sn** sürer (`SARMASIK_UYARI ≥ T_MIN`, değişmez); sonra **0,25 sn** büyür; büyüme başladığı andan itibaren en kötü durum zarfıyla (tam boy) çarpar.
+- Değişmez: `T_MIN + T_IVME + kaçışSüresi(SARMASIK_TASMA + R_CARPMA + pay) ≤ uyarı başlangıcından varışa süre`.
+- Koridor: sarmaşık zarfları + dilim engel zarfları birleşince her x'te en az bir geçilebilir koridor kalır ve bu koridor önceki/sonraki boşluğa kural 3 hızıyla bağlanır (adalet testi).
+- *Uygulama sapması:* uyarı varıştan **1,26 sn** önce başlar ve **0,91 sn** sürer (önerilen 1,05 / 0,70); büyüme 0,25 sn, tam boy varıştan 0,10 sn önce. Gerekçe: değişmez en kötü başlangıçla (11.9: ters tam ivme) ve zaman payıyla uygulanınca `T_MIN + T_IVME + kacisSuresi(1 + 1,6 + 0,5; ay = −120) + PAY_KACIS_SN + DT = 0,6 + 0,24 + 0,358 + 0,05 + 0,008 = 1,257 sn`; `DT`, uyarı tetiğinin adım ayrıklığından (uyarı→varış ≥ `SARMASIK_ONCE − DT`). Uyarı tetiği dilimin hızıyla hesaplanır (sütunlara varıştaki hızdan büyük; adım başına `zorluk()` çağrısı yok). Sarmaşık adayı en çok tozu (`TOZ_MAX`) alır: sütunlar iç tozlarda, daha geç sütun seçenekleri kaçış süresini uzatır; seçilen sütun sayısı uymazsa daha az sütun denenir.
+- **Uyarı görünümü (bağlayıcı, denetim K1):** faz 1'de (uyarı) UI her sütunun x aralığını ve uç yüksekliğini kendi ışığıyla **hayalet silüet** olarak, ünlemle birlikte gösterir; ekran dışındaki sütunların uç yüksekliği sağ kenarda ünlemle işaretlenir. Adalet buna dayanır: Bot B uyarı başladıktan `T_MIN` sonra yönü ve her sütunun uç yüksekliğini bilir; sütunun x'ini yalnız sütun ekrandaysa (`x − bx ≤ W − X_BOCEK`) bilir, değilse en erken varışı (`x = bx + W − X_BOCEK`) varsayar. Başka iç bilgi kullanmaz. Kaçış modeli bombadakiyle aynı (11.9), yön sabit: yakın duvarın tersi; sütun başlangıcı uygun değilse diğer iç toz başlangıçları denenir, hiçbiri uymazsa sarmaşık konmaz. Sarmaşık dilimlerinde kıvılcım yok. Sarmaşık verisi dilimde `sarmasik: {yon, x1, x2, sutunlar: [{x, y, w, h, tx, ty}], faz, sure, ilerleme}`; yutulan toz `yutuldu = 1`.
+
+### 11.8 Çakışma kuralı
+- Başlangıç puanları ayrı: tozsuz 800, bomba 1200, sarmaşık 2000.
+- Puan **< 5000** iken bir sarmaşık dilimi, herhangi bir tozsuz dilimine **2 dilimden** yakın olamaz. 5000 ve sonrası birlikte gelebilir.
+- Üretici artık `sonraki(bolge, puan)` alır; dilim dizisi puana bağlı eşikler yüzünden girdiye bağlı olabilir. Determinizm testi (b) bölge **ve** puan sabitlenerek yapılır.
+- *Uygulama:* kural sarmaşığın üretildiği puana göre uygulanır (dilimde `puan` alanı = üretim puanı): o puan < 5000 ise sarmaşık ile herhangi bir tozsuz dilim arasında dilim numarası farkı en az `CAKISMA_ARA = 2` olur, yani **aralarında en az bir sıradan dilim** bulunur (hem sarmaşık üretilirken hem pencere başlarken denetlenir). 5000 ve sonrasında yan yana gelebilirler (fark 1).
+
+### 11.9 Kaçış süresi yardımcısı (uygulama)
+- `AtesBocegi.kacisSuresi(dy, v0, ay0)`: `adim()`'daki bütünlemenin (rampa, hız sınırı, yarı örtük Euler) aynısını **zayıf yönde** (`min(A_YUKSEL, G_SUZUL)`, `min(VY_YUKARI, VY_ASAGI)`) tam girdiyle koşturur; `ay = ay0`, `vy = v0` (kaçış yönünde işaretli, negatif = tehlikeye doğru) başlangıçtan, yer değiştirme `≥ dy` **ve** hız kaçış yönüne dönmüş olduğu ilk anı verir. `kacisMesafesi(t, v0, ay0)`: aynı benzetimle `t` sn'de alınan yol (tersi). `cikisSuresi(v)`: duruştan `v` hızına çıkış süresi (`T_IVME` denetimi; 11.1 gereği duruştan).
+- Ardışık iki tehlike dilimi yoktur (bomba/sarmaşık dilimini doğrudan yeni bir bomba/sarmaşık dilimi izlemez): öncekinden dönüş hareketi tepki anında aleyhte hız bırakır, kaçış modeli bunu varsaymaz.
+- En kötü başlangıç (denetim O1): tepki anında olası yükseklikler `[yA, yU]` = (yol ± `TOZ_SAPMA`) ile önceki dilimin tutma aralığının (11.6) birleşimi; ivme `[−A, +A]` (`A = min(A_YUKSEL, G_SUZUL)`); dikey hız yolun aleyhte hızı (lehteyse 0); kaçış süresine `PAY_KACIS_SN = 0,05` sn eklenir. Tek yönlü kaçış (sarmaşık): tehlikeye en yakın yükseklik ve ters tam ivme (`ay = −A`). İki yönlü kaçış (bomba): her `(y, ay)` için en az bir yan yetişmeli; sabit `ay`'da aşağı yan `y ≥ f`, yukarı yan `y ≤ g`'de yetişir, `[yA, yU]` kapsanır ⇔ `f ≤ g` ya da `yA ≥ f` ya da `yU ≤ g`; `ay` 9 noktada denenir. (Her iki yanı ayrı ayrı en kötü durumla istemek çifte sayardı: bir oyuncunun ivmesi ve konumu aynı anda iki yöne de aleyhte olamaz.) Sarmaşık ve bomba `ayarDogrula` değişmezleri de ters tam ivme ve `PAY_KACIS_SN` ile hesaplanır. Önceki dilimin zarfından önce kaçış başlamaz (ışık tabanında o dilimin bandı, örneğin asılı düşen dal, görünmeyebilir). Kanıt: Bot B (ışık 0, `T_MIN` gecikmeli) bomba ve sarmaşıkta 0 isabet.

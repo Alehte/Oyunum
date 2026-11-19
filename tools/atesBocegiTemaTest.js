@@ -229,6 +229,92 @@ dene('engel sabit renkleri kodda tek yerde tanimli (js/*.js)', () => {
   TEMALAR.forEach(t => assert(!/0B0F14|E9EDF2/i.test(JSON.stringify(t.isik)), t.id));
 });
 
+console.log('Karanliktasuzul: bomba / unlem / sarmasik sabit renkleri ve yeni arka plan katmanlari');
+
+const BOMBA_KENAR = sabit(OYUN, 'BOMBA_KENAR'), BOMBA_CEKIRDEK = sabit(OYUN, 'BOMBA_CEKIRDEK'), UNLEM_RENK = sabit(OYUN, 'UNLEM_RENK');
+const SARMASIK_GOVDE = sabit(OYUN, 'SARMASIK_GOVDE'), SARMASIK_YAPRAK = sabit(OYUN, 'SARMASIK_YAPRAK');
+const SABIT_TEHLIKE = { BOMBA_KENAR, BOMBA_CEKIRDEK, UNLEM_RENK, SARMASIK_GOVDE, SARMASIK_YAPRAK };
+const TUM_TEMA = TEMALAR.map(t => ({ id: t.id, p: t.isik })).concat([{ id: 'yerlesik', p: YERLESIK_PALET }]);
+const KATMAN = {};
+{ const m = /var KATMAN = \{([^}]*)\}/.exec(OYUN); assert(m, 'KATMAN tablosu yok'); m[1].split(',').forEach(p => { const k = /(\w+):\s*([0-9.]+)/.exec(p); KATMAN[k[1]] = +k[2]; }); }
+const EN_DUSUK = {};
+const izle = (ad, o) => { if (!(ad in EN_DUSUK) || o < EN_DUSUK[ad]) EN_DUSUK[ad] = o; };
+
+dene('bomba / unlem / sarmasik sabit renkleri zemine >= 3,0 (10 palet x 4 bolge x 3 gorme bicimi, 600 oran)', () => {
+  const kotu = []; let n = 0;
+  Object.keys(SABIT_TEHLIKE).forEach(ad => TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => BICIMLER.forEach(b => {
+    const o = oran(rgb(SABIT_TEHLIKE[ad]), karistir(ton, t.p.isik, ISIK_KARISIM), b); n++; izle(ad, o);
+    if (o < 3.0) kotu.push(ad + ' ' + t.id + ' bolge' + bi + ' ' + b + ' ' + o.toFixed(2));
+  }))));
+  assert.strictEqual(n, 600); assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('bomba kenari ile toz renk korlugunde de ayrisir: parlaklik orani >= 1,5 (cekirdek >= 1,4), 3 gorme bicimi', () => {
+  // Gerekce: toz acik (L ~0,75-0,9); bomba kenari zemine >= 3 icin L >= ~0,4 ister; iki kosul arasinda kalan pencere 1,5 ya da biraz ustu.
+  // Asil ayrim SEKIL (asagidaki test): bu oran renk bilgisini ikinci kanal olarak korur.
+  const kotu = [];
+  TUM_TEMA.forEach(t => BICIMLER.forEach(b => {
+    const k = oran(rgb(BOMBA_KENAR), rgb(t.p.toz), b), c = oran(rgb(BOMBA_CEKIRDEK), rgb(t.p.toz), b);
+    izle('bomba kenar/toz', k); izle('bomba cekirdek/toz', c);
+    if (k < 1.5) kotu.push(t.id + ' kenar ' + b + ' ' + k.toFixed(2));
+    if (c < 1.4) kotu.push(t.id + ' cekirdek ' + b + ' ' + c.toFixed(2));
+  }));
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('bomba / toz SEKIL ayrimi (renkten bagimsiz): diken sayisi 6-8, tozdan buyuk, dikenli sprite kodda', () => {
+  const dk = +/BOMBA_DIKEN = (\d+)/.exec(OYUN)[1], h = require(path.join(KOK, 'js', 'atesBocegi.js')).AYAR.hareket;
+  assert(dk >= 6 && dk <= 8, 'diken ' + dk);
+  assert(h.R_BOMBA / h.R_TOZ_GORSEL >= 1.4, 'bomba/toz yaricap orani ' + (h.R_BOMBA / h.R_TOZ_GORSEL));
+  assert(/function bombaSprite\(\)/.test(OYUN) && /BOMBA_DIKEN \* 2/.test(OYUN), 'dikenli dis hat');
+  assert(/ENGEL_DOLGU; x\.strokeStyle = BOMBA_KENAR/.test(OYUN), 'koyu kure + sabit acik kenar');
+  assert(!/pal\.(isik|toz|vurgu|karanlik)/.test(/function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0]), 'bomba sprite temaya bagli degil');
+});
+
+dene('yeni sabit renkler js/*.js icinde tek yerde tanimli ve temalar tasiyamaz', () => {
+  const dosyalar = fs.readdirSync(path.join(KOK, 'js')).filter(f => /\.js$/.test(f));
+  Object.keys(SABIT_TEHLIKE).forEach(ad => {
+    const r = SABIT_TEHLIKE[ad], bulunan = [];
+    dosyalar.forEach(f => { const n = (oku('js/' + f).match(new RegExp(r, 'gi')) || []).length; if (n) bulunan.push(f + ':' + n); });
+    assert.deepStrictEqual(bulunan, ['atesBocegiOyun.js:1'], ad + ' ' + r + ' -> ' + bulunan.join(', '));
+    TEMALAR.forEach(t => assert(JSON.stringify(t.isik).toUpperCase().indexOf(r.toUpperCase()) < 0, t.id + ' ' + ad));
+  });
+  // yutulan toz cizilmez ve renk tema alanindan okunmaz: sarmasik/unlem/bomba cizimi pal.* kullanmaz
+  ['function sarmasikCiz', 'function ozIsikCiz'].forEach(fn => {
+    const g = new RegExp(fn.replace(' ', '\\s+') + '[\\s\\S]*?\\n  \\}').exec(OYUN);
+    assert(g && !/pal\./.test(g[0]), fn + ' pal.* kullanmamali');
+  });
+});
+
+dene('mantar / ay / sis katmanlari: engel kenarindan her zaman koyu, kenar ve toz ile >= 3,0 (10 palet, 3 gorme bicimi)', () => {
+  // Renkler katmanCiz ile ayni formul: mantar kap = karistir(zemin, vurgu, mantarKap) + hale (alfa mantarHale);
+  // ay = karistir(zemin, beyaz, ay); sis = karistir(zemin, beyaz, sis) alfa sisAlfa ile (elipsler yari saydam; opak hesap gercegi yansitmaz).
+  const kenar = rgb(ENGEL_KENAR), kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
+  const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
+  TUM_TEMA.forEach(t => {
+    const vur = rgb(t.p.vurgu), toz = rgb(t.p.toz), bey = [1, 1, 1];
+    const zem = bi => karistir(BOLGE[bi], t.p.isik, ISIK_KARISIM);
+    const katmanlar = {
+      'mantar kap': mix(zem(1), vur, KATMAN.mantarKap),
+      'mantar hale': mix(zem(1), vur, KATMAN.mantarHale),
+      'ay': mix(zem(2), bey, KATMAN.ay),
+      'sis (alfa)': mix(zem(3), mix(zem(3), bey, KATMAN.sis), KATMAN.sisAlfa)
+    };
+    Object.keys(katmanlar).forEach(ad => BICIMLER.forEach(b => {
+      const c = katmanlar[ad], ok = oran(kenar, c, b), ot = oran(toz, c, b);
+      izle('katman/kenar', ok); izle('katman/toz', ot);
+      if (!(L(c, b) < L(kenar, b))) kotu.push(t.id + ' ' + ad + ' ' + b + ' kenardan acik');
+      if (ok < 3.0) kotu.push(t.id + ' ' + ad + ' kenar ' + b + ' ' + ok.toFixed(2));
+      if (ot < 3.0) kotu.push(t.id + ' ' + ad + ' toz ' + b + ' ' + ot.toFixed(2));
+    }));
+  });
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('en dusuk oranlar (bilgi)', () => {
+  console.log('       ' + Object.keys(EN_DUSUK).map(k => k + ' ' + EN_DUSUK[k].toFixed(2)).join(' | '));
+});
+
 console.log('Market baglantisi (8.6)');
 
 dene('isikCoz: yerlesik / eksik / bozuk girdi -> tam palet', () => {
