@@ -794,59 +794,74 @@ window.AppMarket = (function () {
 
   // ---------------------------------------------------------------
   // KUTULAR
-  // Cekilis once nadirligi, sonra o nadirlikten bir temayi secer. Tema
-  // zaten varsa nadirligine gore jeton iadesi yapilir. Cekilen kademe
-  // katalogda bossa en yakin dolu kademeye dusulur. Toplanacak tema
-  // kalmadiysa kutu hic acilmaz, jeton harcanmaz.
+  // Cekim havuzu = satilik temalar - sahip olunanlar (sahip olunan cikmaz).
+  // Havuzu bos olan nadirlik grubunun orani, orani > 0 olan dolu gruplara
+  // oranlariyla orantili dagitilir. Orani 0 olan grup hic cikmaz.
+  // Cikacak tema kalmadiysa kutu pasiftir: jeton harcanmaz.
   // ---------------------------------------------------------------
   function sandikBul(sid) {
     for (var i = 0; i < K.SANDIKLAR.length; i++) if (K.SANDIKLAR[i].id === sid) return K.SANDIKLAR[i];
     return null;
   }
 
-  function nadirlikCek(ihtimal) {
-    var r = Math.random(), t = 0, i, n;
-    for (i = 0; i < NADIRLIK_SIRA.length; i++) {
-      n = NADIRLIK_SIRA[i];
-      t += (ihtimal[n] || 0);
-      if (r < t) return n;
-    }
-    return 'siradan';
+  function sahipListesi(sahipler) { return sahipler || kayit.s; }
+
+  function sandikHavuz(sahipler) {
+    var sl = sahipListesi(sahipler);
+    return satilikTemalar().filter(function (t) { return sl.indexOf(t.id) < 0; });
   }
 
-  function kademeTemalari(n) {
-    return satilikTemalar().filter(function (t) { return t.nadirlik === n; });
+  // { siradan, nadir, ender, efsanevi } oranlari (toplam 1) | null (cikacak tema yok)
+  function sandikDagilimi(sid, sahipler) {
+    var s = sandikBul(sid);
+    if (!s) return null;
+    var havuz = sandikHavuz(sahipler), w = {}, top = 0, i, n;
+    for (i = 0; i < NADIRLIK_SIRA.length; i++) {
+      n = NADIRLIK_SIRA[i];
+      w[n] = (s.ihtimal[n] > 0 && havuz.some(function (t) { return t.nadirlik === n; })) ? s.ihtimal[n] : 0;
+      top += w[n];
+    }
+    if (!(top > 0)) return null;
+    for (i = 0; i < NADIRLIK_SIRA.length; i++) w[NADIRLIK_SIRA[i]] /= top;
+    return w;
+  }
+
+  // 'aktif' | 'tamam' (hicbir tema kalmadi) | 'bos' (yalniz bu kutunun cikaramayacagi temalar kaldi)
+  function sandikDurum(sid, sahipler) {
+    if (!sandikBul(sid)) return 'bos';
+    if (sandikDagilimi(sid, sahipler)) return 'aktif';
+    return sandikHavuz(sahipler).length ? 'bos' : 'tamam';
+  }
+
+  // Saf cekim: rng() -> [0,1). Tema dondurur, cikacak yoksa null.
+  function sandikCek(sid, sahipler, rng) {
+    rng = rng || Math.random;
+    var d = sandikDagilimi(sid, sahipler);
+    if (!d) return null;
+    var r = rng(), t = 0, kademe = null, i, n, liste;
+    for (i = 0; i < NADIRLIK_SIRA.length; i++) {
+      n = NADIRLIK_SIRA[i];
+      if (!(d[n] > 0)) continue;
+      kademe = n;
+      t += d[n];
+      if (r < t) break;
+    }
+    liste = sandikHavuz(sahipler).filter(function (x) { return x.nadirlik === kademe; });
+    return liste[Math.min(liste.length - 1, Math.floor(rng() * liste.length))];
   }
 
   function kalanVarMi() {
     return satilikTemalar().some(function (t) { return !sahipMi(t.id); });
   }
 
-  // { tur:'tema', tema }  |  { tur:'iade', tema, jeton }  |  { tur:'kapali' }  |  null (jeton yetmedi)
+  // { tur:'tema', tema }  |  { tur:'kapali', durum }  |  null (jeton yetmedi)
   function sandikAc(sid) {
     var s = sandikBul(sid);
     if (!s) return null;
-    if (!kalanVarMi()) return { tur: 'kapali' };
+    var durum = sandikDurum(sid);
+    if (durum !== 'aktif') return { tur: 'kapali', durum: durum };
     if (!window.AppGold.harca(s.fiyat)) return null;
-
-    var kademe = nadirlikCek(s.ihtimal), liste = kademeTemalari(kademe), ix, mesafe, k;
-    if (!liste.length) {
-      ix = NADIRLIK_SIRA.indexOf(kademe);
-      for (mesafe = 1; mesafe < NADIRLIK_SIRA.length && !liste.length; mesafe++) {
-        for (k = 0; k < 2 && !liste.length; k++) {
-          var aday = NADIRLIK_SIRA[ix + (k === 0 ? -mesafe : mesafe)];
-          if (aday) liste = kademeTemalari(aday);
-        }
-      }
-    }
-    if (!liste.length) { window.AppGold.add(s.fiyat); return { tur: 'kapali' }; }
-
-    var tema = liste[Math.floor(Math.random() * liste.length)];
-    if (sahipMi(tema.id)) {
-      var iade = K.NADIRLIK[tema.nadirlik].iade || 0;
-      window.AppGold.add(iade);
-      return { tur: 'iade', tema: tema, jeton: iade };
-    }
+    var tema = sandikCek(sid);
     sahipYap(tema.id);
     yaz();
     return { tur: 'tema', tema: tema };
@@ -924,6 +939,9 @@ window.AppMarket = (function () {
     sandiklar: function () { return K.SANDIKLAR; },
     sandikBul: sandikBul,
     sandikAc: sandikAc,
+    sandikDagilimi: sandikDagilimi,
+    sandikDurum: sandikDurum,
+    sandikCek: sandikCek,
     kalanVarMi: kalanVarMi,
     hediyeHazirMi: hediyeHazirMi,
     hediyeAl: hediyeAl,

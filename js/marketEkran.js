@@ -369,9 +369,9 @@ window.MarketEkran = (function () {
       }
       var sonuc = M.sandikAc(id);
       if (!sonuc) { mesaj('Kutu açılamadı'); return; }
-      if (sonuc.tur === 'kapali') { mesaj('Bütün temaları topladın, kutuda yeni bir şey yok'); return; }
+      if (sonuc.tur === 'kapali') { mesaj(sonuc.durum === 'bos' ? 'Bu kutudan çıkacak tema kalmadı' : 'Koleksiyon tamam'); return; }
       if (window.AppFX) window.AppFX.seq([[520, .12, .16, 0], [720, .12, .16, 110], [980, .22, .18, 220]], 'triangle');
-      titre(sonuc.tur === 'tema' ? [14, 40, 14, 40, 26] : 16);
+      titre([14, 40, 14, 40, 26]);
       sonucGoster(sonuc);
       ciz();
       return;
@@ -422,15 +422,6 @@ window.MarketEkran = (function () {
            '<div class="mk-sonuc-kat">Beş oyunda birden geçerli</div>' +
            '<button class="mk-sonuc-btn" data-eylem="sec" data-id="' + t.id + '">Hemen Kullan</button>' +
            '<button class="mk-sonuc-btn ikincil" data-eylem="sonucKapat">Sonra</button></div>';
-    } else if (sonuc.tur === 'iade') {
-      t = sonuc.tema; n = M.nadirlikBilgi(t.nadirlik);
-      ic = '<div class="mk-sonuc-kart" data-nadirlik="' + t.nadirlik + '">' +
-           '<div class="mk-sonuc-ust">Zaten sende · ' + n.ad + '</div>' +
-           '<div class="mk-onizleme" data-tema="' + t.id + '"></div>' +
-           '<div class="mk-sonuc-ad">' + t.ad + '</div>' +
-           '<div class="mk-sonuc-jeton kucuk">' + window.CoinSVG(true) + '<span>+' + sonuc.jeton + '</span></div>' +
-           '<div class="mk-sonuc-kat">Bu tema koleksiyonunda vardı, jeton iadesi yapıldı</div>' +
-           '<button class="mk-sonuc-btn" data-eylem="sonucKapat">Tamam</button></div>';
     } else {
       ic = '<div class="mk-sonuc-kart" data-nadirlik="efsanevi">' +
            '<div class="mk-sonuc-ust">Günlük Hediye</div>' +
@@ -522,16 +513,18 @@ window.MarketEkran = (function () {
   }
 
   function sandiklarCiz() {
-    var liste = M.sandiklar(), i, s = '', k, yeter, kalan = M.kalanVarMi();
+    var liste = M.sandiklar(), i, s = '', k, yeter, durum;
     for (i = 0; i < liste.length; i++) {
       k = liste[i];
-      yeter = kalan && window.AppGold.get() >= k.fiyat;
+      durum = M.sandikDurum(k.id);
+      yeter = durum === 'aktif' && window.AppGold.get() >= k.fiyat;
       s += '<div class="mk-sandik" style="--sandik-renk:' + k.renk + ';">' +
            sandikSVG(k.renk, koyulastir(k.renk)) +
            '<button class="mk-sandik-btn' + (yeter ? '' : ' pasif') + '"' +
            (yeter ? ' data-eylem="sandik" data-id="' + k.id + '"' : ' disabled') + '>' +
            '<b>' + k.ad.toLocaleUpperCase('tr-TR') + '</b>' +
-           (kalan ? '<span>' + window.CoinSVG(true) + k.fiyat + '</span>' : '<span>Hepsi sende</span>') +
+           (durum === 'aktif' ? '<span>' + window.CoinSVG(true) + k.fiyat + '</span>'
+             : '<span>' + (durum === 'tamam' ? 'Koleksiyon tamam' : 'Bu kutudan çıkacak tema kalmadı') + '</span>') +
            '</button></div>';
     }
     el.sandiklar.innerHTML = s;

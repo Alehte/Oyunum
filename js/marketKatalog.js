@@ -39,13 +39,14 @@ window.AppMarketKatalog = (function () {
 
   // ---------------------------------------------------------------
   // KUTULAR — ihtimal toplami 1.00. Once nadirlik cekilir, sonra o
-  // nadirlikten bir tema. Tema zaten varsa jeton iadesi yapilir.
+  // nadirlikten bir tema. Sahip olunan tema cikmaz; bos grubun orani
+  // dolu gruplara orantili dagitilir (bkz. market.js sandikDagilimi).
   // ---------------------------------------------------------------
   var SANDIKLAR = [
     { id: 'gumus', ad: 'Gümüş Kutu', fiyat: 1000, renk: '#B8C4D4',
-      ihtimal: { siradan: 0.50, nadir: 0.30, ender: 0.15, efsanevi: 0.05 } },
+      ihtimal: { siradan: 0.59375, nadir: 0.35625, ender: 0.05, efsanevi: 0 } },
     { id: 'altin', ad: 'Altın Kutu', fiyat: 3500, renk: '#F0B93C',
-      ihtimal: { siradan: 0.19, nadir: 0.38, ender: 0.28, efsanevi: 0.15 } }
+      ihtimal: { siradan: 0.10, nadir: 0.35, ender: 0.30, efsanevi: 0.25 } }
   ];
 
   var YERLESIK = { yerlesik: true };
