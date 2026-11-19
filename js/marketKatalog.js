@@ -154,9 +154,9 @@ window.AppMarketKatalog = (function () {
       isik: { isik: '#AEB8FF', toz: '#DCE1FF', vurgu: '#7FE0C0', karanlik: '#07081A',
               iz: { renk: '#7C88F0', sekil: 'cizgi' } },
       deri: {
-        govde: { tip: 'benekli', renkler: ['#4A4A8C', '#38386E', '#5E5EA6', '#2C2C56'], kontur: '#16162E' },
+        govde: { tip: 'benekli', renkler: ['#4A4A8C', '#42427E', '#5E5EA6', '#3A3A74'], kontur: '#16162E' },
         // hedef: kagida dusen ikinci renk — govde boyunca yesil murekkep cizgisi
-        hedef: { tip: 'benekli', renkler: ['#3E4A6E'], kontur: '#1E3A32', vurgu: '#3FD98E', vurguTip: 'cizgi' }
+        hedef: { tip: 'benekli', renkler: ['#4E5D8B'], kontur: '#1E3A32', vurgu: '#3FD98E', vurguTip: 'cizgi' }
       },
       karo: {
         zemin: '#101226',
@@ -310,9 +310,9 @@ window.AppMarketKatalog = (function () {
               animasyon: 'lav' },
       deri: {
         animasyon: 'lav',
-        govde: { tip: 'seritli', renkler: ['#2A1C16', '#E8622A', '#3A2620', '#FF8A3C'], kontur: '#0A0503', parlak: true },
+        govde: { tip: 'seritli', renkler: ['#4A3024', '#E8622A', '#744E3A', '#C47A10'], kontur: '#0A0503', parlak: true },
         // hedef: sogumus lavda yesil alev — kontur olarak yaniyor
-        hedef: { tip: 'seritli', renkler: ['#123A22'], kontur: '#06140C', vurgu: '#4FE07A', vurguTip: 'kontur', parlak: true }
+        hedef: { tip: 'seritli', renkler: ['#184D2D'], kontur: '#06140C', vurgu: '#4FE07A', vurguTip: 'kontur', parlak: true }
       },
       karo: {
         zemin: '#140A06', animasyon: 'lav',
