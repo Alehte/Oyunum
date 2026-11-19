@@ -347,7 +347,7 @@ dene('sarmasik: her fazda (0,1,2,3) cizim hatasiz; faz 1 unlem karanligin ustund
       const l = ciziliyor(o);
       let kk = -1; l.forEach((c, i) => { if (c[0] === 'drawImage' && c[1].length === 3) kk = i; });
       const unlem = l.slice(kk).filter(c => c[0] === 'lineTo' && c[1][0] === 2.5 && c[1][1] === 1.7).length;
-      const govde = l.slice(0, kk).filter(c => c[0] === 'ellipse' && c[1][2] === 0.55 && c[1][3] === 0.28).length;
+      const govde = l.slice(0, kk).filter(c => c[0] === 'ellipse' && c[1][2] === 0.5 && c[1][3] === 0.26).length;
       assert.strictEqual(unlem > 0, faz === 1, 'faz ' + faz + ' unlem');
       assert.strictEqual(govde > 0, faz >= 2, 'faz ' + faz + ' yaprak');
     }
@@ -380,7 +380,7 @@ dene('sarmasik ekran disi sutun (x - mesafe > W): unlem sag kenarda, uc yuksekli
     const l = ciziliyor(o), after = l.slice(sonKaranlik(l));
     const tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9);
     assert.strictEqual(tr.length, 1, yon + ' unlem sag kenarda');
-    assert.ok(Math.abs(tr[0][1][1] - (yon === 'ust' ? 43.5 : H - 40 - 3.5)) < 1e-9, yon + ' unlem y uc yuksekligi ' + tr[0][1][1]);
+    assert.ok(Math.abs(tr[0][1][1] - (yon === 'ust' ? 40 + M.R_CARPMA + AB.AYAR.adalet.PAY_KACIS : H - 40 - M.R_CARPMA - AB.AYAR.adalet.PAY_KACIS)) < 1e-9, yon + ' unlem y uc yuksekligi ' + tr[0][1][1]);
   });
 });
 
@@ -408,6 +408,98 @@ dene('sarmasik: uyari -> kisa uyari sesi (880 Hz), carpinca hasar sesi (280 Hz t
 dene('yeni alanlarla 600 karelik kosu hatasiz (bomba/sarmasik uretildiyse de), temaDegisti dahil', () => {
   const o = ortam(); o.yeni();
   o.durum.puan = 3000; o.kare(600); o.O.temaDegisti(); o.kare(10);
+});
+
+console.log('Karanliktasuzul B4: gorsel iyilestirme (cizim guvenligi, performans, denetci duzeltmeleri)');
+
+const sonDilim = o => o.durum.dilimler[o.durum.dilimler.length - 1];
+
+dene('K-1: uzak dilimdeki (dilimler[0] degil) sarmasik faz 1 ilk karede unlem cizer (dilim onu siniri yok)', () => {
+  ['ust', 'alt'].forEach(yon => {
+    const o = ortam(); o.O.start(); o.kare(1);
+    const m = o.durum.mesafe, x1 = m + 95, s = sonDilim(o);
+    assert.notStrictEqual(s, o.durum.dilimler[0]);
+    s.x = m + 140;                                           // dilim onu ekranin cok otesinde
+    s.sarmasik = { yon, x1, x2: x1 + 3, sutunlar: [sutunlu(x1, 40, yon)], faz: 1, sure: 0, ilerleme: 0 };
+    const l = ciziliyor(o), after = l.slice(sonKaranlik(l));
+    assert.strictEqual(after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9).length, 1, yon + ' unlem ilk karede');
+    s.sarmasik.faz = 2;
+    const l2 = ciziliyor(o), a2 = l2.slice(sonKaranlik(l2));          // faz 2: unlem yok, kenar isareti kalir
+    assert.strictEqual(a2.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9).length, 0);
+    assert.ok(a2.some(c => c[0] === 'moveTo' && Math.abs(c[1][0] - (W - 2.4)) < 1e-9), 'kenar isareti');
+  });
+});
+
+dene('K-a: ekran disi birden cok sutun tek unlem cizer (ust uste binmez)', () => {
+  const o = ortam(); o.O.start(); o.kare(1);
+  const m = o.durum.mesafe, x1 = m + W + 20, sut = [sutunlu(x1, 30, 'ust'), sutunlu(x1 + 5, 45, 'ust'), sutunlu(x1 + 10, 20, 'ust')];
+  o.durum.dilimler[0].sarmasik = { yon: 'ust', x1, x2: x1 + 13, sutunlar: sut, faz: 1, sure: 0, ilerleme: 0 };
+  const l = ciziliyor(o), after = l.slice(sonKaranlik(l)), tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9);
+  assert.strictEqual(tr.length, 1, 'tek unlem');
+  assert.ok(Math.abs(tr[0][1][1] - (45 + M.R_CARPMA + AB.AYAR.adalet.PAY_KACIS)) < 1e-9, 'en tehlikeli (en uzun) uc seviyesi');
+});
+
+dene('O-1: ekrandaki her alinmamis toz cizilir (tozun dilimi ekranin otesinde olsa da)', () => {
+  const o = ortam(); o.O.start(); o.kare(1);
+  const m = o.durum.mesafe, s = sonDilim(o);
+  s.x = m + W + 60;
+  s.toz = [{ x: m + 30, y: 50, alindi: 0, yutuldu: 0 }];
+  const say = () => ciziliyor(o).filter(c => c[0] === 'drawImage' && c[1].length === 5 && Math.abs(c[1][2] - (50 - M.R_TOZ_GORSEL * 3.2)) < 1e-6 && Math.abs(c[1][3] - M.R_TOZ_GORSEL * 6.4) < 1e-6).length;
+  assert.strictEqual(say(), 1);
+  s.toz[0].alindi = 1; assert.strictEqual(say(), 0);
+});
+
+dene('K-d: azaltilmis harekette bomba ve unlem sabit (titreme/nabiz/yanip sonme yok); normal harekette degisir', () => {
+  [true, false].forEach(az => {
+    const o = ortam(); o.azHareket = az; o.O.start(); o.kare(1);
+    const m = o.durum.mesafe, x1 = m + 25;
+    o.durum.dilimler[0].bomba = { x: m + 30, y: 40, alindi: 0 };
+    o.durum.dilimler[0].sarmasik = { yon: 'ust', x1, x2: x1 + 3, sutunlar: [sutunlu(x1, 40, 'ust')], faz: 1, sure: 0, ilerleme: 0 };
+    const ozet = () => { const l = ciziliyor(o), a = l.slice(sonKaranlik(l)); return JSON.stringify(a.filter(c => c[0] === 'translate' || c[0] === 'scale' || c[0] === 'rotate')); };
+    const hepsi = []; for (let i = 0; i < 6; i++) { hepsi.push(ozet()); o.kare(3); }
+    const tek = new Set(hepsi).size === 1;
+    assert.strictEqual(tek, az, 'az=' + az + ' sabit mi: ' + tek);
+  });
+});
+
+dene('K-e: olumcul bomba: sonme sirasinda patlama parcaciklari cizilir ve ilerler; toplam parcacik <= 24', () => {
+  const o = ortam(); o.yeni();
+  o.durum.isik = 0.1; o.durum.dokunulmaz = 0;
+  o.durum.dilimler[0].bomba = { x: o.durum.mesafe + XB + 0.5, y: o.durum.y, alindi: 0 };
+  o.kare(1);
+  assert.ok(o.durum.bitti, 'olum');
+  let en = 0, ilk = null, son = null;
+  for (let i = 0; i < 6; i++) {
+    o.log = []; o.kare(1); const p = o.log.filter(c => c[0] === 'fillRect' && c[1][2] === 0.6 && c[1][3] === 0.6); o.log = null;
+    en = Math.max(en, p.length); if (!ilk && p.length) ilk = p[0][1][0]; if (p.length) son = p[0][1][0];
+    assert.ok(p.length <= 24);
+  }
+  assert.ok(en >= 1, 'patlama gorunmeli'); assert.ok(ilk !== son, 'parcacik ilerlemeli');
+});
+
+dene('K-e: lav izi (akkor) bomba patlamasi icin en az 8 yuva birakir', () => {
+  const o = ortam(); o.sb.AppMarket = { isikCoz: p => p, aktif: () => ({ isik: '#FFA64A', toz: '#FFD98A', vurgu: '#7CF0A0', karanlik: '#120604', iz: { renk: '#FF6A2A', renk2: '#FFD07A', sekil: 'akkor' }, animasyon: 'lav' }) };
+  o.yeni(); o.kare(120);                                    // iz parcaciklari doldu
+  o.durum.dilimler[0].bomba = { x: o.durum.mesafe + XB + 0.5, y: o.durum.y, alindi: 0 }; o.durum.dokunulmaz = 0; o.durum.isik = 1;
+  o.log = []; o.kare(1);
+  const tum = o.log.filter(c => c[0] === 'fillRect' && c[1][2] === 0.6 && c[1][3] === 0.6).length; o.log = null;
+  assert.ok(tum <= 24 && tum >= 8, 'parcacik ' + tum);
+});
+
+dene('performans: kare basina cizim cagrisi ust siniri (yogun sahne: dal/ag/kus/dusen/bomba/sarmasik/toz); onceki surum 446, simdi < 800', () => {
+  const o = ortam(); o.O.start(); o.kare(1);
+  const d = o.durum, m = d.mesafe; d.puan = 3000;
+  d.dilimler[0].bomba = { x: m + 30, y: 40, alindi: 0 }; d.dilimler[1].bomba = { x: m + 36, y: 60, alindi: 0 };
+  const x1 = m + XB + 22;
+  d.dilimler[0].sarmasik = { yon: 'ust', x1, x2: x1 + 8, sutunlar: [sutunlu(x1, 40, 'ust'), sutunlu(x1 + 4, 30, 'ust')], faz: 3, sure: 0, ilerleme: 1 };
+  d.dilimler[1].sarmasik = { yon: 'alt', x1: m + 40, x2: m + 48, sutunlar: [sutunlu(m + 40, 40, 'alt')], faz: 1, sure: 0, ilerleme: 0 };
+  d.dilimler[2].engeller = [{ tur: 'dal', yon: 'ust', x: m + 20, y: 0, w: 5, h: 30 }, { tur: 'dal', yon: 'alt', x: m + 20, y: 70, w: 5, h: 30 }, { tur: 'ag', x: m + 26, y: 10, w: 7, h: 17 }, { tur: 'kus', x: m + 34, y: 60, w: 5, h: 3.5 }, { tur: 'dusen', x: m + 42, y: 0, w: 5, h: 25, faz: 1 }];
+  d.dilimler[2].toz = [{ x: m + 12, y: 45, alindi: 0, yutuldu: 0 }, { x: m + 16, y: 55, alindi: 0, yutuldu: 0 }];
+  d.dokunulmaz = 0; d.isik = 1;
+  o.kare(3);
+  let en = 0; for (let i = 0; i < 10; i++) en = Math.max(en, ciziliyor(o).length);
+  console.log('       kare basina cizim cagrisi (yogun sahne): ' + en);
+  assert.ok(en < 800, 'cagri ' + en);
 });
 
 console.log(gecti + ' deneme gecti');

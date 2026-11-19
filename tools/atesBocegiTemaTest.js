@@ -311,6 +311,60 @@ dene('mantar / ay / sis katmanlari: engel kenarindan her zaman koyu, kenar ve to
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
+dene('B4 derinlik katmanlari (uzak soluk mavi, yakin koyu siluet, huzme/sis bandi): kenardan koyu, kenar ve toz ile >= 3,0 (10 palet, 3 gorme bicimi)', () => {
+  // katmanCiz: uzak = karistir(zemin, UZAK_MAVI, uzak); yakin = karistir(zemin, siyah, yakin); huzme / sis bandi = acik (zemin + %15 beyaz) uzerine alfa (<= acik).
+  const UZAK_MAVI = sabit(OYUN, 'UZAK_MAVI'), kenar = rgb(ENGEL_KENAR), kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
+  const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
+  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
+    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), toz = rgb(t.p.toz);
+    const kat = { 'uzak mavi': mix(zem, rgb(UZAK_MAVI), KATMAN.uzak), 'yakin siluet': mix(zem, [0, 0, 0], KATMAN.yakin), 'huzme/sis bandi (acik)': mix(zem, [1, 1, 1], 0.15) };
+    Object.keys(kat).forEach(ad => BICIMLER.forEach(b => {
+      const c = kat[ad], ok = oran(kenar, c, b), ot = oran(toz, c, b);
+      izle('B4 katman/kenar', ok); izle('B4 katman/toz', ot);
+      if (!(L(c, b) < L(kenar, b))) kotu.push(t.id + ' b' + bi + ' ' + ad + ' ' + b + ' kenardan acik');
+      if (ok < 3.0) kotu.push(t.id + ' b' + bi + ' ' + ad + ' kenar ' + b + ' ' + ok.toFixed(2));
+      if (ot < 3.0) kotu.push(t.id + ' b' + bi + ' ' + ad + ' toz ' + b + ' ' + ot.toFixed(2));
+    }));
+  }));
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 bicim: >= 3,0 YA DA koyu dis kontur (kodda var, >= ~1 px) ve kontur x tehlike >= 3,0', () => {
+  // Secim: renkleri degistirmek yerine (toz/tehlike ayrimi ve tema paletleri bozulmasin) koyu dis kontur zorunlu.
+  // Bomba: sprite'ta ENGEL_DOLGU 0,7 genis kontur altta, acik kenar 0,26 ustte -> dis bant 0,22 birim (>= 1 px, olcek >= 4,6).
+  // Sarmasik: ENGEL_DOLGU 1,3 genis cizgi altta, yesil 0,7 ustte -> 0,3 birim. Unlem: ENGEL_DOLGU 0,46 kontur -> 0,23 birim.
+  const UZAK_MAVI = sabit(OYUN, 'UZAK_MAVI'), dolgu = rgb(ENGEL_DOLGU), mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
+  const kaynakBomba = /function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0];
+  assert(/x\.strokeStyle = ENGEL_DOLGU; x\.lineWidth = 0\.7; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = BOMBA_KENAR; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur');
+  assert(((0.7 - 0.26) / 2) * 4.6 >= 1.0, 'bomba kontur >= 1 px');
+  const sar = /function sarmasikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
+  assert(/u \? SARMASIK_GOVDE : ENGEL_DOLGU; c\.lineWidth = u \? 0\.7 : 1\.3/.test(sar), 'sarmasik koyu dis cizgi');
+  assert(((1.3 - 0.7) / 2) * 4.6 >= 1.0, 'sarmasik kontur >= 1 px');
+  assert(/c\.fillStyle = UNLEM_RENK; c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 0\.46/.test(OYUN), 'unlem koyu kontur');
+  assert(0.46 / 2 * 4.6 >= 1.0, 'unlem kontur >= 1 px');
+  const kotu = [], konturGereken = {}; let n = 0;
+  const tehlike = { BOMBA_KENAR, BOMBA_CEKIRDEK, UNLEM_RENK, SARMASIK_GOVDE, SARMASIK_YAPRAK };
+  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
+    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), vur = rgb(t.p.vurgu), bey = [1, 1, 1], sif = [0, 0, 0];
+    const zeminler = {
+      'zemin': zem, 'k0 koyu': mix(zem, sif, 0.15), 'k1 koyu': mix(zem, sif, 0.07), 'acik': mix(zem, bey, 0.15), 'uzak mavi': mix(zem, rgb(UZAK_MAVI), KATMAN.uzak),
+      'yakin siluet': mix(zem, sif, KATMAN.yakin), 'mantar kap': mix(zem, vur, KATMAN.mantarKap), 'mantar hale': mix(zem, vur, KATMAN.mantarHale),
+      'ay': mix(zem, bey, KATMAN.ay), 'sis': mix(zem, mix(zem, bey, KATMAN.sis), KATMAN.sisAlfa)
+    };
+    Object.keys(tehlike).forEach(ad => BICIMLER.forEach(b => {
+      const c = rgb(tehlike[ad]), kon = oran(c, dolgu, b); izle('O-3 tehlike/koyu kontur', kon);
+      if (kon < 3.0) kotu.push(ad + ' x koyu kontur ' + b + ' ' + kon.toFixed(2));
+      Object.keys(zeminler).forEach(zn => {
+        const o = oran(c, zeminler[zn], b); n++; izle('O-3 tehlike/katman (kontursuz)', o);
+        if (o < 3.0) konturGereken[ad + ' x ' + zn] = 1;      // kontur sayesinde okunur
+      });
+    }));
+  }));
+  assert.strictEqual(n, 6000, 'oran sayisi ' + n);       // 5 renk x 10 palet x 4 bolge x 3 bicim x 10 zemin/katman
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+  console.log('       kontur gerektiren cift (tehlike x katman, 3,0 altinda): ' + Object.keys(konturGereken).length);
+});
+
 dene('en dusuk oranlar (bilgi)', () => {
   console.log('       ' + Object.keys(EN_DUSUK).map(k => k + ' ' + EN_DUSUK[k].toFixed(2)).join(' | '));
 });
