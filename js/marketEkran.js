@@ -197,7 +197,7 @@ window.MarketEkran = (function () {
     var sahne = kutu('mo-sahne mo-ates', ana);
     var p = M.isikCoz(tema.isik), id = 'moAtes' + (++ATES_SAYAC), g = p.govde;     // bocek govdesi temadan (oyunla ayni, 12.3)
     var zemin = hexKaristir(hexKaristir(p.bolgeler[0], '#000000', 0.36), p.isik, 0.06);   // temanin orman tonu (oyunla ayni kaynak, 12.3)
-    sahne.innerHTML =
+    var ic =
       '<svg viewBox="0 0 58 58" aria-hidden="true" focusable="false">' +
       '<defs><radialGradient id="' + id + 'z"><stop offset=".72" stop-color="' + zemin + '"/><stop offset="1" stop-color="' + zemin + '" stop-opacity="0"/></radialGradient>' +
       '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="' + p.isik + '" stop-opacity=".35"/><stop offset="1" stop-color="' + p.isik + '" stop-opacity="0"/></radialGradient></defs>' +
@@ -207,12 +207,38 @@ window.MarketEkran = (function () {
       '<circle cx="39.5" cy="21.5" r="1.4" fill="' + p.toz + '"/><circle cx="43" cy="35" r="1.4" fill="' + p.toz + '"/><circle cx="37" cy="41.5" r="1.4" fill="' + p.toz + '"/>' +
       '<ellipse cx="29.5" cy="26" rx="1.6" ry="4" fill="' + g.kanat + '" opacity=".4" transform="rotate(-30 29.5 26)"/>' +
       '<ellipse cx="32.5" cy="25" rx="1.6" ry="4" fill="' + g.kanat + '" opacity=".3" transform="rotate(25 32.5 25)"/>' +
-      '<ellipse cx="29.5" cy="29.5" rx="4.6" ry="3" fill="' + g.koyu + '" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
-      '<ellipse cx="26.6" cy="29.5" rx="2.2" ry="1.7" fill="' + p.isik + '"/>' +
-      '<ellipse cx="31" cy="29.5" rx="3" ry="2.4" fill="' + g.kin + '" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
-      '<circle cx="35" cy="29" r="2" fill="' + g.koyu + '" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
-      '<path class="mo-ates-dal" style="fill:' + p.engel.dolgu + ';stroke:' + p.engel.kenar + '" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
       '</svg>';
+    sahne.innerHTML = ic;
+    // Koyu dolgular (govde, dikenli dal) <canvas>'a cizilir: Chrome otomatik karanlik modu satir ici SVG'deki ve <img> SVG'sindeki
+    // koyu dolgulari ters cevirip beyaza yakin yapiyor, canvas piksellerine dokunmuyor. Renkler yine temadan (p).
+    var cv = document.createElement('canvas');
+    cv.className = 'mo-ates-govde';
+    cv.setAttribute('aria-hidden', 'true');
+    sahne.appendChild(cv);
+    atesGovdeCiz(cv, p);
+  }
+  // 58x58 birim sahnenin koyu katmani; p = M.isikCoz(...) sonucu. getContext yoksa (testlerdeki sahte DOM) sessizce atlar.
+  function atesGovdeCiz(cv, p) {
+    var g = p.govde, k = Math.max(2, Math.ceil(window.devicePixelRatio || 1)), x, i, dikenler = [[20, 17.5, 16], [35, 32.5, 31]];
+    if (!cv.getContext) return;
+    cv.width = 58 * k; cv.height = 58 * k;
+    x = cv.getContext('2d');
+    if (!x) return;
+    x.scale(k, k);
+    function oval(cx, cy, rx, ry, dolgu) {
+      x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      x.fillStyle = dolgu; x.fill();
+      if (dolgu !== p.isik) { x.globalAlpha = 0.35; x.strokeStyle = '#fff'; x.lineWidth = 0.4; x.stroke(); x.globalAlpha = 1; }
+    }
+    oval(29.5, 29.5, 4.6, 3, g.koyu);
+    oval(26.6, 29.5, 2.2, 1.7, p.isik);
+    oval(31, 29.5, 3, 2.4, g.kin);
+    x.beginPath(); x.arc(35, 29, 2, 0, Math.PI * 2); x.fillStyle = g.koyu; x.fill();
+    x.globalAlpha = 0.35; x.strokeStyle = '#fff'; x.lineWidth = 0.4; x.stroke(); x.globalAlpha = 1;
+    x.beginPath(); x.moveTo(52, 10); x.lineTo(56, 10); x.lineTo(56, 48); x.lineTo(52, 48); x.closePath();
+    for (i = 0; i < 2; i++) { x.moveTo(52, dikenler[i][0]); x.lineTo(47.5, dikenler[i][1]); x.lineTo(52, dikenler[i][2]); x.closePath(); }
+    x.fillStyle = p.engel.dolgu; x.fill();
+    x.globalAlpha = 0.85; x.strokeStyle = p.engel.kenar; x.lineWidth = 1; x.lineJoin = 'round'; x.stroke(); x.globalAlpha = 1;
   }
 
   function onizlemeKur(kap, tema) {

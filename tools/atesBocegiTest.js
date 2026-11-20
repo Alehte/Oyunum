@@ -983,6 +983,15 @@ dene('isik <= 0 -> bitti tek kez, sonra adim bos', () => {
   assert.strictEqual(say(o, 'bitti'), 1); assert.strictEqual(d.bitti, 1);
   const t = d.t; assert.deepStrictEqual(AB.adim(d, true), []); assert.strictEqual(d.t, t);
 });
+dene('isik sifirlanacakken zemin temasi ayni adimda -> tek bitti, sebep zemin, sonraki adim bos', () => {
+  const d = bosDurum(); d.y = Y_ALT - 0.1; d.vy = MH.VY_ASAGI; d.ay = MH.G_SUZUL; d.isik = 1e-9;
+  const o = AB.adim(d, false);
+  assert.strictEqual(say(o, 'bitti'), 1); assert.strictEqual(say(o, 'zemin'), 1);
+  assert.strictEqual(o.find(x => x.tur === 'bitti').sebep, 'zemin');
+  assert.strictEqual(d.bitti, 1); assert.strictEqual(d.sebep, 'zemin'); assert.strictEqual(d.isik, 1e-9, 'zemin adiminda dunya (isik sizintisi) islemez'); assert.strictEqual(d.y, Y_ALT);
+  const kopyaD = JSON.stringify(d);
+  assert.deepStrictEqual(AB.adim(d, true), []); assert.deepStrictEqual(AB.adim(d, false), []); assert.strictEqual(JSON.stringify(d), kopyaD);
+});
 dene('hasar ile bitis tek bitti', () => {
   const d = bosDurum(); d.y = 50; d.isik = 0.2;
   d.dilimler = [dilim([{ tur: 'dal', x: 0, y: 0, w: 1e6, h: 100 }])];

@@ -29,13 +29,12 @@ window.AppMarketKatalog = (function () {
   // ---------------------------------------------------------------
   // NADIRLIK KADEMELERI
   // fiyat : Gunun Seckisi'ndeki dogrudan satis fiyati (jeton)
-  // iade  : tema kutudan TEKRAR cikarsa geri verilen jeton
   // ---------------------------------------------------------------
   var NADIRLIK = {
-    siradan:  { ad: 'Sıradan',  renk: '#8A8F98', parlak: '#B9BEC7', fiyat: 800,  iade: 300,  sira: 0 },
-    nadir:    { ad: 'Nadir',    renk: '#3B82F6', parlak: '#7DAEFF', fiyat: 1800, iade: 600,  sira: 1 },
-    ender:    { ad: 'Ender',    renk: '#A855F7', parlak: '#CB93FF', fiyat: 4000, iade: 1200, sira: 2 },
-    efsanevi: { ad: 'Efsanevi', renk: '#FBBF24', parlak: '#FFDA7A', fiyat: 8000, iade: 2500, sira: 3 }
+    siradan:  { ad: 'Sıradan',  renk: '#8A8F98', parlak: '#B9BEC7', fiyat: 800,  sira: 0 },
+    nadir:    { ad: 'Nadir',    renk: '#3B82F6', parlak: '#7DAEFF', fiyat: 1800, sira: 1 },
+    ender:    { ad: 'Ender',    renk: '#A855F7', parlak: '#CB93FF', fiyat: 4000, sira: 2 },
+    efsanevi: { ad: 'Efsanevi', renk: '#FBBF24', parlak: '#FFDA7A', fiyat: 8000, sira: 3 }
   };
 
   // ---------------------------------------------------------------

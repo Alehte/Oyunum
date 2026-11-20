@@ -670,7 +670,7 @@ dene('stil: .mo-ates CSS style.css\'te, JS stil enjekte etmiyor; hareketi azaltt
   assert(/Beş oyunda birden geçerli/.test(ekran) && !/Dört oyunda/.test(ekran));
 });
 
-dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS seffaf', () => {
+dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS sabit koyu, SVG zemin dolgusu yok', () => {
   const lum = h => (parseInt(h.substr(1, 2), 16) * 0.299 + parseInt(h.substr(3, 2), 16) * 0.587 + parseInt(h.substr(5, 2), 16) * 0.114);
   TEMALAR.forEach(t => assert(lum(M.isikCoz(t.isik).karanlik) < 60, t.id + ' karanlik zemin acik'));
   const css = oku('style.css');
@@ -731,7 +731,7 @@ function pngCoz(buf) {
 function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD karsilastirmasi) onlar kullanilir
   const os = require('os'), cp = require('child_process');
   const { win, doc, ctx } = yukle(false);
-  const src = (kaynak ? kaynak.ekran : oku('js/marketEkran.js')).replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');
+  const src = (kaynak ? kaynak.ekran : oku('js/marketEkran.js')).replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur, atesGovdeCiz: typeof atesGovdeCiz === "function" ? atesGovdeCiz : null };');
   const hata = console.error; console.error = () => {};
   try { vm.runInContext(src, ctx, { filename: 'marketEkran.js' }); } finally { console.error = hata; }
   const css = kaynak ? kaynak.css : oku('style.css'), bas = css.indexOf('.mk-onizleme{position:relative'), son = '.mo-ates-iz.lav{animation:none;} }';
@@ -739,16 +739,20 @@ function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD
   const kural = css.slice(bas, css.indexOf(son, bas) + son.length);
   const temalar = win.AppMarket.temalar().filter(t => !t.varsayilan);
   let hucre = '';
+  const paletler = [];
   temalar.forEach(t => {
+    paletler.push(M.isikCoz(t.isik));
     const k = doc.createElement(); win.MarketEkran.onizlemeKur(k, t);
     const s = k.cocuklar[k.cocuklar.length - 1], tonVar = t.ton && t.ton.css;
     hucre += '<div class="mk-onizleme' + (tonVar ? ' ton-var' : '') + '" style="' + (tonVar ? '--tema-ton:' + t.ton.css + ';' : '') + 'width:120px;height:100px;box-sizing:border-box">' +
-      '<div class="' + s.className + '">' + s.innerHTML + '</div></div>';
+      '<div class="' + s.className + '">' + s.innerHTML + (win.MarketEkran.atesGovdeCiz ? '<canvas class="mo-ates-govde"></canvas>' : '') + '</div></div>';
   });
   const dizin = fs.mkdtempSync(path.join(os.tmpdir(), 'ates-onizleme-'));
   try {
     fs.writeFileSync(path.join(dizin, 'a.html'), '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000}' +
-      '.g{display:grid;grid-template-columns:repeat(3,120px);grid-auto-rows:100px;width:360px;align-items:start}' + kural + '</style><div class="g">' + hucre + '</div>');
+      '.g{display:grid;grid-template-columns:repeat(3,120px);grid-auto-rows:100px;width:360px;align-items:start}' + kural + '</style><div class="g">' + hucre + '</div>' +
+      // govde + dal canvas'a cizilir (sayfadaki atesGovdeCiz, sahte DOM'da calismadigi icin burada ayni kodla)
+      (win.MarketEkran.atesGovdeCiz ? '<script>var P=' + JSON.stringify(paletler) + ';' + win.MarketEkran.atesGovdeCiz.toString() + ';Array.prototype.forEach.call(document.querySelectorAll("canvas.mo-ates-govde"),function(c,i){atesGovdeCiz(c,P[i])})</script>' : ''));
     const r = cp.spawnSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', '--force-color-profile=srgb', '--window-size=360,300',
       '--screenshot=' + path.join(dizin, 'a.png'), require('url').pathToFileURL(path.join(dizin, 'a.html')).href], { timeout: 90000, encoding: 'utf8' });
     assert(r.status === 0 && fs.existsSync(path.join(dizin, 'a.png')), 'Chrome ekran goruntusu uretmedi (' + (r.error ? r.error.message : 'cikis ' + r.status) + ') ' + String(r.stderr || '').slice(0, 300));
@@ -771,7 +775,7 @@ function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD
 }
 dene('onizleme zemini temanin orman tonundan (12.3): oyunla ayni kaynak, temalar arasi farkli, koyu', () => {
   const { win, doc, ctx } = yukle(false);
-  const src = oku('js/marketEkran.js').replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');
+  const src = oku('js/marketEkran.js').replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur, atesGovdeCiz: atesGovdeCiz };');
   const hata = console.error; console.error = () => {};
   try { vm.runInContext(src, ctx, { filename: 'marketEkran.js' }); } finally { console.error = hata; }
   const hexK = (a, b, x) => '#' + [1, 3, 5].map(i => { const p = parseInt(a.substr(i, 2), 16), q = parseInt(b.substr(i, 2), 16); return Math.round(p + (q - p) * x).toString(16).padStart(2, '0'); }).join('').toUpperCase();   // marketEkran hexKaristir (tamsayi)
@@ -784,7 +788,10 @@ dene('onizleme zemini temanin orman tonundan (12.3): oyunla ayni kaynak, temalar
     assert.strictEqual(z[1].toUpperCase(), hexK(hexK(P.bolgeler[0], '#000000', 0.36), P.isik, 0.06), t.id + ': zemin orman tonundan degil');
     assert(parlaklik(dogrusal(rgb(z[1])), 'normal') < 0.03, t.id + ': zemin acik');
     goruldu.add(z[1].toUpperCase());
-    assert(svg.indexOf(P.govde.koyu) > 0 && svg.indexOf(P.govde.kin) > 0, t.id + ': bocek govdesi temadan degil');
+    // govde + dal canvas'a cizilir (otomatik karanlik SVG'yi ters ceviriyor): sahte 2d baglamla boyama renkleri temadan mi?
+    const boya = new Set(), x2 = { scale() {}, beginPath() {}, ellipse() {}, arc() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() { boya.add(String(this._f).toUpperCase()); }, set fillStyle(v) { this._f = v; }, get fillStyle() { return this._f; } };
+    win.MarketEkran.atesGovdeCiz({ getContext: () => x2 }, P);
+    [P.govde.koyu, P.govde.kin, P.isik, P.engel.dolgu].forEach(r => assert(boya.has(r.toUpperCase()), t.id + ': canvas boyasi temadan degil ' + r));
   });
   assert.strictEqual(goruldu.size, 10, 'onizleme zeminleri temalar arasi farkli olmali');
 });
@@ -838,19 +845,46 @@ function marketKartlariOlc(chrome, oto, port) {
     const noktalar = [[4, 4], [W - 5, 4], [4, H - 5], [W - 5, H - 5], [Math.round(W / 2), 1], [Math.round(W / 2), H - 2], [1, Math.round(H / 2)]];
     let en = 0;
     noktalar.forEach(n => { const i = ((y0 + n[1]) * im.w + x0 + n[0]) * im.bpp; en = Math.max(en, im.px[i], im.px[i + 1], im.px[i + 2]); });
-    return { ad: k.ad, en, w: W, h: H };
+    const px = (x, y) => { const i = ((y0 + y) * im.w + x0 + x) * im.bpp; return [im.px[i], im.px[i + 1], im.px[i + 2]]; };
+    const ic = [];   // 58x58 sahne ici (kutu 1:1 olcekte): normal/otomatik karanlik karsilastirmasi icin
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) ic.push(px(x, y));
+    // dal ortasi (54,24; dikenlerden uzak), govde: arka govde (35,29) ve kin (31,30.5)
+    return { ad: k.ad, en, w: W, h: H, dal: px(54, 24), gov: px(35, 29), kin: px(32, 31), ic };
   });
 }
+const MARKET_OLCUM = {};
+const marketOlcumu = (chrome, oto, port) => MARKET_OLCUM[oto] || (MARKET_OLCUM[oto] = marketKartlariOlc(chrome, oto, port));
 [false, true].forEach((oto, mi) => dene('gercek market karti: Karanlikta Suzul onizleme kutusu kose/kenar pikselleri koyu (her kanal < 60), 10 kart, ' + (oto ? 'otomatik karanlik mod' : 'normal mod'), () => {
   const chrome = chromeBul();
   if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
-  const olcum = marketKartlariOlc(chrome, oto, 9440 + mi);
+  const olcum = marketOlcumu(chrome, oto, 9440 + mi);
   assert.strictEqual(olcum.length, 10, 'kart sayisi ' + olcum.length);
   olcum.forEach(o => assert(o.w === 58 && o.h === 58, o.ad + ' kutu boyutu ' + o.w + 'x' + o.h));
   const kotu = olcum.filter(o => !(o.en < 60));
   if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.ad + ' en parlak kanal ' + o.en).join('\n'));
   assert.strictEqual(kotu.length, 0, kotu.map(o => o.ad + ' kanal ' + o.en).join('; '));
 }));
+
+// Ic pikseller: otomatik karanlik SVG ici koyu dolgulari (govde, dikenli dal) de ters cevirip beyaza yakin yapiyordu.
+// Dal ortasi ve bocek govdesi her iki modda koyu (her kanal < 140) ve iki mod arasinda ic bolgede buyuk fark yok.
+[false, true].forEach((oto, mi) => dene('gercek market karti: bocek govdesi ve dal ortasi koyu (her kanal < 140), 10 kart, ' + (oto ? 'otomatik karanlik mod' : 'normal mod'), () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const olcum = marketOlcumu(chrome, oto, 9440 + mi);
+  const en = c => Math.max(c[0], c[1], c[2]);
+  if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.ad + ' dal ' + o.dal + ' govde ' + o.gov + ' kin ' + o.kin).join('\n'));
+  const kotu = olcum.filter(o => !(en(o.dal) < 140 && en(o.gov) < 140 && en(o.kin) < 140));
+  assert.strictEqual(kotu.length, 0, kotu.map(o => o.ad + ' dal ' + o.dal + ' govde ' + o.gov + ' kin ' + o.kin).join('; '));
+}));
+dene('gercek market karti: normal ve otomatik karanlik modun ic bolgesi benzer (kart basina piksel ort. fark < 8)', () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const a = marketOlcumu(chrome, false, 9440), b = marketOlcumu(chrome, true, 9441);
+  const fark = a.map((o, i) => { let s = 0; o.ic.forEach((c, j) => { s += (Math.abs(c[0] - b[i].ic[j][0]) + Math.abs(c[1] - b[i].ic[j][1]) + Math.abs(c[2] - b[i].ic[j][2])) / 3; }); return { ad: o.ad, f: s / o.ic.length }; });
+  if (process.env.ONIZ_OLCUM) console.log(fark.map(f => '       ' + f.ad + ' ort fark ' + f.f.toFixed(2)).join('\n'));
+  const kotu = fark.filter(f => !(f.f < 8));
+  assert.strictEqual(kotu.length, 0, kotu.map(f => f.ad + ' ' + f.f.toFixed(2)).join('; '));
+});
 
 // ---- Tema gorselligi (12.3): ayni sahne 10 palette (9 tema + varsayilan) x 4 bolge, GERCEK oyun cizimi (tools/atesBocegiTemaYakala.js) ----
 // Yontem: tuval 300x600 px (dunya 50x100, olcek 6, dpr 1); 4x4 px bloklar dogrusal RGB'de ortalanir (kenar yumusatma gurultusu

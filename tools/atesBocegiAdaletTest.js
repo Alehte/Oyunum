@@ -887,7 +887,7 @@ dene('(a) Bot T (tam toplayici, ' + rs.T.length + ' tohum): puan >= ' + RISK_ESI
   assert.ok(roT.dilim > 1000 && roT.penOrt >= 2, 'pencere ort ' + roT.penOrt);
   assert.ok(roT.oran >= 3 * roA.oran && roT.oran - roA.oran >= 0.2, 'T ' + roT.oran + ' A ' + roA.oran);
 });
-dene('(b) secici botlar yasar: Bot A ve Bot B gercek isikla ' + RISK_MESAFE + ' birimi tamamlar, 800 sonrasi 0 hasar, risk tozu almaz', () => {
+dene('(b) secici botlar yasar: Bot A (sabit isik) ve Bot B (gercek isik) ' + RISK_MESAFE + ' birimi tamamlar, 800 sonrasi 0 hasar, risk tozu almaz', () => {
   const bg = riskOzet(rs.Bg, U.RISK_PUAN);
   console.log('       Bot B gercek isik: tamamlanan ' + rs.Bg.filter(r => !r.bitti).length + '/' + rs.Bg.length + ', dilim basina hasar ' + bg.oran.toFixed(3) + ', risk tozu alinan ' + riskAl(rs.Bg));
   [rs.A, rs.Bg].forEach(L => L.forEach(r => { assert.ok(!r.bitti && r.mesafe >= RISK_MESAFE && r.riskAl === 0 && r.sersem === 0 && r.zemin === 0, 'tohum kosusu'); }));
