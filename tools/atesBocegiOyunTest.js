@@ -258,6 +258,47 @@ dene('gercek market.js + katalog: 10 temanin palet sonucu isikCoz ile birebir (p
 });
 
 // ---------------------------------------------------------------
+// Tema gorselligi (tasarim 12.3): halo halkasi, bocek govdesi, onbellek
+// ---------------------------------------------------------------
+const TEMA_PAL = { isik: '#FFD36A', toz: '#FFE9A8', vurgu: '#4FD98A', karanlik: '#0A0B12', iz: { renk: '#E8566A', sekil: 'cizgi' }, animasyon: '',
+  bolgeler: ['#0A3E25', '#3E1660', '#0E2A6E', '#56301A'], engel: { dolgu: '#0E1018', kenar: '#FFE7A8' },
+  govde: { koyu: '#0E1018', kin: '#5A1A2C', plaka: '#1C3C78', kanat: '#FFF2C8' }, halo: '#C080FF', haloHalka: 0.18, uzak: '#A06AE0', tehlike: { ton: '#E8566A', bitki: '#4FD98A' } };
+function temali(o, p) { o.sb.AppMarket = { aktif: () => ({}), isikCoz: () => JSON.parse(JSON.stringify(p)) }; o.O.temaDegisti(); }
+function kayitliKare(o) {          // bir karede: cagrilar + atanan stiller (fillStyle/strokeStyle) sirayla
+  o.log = []; const eski = o.alfaAc; o.alfaAc = false; o.kare(1); const l = o.log; o.log = null; o.alfaAc = eski; return l;
+}
+const KK = AB.AYAR.adalet.KARARTMA;
+const tamKare = c => c[0] === 'fillRect' && c[1][0] === -KK && c[1][1] === -KK && c[1][2] === 2 * KK;
+
+dene('halo halkasi: yerlesikte yok (karanlik deligi tek dolgu), temada karanlik deliginden sonra ikinci tam dolgu; kare basina gradyan uretilmez', () => {
+  const o = ortam(); o.yeni(); o.kare(2);
+  let l = kayitliKare(o);
+  assert.strictEqual(l.filter(tamKare).length, 1, 'yerlesik: yalniz delik');
+  assert.strictEqual(l.filter(c => /create(Radial|Linear)Gradient/.test(c[0])).length, 0, 'kare basina gradyan');
+  temali(o, TEMA_PAL); o.kare(2);
+  l = kayitliKare(o);
+  assert.strictEqual(l.filter(tamKare).length, 2, 'tema: delik + halo halkasi');
+  assert.strictEqual(l.filter(c => /create(Radial|Linear)Gradient/.test(c[0])).length, 0, 'kare basina gradyan (tema)');
+  temali(o, Object.assign({}, TEMA_PAL, { haloHalka: 0 })); o.kare(2);
+  assert.strictEqual(kayitliKare(o).filter(tamKare).length, 1, 'haloHalka 0: halka yok');
+});
+
+dene('halo halkasi cemberin icine girmez (kaynak): ilk durak 1/KARARTMA saydam, tepe HALO_TEPE in (1, KARARTMA), sonerken isikla solar', () => {
+  const tepe = +/HALO_TEPE = ([0-9.]+)/.exec(KAYNAK)[1];
+  assert(tepe > 1 && tepe < KK, 'HALO_TEPE ' + tepe);
+  const g = /haloGrad = kctx\.createRadialGradient[\s\S]*?\n    \}/.exec(KAYNAK);
+  assert(g, 'halo gradyani bulunamadi');
+  assert(/addColorStop\(0, rgba\(pal\.halo, 0\)\);\s*haloGrad\.addColorStop\(1 \/ AD\.KARARTMA, rgba\(pal\.halo, 0\)\);/.test(g[0]), 'cember ici saydam');
+  assert(/if \(haloGrad\) \{[^}]*kctx\.globalAlpha = f;/.test(KAYNAK), 'sonmeyle solar');
+});
+
+dene('bocek govdesi temadan: bocekCiz sabit BOCEK_KOYU/KIN/PLAKA/KANAT kullanmaz, rk (temadan) kullanir (kaynak)', () => {
+  const g = /function bocekCiz[\s\S]*?\n  \}/.exec(KAYNAK)[0];
+  assert(!/BOCEK_(KOYU|KIN|PLAKA|KANAT)/.test(g), 'bocekCiz sabit govde rengi kullaniyor');
+  assert(/rk\.koyu/.test(g) && /rk\.kin/.test(g) && /rk\.plaka/.test(g) && /rk\.kanat/.test(g), 'rk govde alanlari');
+});
+
+// ---------------------------------------------------------------
 // Karanliktasuzul: geri tusu, yutulan toz, bomba, sarmasik
 // ---------------------------------------------------------------
 const CORE = fs.readFileSync(path.join(__dirname, '..', 'js', 'core.js'), 'utf8');

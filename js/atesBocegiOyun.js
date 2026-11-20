@@ -29,10 +29,11 @@
   var BOMBA_DIKEN = 8;                                             // diken sayisi (renk korlugunde sekil ayrimi: toz duz daire)
   var KATMAN = { mantarKap: 0.3, mantarHale: 0.16, ay: 0.12, sis: 0.5, sisAlfa: 0.14, uzak: 0.22, huzme: 0.16, sisBant: 0.16, yakin: 0.42 };   // arka plan katman karisimlari (test okur)
   var UZAK_MAVI = '#7F98C0';                                        // uzak katman soluk mavi tonu (tema testi okur)
-  var BOCEK_KOYU = '#1A1410', BOCEK_KIN = '#2E2219', BOCEK_PLAKA = '#3A2C20', BOCEK_KANAT = '#FFFFFF';   // bocek sabit koyu parcalari
+  var BOCEK_KOYU = '#1A1410', BOCEK_KIN = '#2E2219', BOCEK_PLAKA = '#3A2C20', BOCEK_KANAT = '#FFFFFF';   // yerlesik bocek govdesi (tema pal.govde; toz cekirdegi her temada BOCEK_KANAT)
   var BOLGE_TON = ['#24402F', '#2E2A44', '#1F3F4C', '#3A4031'];            // orman, magara, nehir, bataklik
   var PARALAKS = [0.2, 0.5, 1];       // uc katmanin hiz carpani
   var ISIK_KARISIM = 0.12;            // zemine isik tonu bindirme (tasarim 5)
+  var HALO_TEPE = 1.07;               // halo halkasinin en yogun yeri (R'nin kati); halka R ile KARARTMA*R arasinda, cember icine girmez (12.3)
   var IZ_SANIYE = 0.5, IZ_ORNEK = 30, IZ_ALFA = 0.6;
   var PARCACIK_TAVAN = 24, PARCACIK_OMUR = 0.6, PARCACIK_HIZ = 40, PATLAMA_YUVA = 8;   // son PATLAMA_YUVA yuva lav izine verilmez (bomba patlamasi icin ayrilir)
   var BOLGE_GECIS = 1.5;              // arka plan capraz gecis suresi (sn)
@@ -89,7 +90,7 @@
   var dpr = 1, cssW = 0, cssH = 0, olcek = 1, ox = 0, oy = 0, S = 1, pxD = 1;   // pxD: 1 cihaz pikseli (dunya birimi)
   var DAL_TAVAN = 24, DAL_PAY = 0.3, dalAnahtar = [], dalTuval = [], dalSira = [], dalSayac = 0;   // dal sprite onbellegi (sinirli LRU)
   // kare basina ayirma olmasin diye hazir nesneler
-  var kc = null, kctx = null, karanlikGrad = null, karanlikRenkStr = '';
+  var kc = null, kctx = null, karanlikGrad = null, haloGrad = null, karanlikRenkStr = '';
   var katmanlar = [null, null, null, null];   // bolge -> [tuval, tuval, tuval]
   var sprBocek = null, sprToz = null, sprKivilcim = null, sprBomba = null, sprBombaHale = null;
   var paletAnahtar = '', bocekParlak = '#FFFFFF';
@@ -417,17 +418,25 @@
     rk = renkCoz(pal);
     katmanlar = [null, null, null, null];
     for (k = 0; k < DAL_TAVAN; k++) { dalAnahtar[k] = -1; dalSira[k] = 0; dalTuval[k] = null; }   // olcek / dpr / tema degisti: dal onbellegi temizlenir
-    sprBocek = parilti(M.R_GORSEL * 4, pal.isik);
+    sprBocek = parilti(M.R_GORSEL * 4, pal.halo);              // bocek halesi: temanin halo rengi (yerlesikte isik)
     sprToz = parilti(M.R_TOZ_GORSEL * 3.2, pal.toz);
     sprKivilcim = parilti(M.R_KIVILCIM_GORSEL * 3, pal.vurgu);
     sprBomba = bombaSprite();
     sprBombaHale = bombaHaleSprite();
-    bocekParlak = karistir(pal.isik, BOCEK_KANAT, 0.55);
+    bocekParlak = karistir(pal.isik, rk.kanat, 0.55);
     kc = yeniTuval(W * S, H * S); kctx = kc.getContext('2d');
     karanlikGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
     karanlikGrad.addColorStop(0, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    haloGrad = null;                                             // halo halkasi: karanligin gecis bandinda tema halo rengi (yerlesikte yok)
+    if (pal.haloHalka > 0) {
+      haloGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
+      haloGrad.addColorStop(0, rgba(pal.halo, 0));
+      haloGrad.addColorStop(1 / AD.KARARTMA, rgba(pal.halo, 0));
+      haloGrad.addColorStop(HALO_TEPE / AD.KARARTMA, rgba(pal.halo, pal.haloHalka));
+      haloGrad.addColorStop(1, rgba(pal.halo, 0));
+    }
     karanlikRenkStr = rgba(pal.karanlik, KARANLIK_OPAKLIK);
     for (k = 0; k < katmanlar.length; k++) bolgeKur(k);     // hepsi onceden: bolge gecisinde takilma olmasin
     paletAnahtar = JSON.stringify(pal);
@@ -829,25 +838,25 @@
     c.drawImage(sprBocek, -M.R_GORSEL * 4, -M.R_GORSEL * 4, M.R_GORSEL * 8, M.R_GORSEL * 8);
     c.scale(M.R_GORSEL / 2.4, M.R_GORSEL / 2.4);                  // asagidaki sabit olculer 2,4 yaricapina gore; gorsel buyudukce birlikte olceklenir
     c.lineJoin = 'round'; c.lineCap = 'round';
-    c.fillStyle = BOCEK_KANAT; c.strokeStyle = BOCEK_KANAT; c.lineWidth = 0.08;          // kanatlar: arka cift, on cift
+    c.fillStyle = rk.kanat; c.strokeStyle = rk.kanat; c.lineWidth = 0.08;                // kanatlar: arka cift, on cift (renk temadan)
     c.globalAlpha = 0.26 * g; kanatCiz(c, 0.15, -0.25, 1.5, 0.5, 0.75 + kanat2 * 0.9, 1); kanatCiz(c, 0.15, 0.25, 1.5, 0.5, 0.75 + kanat2 * 0.9, 0);
     c.globalAlpha = 0.4 * g; kanatCiz(c, 0.2, -0.3, 1.7, 0.55, 0.55 + kanat * 0.9, 1); kanatCiz(c, 0.2, 0.3, 1.7, 0.55, 0.55 + kanat * 0.9, 0);
     c.globalAlpha = g; c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.1;
-    c.fillStyle = BOCEK_KOYU; c.beginPath(); c.ellipse(-1.3, 0, 1.45, 0.9, 0, 0, 6.2832); c.fill(); c.stroke();          // karin
+    c.fillStyle = rk.koyu; c.beginPath(); c.ellipse(-1.3, 0, 1.45, 0.9, 0, 0, 6.2832); c.fill(); c.stroke();             // karin (govde renkleri temadan)
     c.globalAlpha = (0.75 + 0.25 * nb) * g; c.fillStyle = pal.isik;                                                    // fener
     c.beginPath(); c.ellipse(-1.95, 0, 0.8 * (1 + 0.08 * nb), 0.62, 0, 0, 6.2832); c.fill();
     c.globalAlpha = (0.6 + 0.4 * nb) * g; c.fillStyle = bocekParlak;
     c.beginPath(); c.ellipse(-2.05, 0, 0.42, 0.3, 0, 0, 6.2832); c.fill();
-    c.globalAlpha = 0.55 * g; c.strokeStyle = BOCEK_KOYU; c.lineWidth = 0.09;                                          // karin segmentleri
+    c.globalAlpha = 0.55 * g; c.strokeStyle = rk.koyu; c.lineWidth = 0.09;                                             // karin segmentleri
     c.beginPath(); c.moveTo(-1.75, -0.55); c.lineTo(-1.75, 0.55); c.moveTo(-2.2, -0.45); c.lineTo(-2.2, 0.45); c.stroke();
-    c.globalAlpha = g; c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.1; c.fillStyle = BOCEK_KIN;                          // kanat kinlari
+    c.globalAlpha = g; c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.1; c.fillStyle = rk.kin;                             // kanat kinlari
     c.beginPath(); c.ellipse(-0.45, -0.4, 1.1, 0.44, -0.12, 0, 6.2832); c.fill(); c.stroke();
     c.beginPath(); c.ellipse(-0.45, 0.4, 1.1, 0.44, 0.12, 0, 6.2832); c.fill(); c.stroke();
-    c.fillStyle = BOCEK_PLAKA; c.beginPath(); c.ellipse(0.5, 0, 0.75, 0.68, 0, 0, 6.2832); c.fill(); c.stroke();          // gogus
+    c.fillStyle = rk.plaka; c.beginPath(); c.ellipse(0.5, 0, 0.75, 0.68, 0, 0, 6.2832); c.fill(); c.stroke();             // gogus
     c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.2;                                                                  // antenler (kontur + koyu)
     c.beginPath(); c.moveTo(1.6, -0.2); c.quadraticCurveTo(2.4, -0.8 + sw, 3.0, -0.75 + sw); c.moveTo(1.6, 0.2); c.quadraticCurveTo(2.4, 0.8 - sw, 3.0, 0.75 - sw);
-    c.stroke(); c.strokeStyle = BOCEK_KOYU; c.lineWidth = 0.08; c.stroke();
-    c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.1; c.fillStyle = BOCEK_KOYU;
+    c.stroke(); c.strokeStyle = rk.koyu; c.lineWidth = 0.08; c.stroke();
+    c.strokeStyle = BOCEK_KONTUR; c.lineWidth = 0.1; c.fillStyle = rk.koyu;
     c.beginPath(); c.arc(1.35, 0, 0.5, 0, 6.2832); c.fill(); c.stroke();                                               // bas
     c.fillStyle = bocekParlak; c.globalAlpha = 0.85 * g;
     c.beginPath(); c.arc(1.55, -0.24, 0.1, 0, 6.2832); c.moveTo(1.65, 0.24); c.arc(1.55, 0.24, 0.1, 0, 6.2832); c.fill();   // gozler
@@ -973,6 +982,11 @@
       kctx.fillStyle = karanlikGrad;
       kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
       kctx.globalCompositeOperation = 'source-over';
+      if (haloGrad) {                                            // ayni donusumle tek dolgu; sonerken isikla birlikte solar
+        kctx.globalAlpha = f; kctx.fillStyle = haloGrad;
+        kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
+        kctx.globalAlpha = 1;
+      }
     }
   }
 
