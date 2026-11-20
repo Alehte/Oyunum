@@ -1,5 +1,7 @@
-// atesBocegiTemaTest.js — Ates Bocegi temalari: katalog, kontrast, isikCoz, onizleme.
-// Tasarim: docs/atesBocegi-tasarim.md bolum 5, 6, 8.3, 8.6.
+// atesBocegiTemaTest.js — Ates Bocegi temalari: katalog, kontrast, isikCoz, onizleme, tema gorselligi.
+// Tasarim: docs/atesBocegi-tasarim.md bolum 5, 6, 8.3, 8.6, 12.3.
+// Tema gorselligi (12.3): her tema bolge tonlari, engel, bocek govdesi, halo, uzak katman ve tehlike tonunu
+// isik alaninda tasir; kontrast kurallari temadan cozulen (isikCoz) bu renklerle hesaplanir.
 // Calistirma:  node tools/atesBocegiTemaTest.js
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
@@ -78,16 +80,53 @@ const oran = (a, b, bicim) => {
   const la = parlaklik(dogrusal(a), bicim), lb = parlaklik(dogrusal(b), bicim);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 };
-
+// CIELAB (D65) ve CIEDE2000 (Sharma, Wu, Dalal 2005). labDogrusal: dogrusal RGB 0-1 girdi.
+function labDogrusal(r, g, b) {
+  const X = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047, Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b, Z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883;
+  const f = t => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116), fx = f(X), fy = f(Y), fz = f(Z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+const labOf = c => { const l = dogrusal(c); return labDogrusal(l[0], l[1], l[2]); };   // sRGB 0-1 girdi
+function de2000(p, q) {
+  const R = Math.PI / 180, [L1, a1, b1] = p, [L2, a2, b2] = q, p7 = x => Math.pow(x, 7), P25 = p7(25);
+  const Cm = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2, G = 0.5 * (1 - Math.sqrt(p7(Cm) / (p7(Cm) + P25)));
+  const ap1 = a1 * (1 + G), ap2 = a2 * (1 + G), C1 = Math.hypot(ap1, b1), C2 = Math.hypot(ap2, b2);
+  let h1 = Math.atan2(b1, ap1) / R; if (h1 < 0) h1 += 360;
+  let h2 = Math.atan2(b2, ap2) / R; if (h2 < 0) h2 += 360;
+  let dh = 0; if (C1 * C2 !== 0) { dh = h2 - h1; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+  const dL = L2 - L1, dC = C2 - C1, dH = 2 * Math.sqrt(C1 * C2) * Math.sin(dh / 2 * R), Lm = (L1 + L2) / 2, Cpm = (C1 + C2) / 2;
+  let hm = h1 + h2; if (C1 * C2 !== 0) hm = Math.abs(h1 - h2) > 180 ? (h1 + h2 < 360 ? (h1 + h2 + 360) / 2 : (h1 + h2 - 360) / 2) : (h1 + h2) / 2;
+  const T = 1 - 0.17 * Math.cos((hm - 30) * R) + 0.24 * Math.cos(2 * hm * R) + 0.32 * Math.cos((3 * hm + 6) * R) - 0.20 * Math.cos((4 * hm - 63) * R);
+  const dT = 30 * Math.exp(-Math.pow((hm - 275) / 25, 2)), RC = 2 * Math.sqrt(p7(Cpm) / (p7(Cpm) + P25));
+  const SL = 1 + 0.015 * Math.pow(Lm - 50, 2) / Math.sqrt(20 + Math.pow(Lm - 50, 2)), SC = 1 + 0.045 * Cpm, SH = 1 + 0.015 * Cpm * T, RT = -Math.sin(2 * dT * R) * RC;
+  return Math.sqrt(Math.pow(dL / SL, 2) + Math.pow(dC / SC, 2) + Math.pow(dH / SH, 2) + RT * (dC / SC) * (dH / SH));
+}
+const EN_DUSUK = {};
+const izle = (ad, o) => { if (!(ad in EN_DUSUK) || o < EN_DUSUK[ad]) EN_DUSUK[ad] = o; };
 // ---- sabitler koddan okunur (kopya yok) ----
 const sabit = (kaynak, ad) => { const m = new RegExp(ad + " = '(#[0-9A-Fa-f]{6})'").exec(kaynak); assert(m, ad + ' bulunamadi'); return m[1]; };
 const ENGEL_DOLGU = sabit(OYUN, 'ENGEL_DOLGU'), ENGEL_KENAR = sabit(OYUN, 'ENGEL_KENAR');
 const bm = /BOLGE_TON = \[([^\]]*)\]/.exec(OYUN);
-const BOLGE = bm[1].match(/#[0-9A-Fa-f]{6}/g);
+const BOLGE = bm[1].match(/#[0-9A-Fa-f]{6}/g);          // yerlesik bolge tonlari (temalar isik.bolgeler ile verir)
 const ISIK_KARISIM = +/ISIK_KARISIM = ([0-9.]+)/.exec(OYUN)[1];
-const EDI = { isik: 0, toz: 0 };
 const BICIMLER = Object.keys(VIENOT);
 const YERLESIK_PALET = M.isikCoz({ yerlesik: true });
+// Temadan cozulen paletler (oyun ayni isikCoz ciktisini kullanir; birebirlik atesBocegiOyunTest.js'te): 9 tema + yerlesik
+const PALET = {};
+TEMALAR.forEach(t => { PALET[t.id] = M.isikCoz(t.isik); });
+PALET.yerlesik = YERLESIK_PALET;
+const zeminOf = (P, bi) => karistir(P.bolgeler[bi], P.isik, ISIK_KARISIM);
+// Tehlike renkleri: oyundaki renkCoz ile ayni formul (taban renk + tema tonu, sabit oran; ton yoksa taban)
+const TEHLIKE_KARISIM = +/TEHLIKE_KARISIM = ([0-9.]+)/.exec(OYUN)[1], BITKI_KARISIM = +/BITKI_KARISIM = ([0-9.]+)/.exec(OYUN)[1];
+const TABAN = { BOMBA_KENAR: sabit(OYUN, 'BOMBA_KENAR'), BOMBA_CEKIRDEK: sabit(OYUN, 'BOMBA_CEKIRDEK'), UNLEM_RENK: sabit(OYUN, 'UNLEM_RENK'),
+  SARMASIK_GOVDE: sabit(OYUN, 'SARMASIK_GOVDE'), SARMASIK_YAPRAK: sabit(OYUN, 'SARMASIK_YAPRAK') };
+function tehlikeRenk(P) {   // ad -> sRGB 0-1
+  const o = {}, t = P.tehlike.ton, b = P.tehlike.bitki;
+  const yuvarla = c => c.map(v => Math.round(v * 255) / 255);         // oyundaki karistir hex'e yuvarlar
+  ['BOMBA_KENAR', 'BOMBA_CEKIRDEK', 'UNLEM_RENK'].forEach(k => { o[k] = t ? yuvarla(karistir(TABAN[k], t, TEHLIKE_KARISIM)) : rgb(TABAN[k]); });
+  ['SARMASIK_GOVDE', 'SARMASIK_YAPRAK'].forEach(k => { o[k] = b ? yuvarla(karistir(TABAN[k], b, BITKI_KARISIM)) : rgb(TABAN[k]); });
+  return o;
+}
 
 console.log('Ates Bocegi tema katalogu');
 
@@ -103,6 +142,57 @@ dene('9 aktif tema ve her birinde tam, gecerli isik alani', () => {
     else assert(HEX.test(i.iz.renk), t.id + ': iz.renk');
     if (i.iz.renk2 !== undefined) assert(HEX.test(i.iz.renk2), t.id + ': iz.renk2');
   });
+});
+
+dene('tema gorselligi alanlari (12.3): 9 temada bolgeler (4), engel, govde, halo, haloHalka, uzak, tehlike tam ve gecerli', () => {
+  TEMALAR.forEach(t => {
+    const i = t.isik;
+    assert(Array.isArray(i.bolgeler) && i.bolgeler.length === 4 && i.bolgeler.every(c => HEX.test(c)), t.id + ': bolgeler');
+    assert(i.engel && HEX.test(i.engel.dolgu) && HEX.test(i.engel.kenar), t.id + ': engel');
+    assert(i.govde && ['koyu', 'kin', 'plaka', 'kanat'].every(k => HEX.test(i.govde[k])), t.id + ': govde');
+    assert(HEX.test(i.halo) && typeof i.haloHalka === 'number' && i.haloHalka > 0 && i.haloHalka <= 0.3, t.id + ': halo');
+    assert(HEX.test(i.uzak), t.id + ': uzak');
+    assert(i.tehlike && HEX.test(i.tehlike.ton) && HEX.test(i.tehlike.bitki), t.id + ': tehlike');
+    // isikCoz alanlari aynen tasir (bozulmadan)
+    const P = PALET[t.id];
+    assert.deepStrictEqual(Array.from(P.bolgeler), Array.from(i.bolgeler), t.id);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(P.engel)), JSON.parse(JSON.stringify(i.engel)), t.id);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(P.govde)), JSON.parse(JSON.stringify(i.govde)), t.id);
+    assert(P.halo === i.halo && P.haloHalka === i.haloHalka && P.uzak === i.uzak && P.tehlike.ton === i.tehlike.ton && P.tehlike.bitki === i.tehlike.bitki, t.id);
+  });
+});
+
+dene('yerlesik palet oyunun sabitleriyle birebir (varsayilan gorunum korunur): bolge, engel, bocek, uzak; halka 0, tehlike tonu yok', () => {
+  const Y = YERLESIK_PALET;
+  assert.deepStrictEqual(Array.from(Y.bolgeler), BOLGE);
+  assert.strictEqual(Y.engel.dolgu, ENGEL_DOLGU); assert.strictEqual(Y.engel.kenar, ENGEL_KENAR);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(Y.govde)), { koyu: sabit(OYUN, 'BOCEK_KOYU'), kin: sabit(OYUN, 'BOCEK_KIN'), plaka: sabit(OYUN, 'BOCEK_PLAKA'), kanat: sabit(OYUN, 'BOCEK_KANAT') });
+  assert.strictEqual(Y.uzak, sabit(OYUN, 'UZAK_MAVI'));
+  assert.strictEqual(Y.halo, Y.isik); assert.strictEqual(Y.haloHalka, 0);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(Y.tehlike)), { ton: '', bitki: '' });
+});
+
+dene('testler yeni renkleri gercekten kapsar: her temanin bolge/engel/govde/uzak/tehlike degerleri yerlesikten farkli', () => {
+  const Y = YERLESIK_PALET;
+  TEMALAR.forEach(t => {
+    const P = PALET[t.id];
+    P.bolgeler.forEach((c, i) => assert.notStrictEqual(c, Y.bolgeler[i], t.id + ' bolge' + i + ' yerlesikle ayni'));
+    assert(P.engel.dolgu !== Y.engel.dolgu && P.engel.kenar !== Y.engel.kenar, t.id + ' engel');
+    assert(P.govde.koyu !== Y.govde.koyu && P.uzak !== Y.uzak && P.tehlike.ton && P.tehlike.bitki, t.id);
+  });
+});
+
+dene('bolge kimligi: her temada 4 bolge tonu birbirinden ayrisir (CIEDE2000 >= 5) ve hepsi koyu (bolge zemini engel kenarindan koyu)', () => {
+  const kotu = [];
+  Object.keys(PALET).forEach(id => {
+    const P = PALET[id];
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) {
+      const d = de2000(labOf(rgb(P.bolgeler[i])), labOf(rgb(P.bolgeler[j])));
+      izle('bolge tonlari arasi dE00', d);
+      if (d < 5) kotu.push(id + ' b' + i + '/b' + j + ' dE ' + d.toFixed(2));
+    }
+  });
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
 dene('varsayilan tema isik: YERLESIK', () => {
@@ -129,30 +219,31 @@ dene('animasyon yalniz efsanevide (lav)', () => {
   });
 });
 
-console.log('Okunabilirlik (bolum 6)');
+console.log('Okunabilirlik (bolum 6, 12.3: temadan cozulen renklerle)');
 
 const sonuclar = [];   // {tema, bolge, kural, bicim, oran}
-function kontrastHesapla(ad, isik, toz, vurgu) {
-  BOLGE.forEach((ton, bi) => {
-    const zemin = karistir(ton, isik, ISIK_KARISIM);
-    const dolgu = rgb(ENGEL_DOLGU), kenar = rgb(ENGEL_KENAR);
+// K1-K5 temanin kendi bolge tonlari, engel renkleri, isik/toz/vurgusu ile (zemin = karistir(bolgeler[b], isik, ISIK_KARISIM))
+function kontrastHesapla(ad, P, hedef) {
+  const dolgu = rgb(P.engel.dolgu), kenar = rgb(P.engel.kenar);
+  P.bolgeler.forEach((ton, bi) => {
+    const zemin = karistir(ton, P.isik, ISIK_KARISIM);
     BICIMLER.forEach(b => {
-      const ekle = (kural, o) => sonuclar.push({ tema: ad, bolge: bi, kural, bicim: b, oran: o });
+      const ekle = (kural, o) => hedef.push({ tema: ad, bolge: bi, kural, bicim: b, oran: o });
       ekle('K1', oran(kenar, zemin, b));
-      ekle('K2', oran(rgb(isik), zemin, b));
-      ekle('K3', oran(rgb(toz), zemin, b));
-      ekle('K4', oran(rgb(vurgu), zemin, b));
-      ekle('K5', oran(rgb(toz), dolgu, b));
+      ekle('K2', oran(rgb(P.isik), zemin, b));
+      ekle('K3', oran(rgb(P.toz), zemin, b));
+      ekle('K4', oran(rgb(P.vurgu), zemin, b));
+      ekle('K5', oran(rgb(P.toz), dolgu, b));
     });
   });
 }
-TEMALAR.forEach(t => kontrastHesapla(t.id, t.isik.isik, t.isik.toz, t.isik.vurgu));
+TEMALAR.forEach(t => kontrastHesapla(t.id, PALET[t.id], sonuclar));
 const ana = sonuclar.length;
-kontrastHesapla('yerlesik', YERLESIK_PALET.isik, YERLESIK_PALET.toz, YERLESIK_PALET.vurgu);
+kontrastHesapla('yerlesik', YERLESIK_PALET, sonuclar);
 
 const ESIK = { K1: 3.0, K2: 3.0, K3: 3.0, K4: 3.0, K5: 4.5, K6: 4.5 };
 
-dene('540 oran (9 tema x 4 bolge x K1-K5 x 3 gorme bicimi) esik ustunde', () => {
+dene('540 oran (9 tema x 4 bolge x K1-K5 x 3 gorme bicimi) esik ustunde (temanin bolge tonu + engel renkleri)', () => {
   assert.strictEqual(ana, 540);
   const kotu = sonuclar.slice(0, ana).filter(s => s.oran < ESIK[s.kural]);
   assert.strictEqual(kotu.length, 0, kotu.map(s => s.tema + ' bolge' + s.bolge + ' ' + s.kural + ' ' + s.bicim + ' ' + s.oran.toFixed(2)).join('; '));
@@ -165,19 +256,45 @@ dene('yerlesik palet 4 bolge x K1-K5 x 3 bicim (60 oran) esik ustunde', () => {
   assert.strictEqual(kotu.length, 0, kotu.map(s => 'bolge' + s.bolge + ' ' + s.kural + ' ' + s.bicim + ' ' + s.oran.toFixed(2)).join('; '));
 });
 
-dene('K1 ek: engel kenari / paralaks katman renkleri >= 3,0 (oyundaki gercek hesap, 3 gorme bicimi)', () => {
+dene('kontrast hesabi bozuk renkleri yakalar (negatif kontrol): engel kenari = bolge tonu, toz = engel dolgusu, bolge tonu = isik', () => {
+  const P = PALET.toprak, bozuk = s => { const h = []; kontrastHesapla('bozuk', s, h); return h.filter(x => x.oran < ESIK[x.kural]).map(x => x.kural); };
+  const kopya = Object.assign({}, P, { engel: { dolgu: P.engel.dolgu, kenar: P.bolgeler[0] } });
+  assert(bozuk(kopya).indexOf('K1') >= 0, 'K1 yakalanmadi');
+  assert(bozuk(Object.assign({}, P, { toz: P.engel.dolgu })).indexOf('K5') >= 0, 'K5 yakalanmadi');
+  assert(bozuk(Object.assign({}, P, { bolgeler: [P.isik, P.isik, P.isik, P.isik] })).indexOf('K2') >= 0, 'K2 yakalanmadi');
+});
+
+dene('K1 ek: engel kenari / paralaks katman renkleri >= 3,0 (oyundaki gercek hesap, temanin bolge tonlari, 3 gorme bicimi)', () => {
   const kat = /var koyu = karistir\(zemin, '#000000', kat === 0 \? ([0-9.]+) : ([0-9.]+)\), acik = karistir\(zemin, '#FFFFFF', ([0-9.]+)\)/.exec(OYUN);
   assert(kat, 'katmanCiz hesabi okunamadi');
-  const k0 = +kat[1], k1 = +kat[2], ac = +kat[3];
-  const kenar = rgb(ENGEL_KENAR), kotu = [];
-  TEMALAR.map(t => ({ id: t.id, isik: t.isik.isik })).concat([{ id: 'yerlesik', isik: YERLESIK_PALET.isik }]).forEach(t => {
-    BOLGE.forEach((ton, bi) => {
-      const zemin = karistir(ton, t.isik, ISIK_KARISIM), mix = (c, h, x) => c.map(v => v + (h - v) * x);
+  const k0 = +kat[1], k1 = +kat[2], ac = +kat[3], kotu = [];
+  Object.keys(PALET).forEach(id => {
+    const P = PALET[id], kenar = rgb(P.engel.kenar);
+    P.bolgeler.forEach((ton, bi) => {
+      const zemin = zeminOf(P, bi), mix = (c, h, x) => c.map(v => v + (h - v) * x);
       const katmanlar = { 'k0 koyu': mix(zemin, 0, k0), 'k1 koyu': mix(zemin, 0, k1), 'k2 acik': mix(zemin, 1, ac) };
       Object.keys(katmanlar).forEach(ad => BICIMLER.forEach(b => {
         const o = oran(kenar, katmanlar[ad], b);
-        if (o < 3.0) kotu.push(t.id + ' bolge' + bi + ' ' + ad + ' ' + b + ' ' + o.toFixed(2));
+        if (o < 3.0) kotu.push(id + ' bolge' + bi + ' ' + ad + ' ' + b + ' ' + o.toFixed(2));
       }));
+    });
+  });
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('bocek (12.3): fener (isik) / govde koyusu >= 3,0; kanat / zemin >= 3,0; govde koyusu her bolge zemininden koyu (10 palet, 3 gorme bicimi)', () => {
+  const kotu = [];
+  Object.keys(PALET).forEach(id => {
+    const P = PALET[id], koyu = rgb(P.govde.koyu), kin = rgb(P.govde.kin), plaka = rgb(P.govde.plaka);
+    BICIMLER.forEach(b => {
+      const L = c => parlaklik(dogrusal(c), b), f = oran(rgb(P.isik), koyu, b); izle('bocek fener/govde', f);
+      if (f < 3.0) kotu.push(id + ' fener/govde ' + b + ' ' + f.toFixed(2));
+      if (!(L(koyu) <= L(kin) && L(koyu) <= L(plaka))) kotu.push(id + ' govde koyusu kin/plakadan acik ' + b);
+      P.bolgeler.forEach((t, bi) => {
+        const z = zeminOf(P, bi), k = oran(rgb(P.govde.kanat), z, b); izle('bocek kanat/zemin', k);
+        if (k < 3.0) kotu.push(id + ' b' + bi + ' kanat ' + b + ' ' + k.toFixed(2));
+        if (!(L(koyu) < L(z))) kotu.push(id + ' b' + bi + ' govde koyusu zeminden acik ' + b);
+      });
     });
   });
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
@@ -215,35 +332,28 @@ dene('kivilcim / toz cizim yaricap orani >= 1,8 (AYAR)', () => {
   assert(h.R_KIVILCIM_GORSEL / h.R_TOZ_GORSEL >= 1.8, 'oran ' + (h.R_KIVILCIM_GORSEL / h.R_TOZ_GORSEL));
 });
 
-dene('engel sabit renkleri kodda tek yerde tanimli (js/*.js)', () => {
+dene('yerlesik engel / bolge / bocek renkleri: oyunda tek sabit, market.js yerlesik paletinde ayni deger (iki yerlesik palet birebir)', () => {
   const dosyalar = fs.readdirSync(path.join(KOK, 'js')).filter(f => /\.js$/.test(f));
-  [ENGEL_DOLGU, ENGEL_KENAR].forEach(r => {
+  [ENGEL_DOLGU, ENGEL_KENAR].concat(BOLGE).forEach(r => {
     const bulunan = [];
     dosyalar.forEach(f => {
       const n = (oku('js/' + f).match(new RegExp(r, 'gi')) || []).length;
       if (n) bulunan.push(f + ':' + n);
     });
-    assert.deepStrictEqual(bulunan, ['atesBocegiOyun.js:1'], r + ' -> ' + bulunan.join(', '));
+    assert.deepStrictEqual(bulunan, ['atesBocegiOyun.js:1', 'market.js:1'], r + ' -> ' + bulunan.join(', '));
   });
-  // temalar engel rengini tasiyamaz
-  TEMALAR.forEach(t => assert(!/0B0F14|E9EDF2/i.test(JSON.stringify(t.isik)), t.id));
 });
 
-console.log('Karanliktasuzul: bomba / unlem / sarmasik sabit renkleri ve yeni arka plan katmanlari');
+console.log('Karanliktasuzul: bomba / unlem / sarmasik (temadan tonlu, silüet sabit) ve arka plan katmanlari');
 
-const BOMBA_KENAR = sabit(OYUN, 'BOMBA_KENAR'), BOMBA_CEKIRDEK = sabit(OYUN, 'BOMBA_CEKIRDEK'), UNLEM_RENK = sabit(OYUN, 'UNLEM_RENK');
-const SARMASIK_GOVDE = sabit(OYUN, 'SARMASIK_GOVDE'), SARMASIK_YAPRAK = sabit(OYUN, 'SARMASIK_YAPRAK');
-const SABIT_TEHLIKE = { BOMBA_KENAR, BOMBA_CEKIRDEK, UNLEM_RENK, SARMASIK_GOVDE, SARMASIK_YAPRAK };
-const TUM_TEMA = TEMALAR.map(t => ({ id: t.id, p: t.isik })).concat([{ id: 'yerlesik', p: YERLESIK_PALET }]);
+const TUM_TEMA = Object.keys(PALET).map(id => ({ id, p: PALET[id], th: tehlikeRenk(PALET[id]) }));
 const KATMAN = {};
 { const m = /var KATMAN = \{([^}]*)\}/.exec(OYUN); assert(m, 'KATMAN tablosu yok'); m[1].split(',').forEach(p => { const k = /(\w+):\s*([0-9.]+)/.exec(p); KATMAN[k[1]] = +k[2]; }); }
-const EN_DUSUK = {};
-const izle = (ad, o) => { if (!(ad in EN_DUSUK) || o < EN_DUSUK[ad]) EN_DUSUK[ad] = o; };
 
-dene('bomba / unlem / sarmasik sabit renkleri zemine >= 3,0 (10 palet x 4 bolge x 3 gorme bicimi, 600 oran)', () => {
+dene('bomba / unlem / sarmasik renkleri (temanin tehlike tonuyla) zemine >= 3,0 (10 palet x 4 bolge x 3 gorme bicimi, 600 oran)', () => {
   const kotu = []; let n = 0;
-  Object.keys(SABIT_TEHLIKE).forEach(ad => TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => BICIMLER.forEach(b => {
-    const o = oran(rgb(SABIT_TEHLIKE[ad]), karistir(ton, t.p.isik, ISIK_KARISIM), b); n++; izle(ad, o);
+  TUM_TEMA.forEach(t => Object.keys(t.th).forEach(ad => t.p.bolgeler.forEach((ton, bi) => BICIMLER.forEach(b => {
+    const o = oran(t.th[ad], zeminOf(t.p, bi), b); n++; izle(ad, o);
     if (o < 3.0) kotu.push(ad + ' ' + t.id + ' bolge' + bi + ' ' + b + ' ' + o.toFixed(2));
   }))));
   assert.strictEqual(n, 600); assert.strictEqual(kotu.length, 0, kotu.join('; '));
@@ -254,10 +364,21 @@ dene('bomba kenari ile toz renk korlugunde de ayrisir: parlaklik orani >= 1,5 (c
   // Asil ayrim SEKIL (asagidaki test): bu oran renk bilgisini ikinci kanal olarak korur.
   const kotu = [];
   TUM_TEMA.forEach(t => BICIMLER.forEach(b => {
-    const k = oran(rgb(BOMBA_KENAR), rgb(t.p.toz), b), c = oran(rgb(BOMBA_CEKIRDEK), rgb(t.p.toz), b);
+    const k = oran(t.th.BOMBA_KENAR, rgb(t.p.toz), b), c = oran(t.th.BOMBA_CEKIRDEK, rgb(t.p.toz), b);
     izle('bomba kenar/toz', k); izle('bomba cekirdek/toz', c);
     if (k < 1.5) kotu.push(t.id + ' kenar ' + b + ' ' + k.toFixed(2));
     if (c < 1.4) kotu.push(t.id + ' cekirdek ' + b + ' ' + c.toFixed(2));
+  }));
+  assert.strictEqual(kotu.length, 0, kotu.join('; '));
+});
+
+dene('tehlike renk ailesi korunur (12.3): ton orani <= 0,25; tonlu renk tabana CIEDE2000 <= 12, ton acisi farki <= 25 derece', () => {
+  assert(TEHLIKE_KARISIM > 0 && TEHLIKE_KARISIM <= 0.25 && BITKI_KARISIM > 0 && BITKI_KARISIM <= 0.25, 'oranlar ' + TEHLIKE_KARISIM + ' ' + BITKI_KARISIM);
+  const aci = c => { const l = labOf(c); return Math.atan2(l[2], l[1]) * 180 / Math.PI; }, kotu = [];
+  TUM_TEMA.forEach(t => Object.keys(t.th).forEach(ad => {
+    const taban = rgb(TABAN[ad]), d = de2000(labOf(taban), labOf(t.th[ad]));
+    let fa = Math.abs(aci(taban) - aci(t.th[ad])); if (fa > 180) fa = 360 - fa;
+    if (d > 12 || fa > 25) kotu.push(t.id + ' ' + ad + ' dE ' + d.toFixed(1) + ' aci ' + fa.toFixed(1));
   }));
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
@@ -271,29 +392,29 @@ dene('bomba / toz SEKIL ayrimi (renkten bagimsiz): diken sayisi 6-8, tozdan buyu
   assert(!/pal\.(isik|toz|vurgu|karanlik)/.test(/function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0]), 'bomba sprite temaya bagli degil');
 });
 
-dene('yeni sabit renkler js/*.js icinde tek yerde tanimli ve temalar tasiyamaz', () => {
+dene('tehlike taban renkleri js/*.js icinde tek yerde (atesBocegiOyun.js); temalar taban rengi degil yalniz ton tasir', () => {
   const dosyalar = fs.readdirSync(path.join(KOK, 'js')).filter(f => /\.js$/.test(f));
-  Object.keys(SABIT_TEHLIKE).forEach(ad => {
-    const r = SABIT_TEHLIKE[ad], bulunan = [];
+  Object.keys(TABAN).forEach(ad => {
+    const r = TABAN[ad], bulunan = [];
     dosyalar.forEach(f => { const n = (oku('js/' + f).match(new RegExp(r, 'gi')) || []).length; if (n) bulunan.push(f + ':' + n); });
     assert.deepStrictEqual(bulunan, ['atesBocegiOyun.js:1'], ad + ' ' + r + ' -> ' + bulunan.join(', '));
     TEMALAR.forEach(t => assert(JSON.stringify(t.isik).toUpperCase().indexOf(r.toUpperCase()) < 0, t.id + ' ' + ad));
   });
-  // yutulan toz cizilmez ve renk tema alanindan okunmaz: sarmasik/unlem/bomba cizimi pal.* kullanmaz
+  // sarmasik/unlem/bomba cizimi tema alanini dogrudan okumaz (renkler gorselKur'da cozulur)
   ['function sarmasikCiz', 'function ozIsikCiz'].forEach(fn => {
     const g = new RegExp(fn.replace(' ', '\\s+') + '[\\s\\S]*?\\n  \\}').exec(OYUN);
     assert(g && !/pal\./.test(g[0]), fn + ' pal.* kullanmamali');
   });
 });
 
-dene('mantar / ay / sis katmanlari: engel kenarindan her zaman koyu, kenar ve toz ile >= 3,0 (10 palet, 3 gorme bicimi)', () => {
+dene('mantar / ay / sis katmanlari: engel kenarindan her zaman koyu, kenar ve toz ile >= 3,0 (10 palet, temanin bolge tonlari, 3 gorme bicimi)', () => {
   // Renkler katmanCiz ile ayni formul: mantar kap = karistir(zemin, vurgu, mantarKap) + hale (alfa mantarHale);
   // ay = karistir(zemin, beyaz, ay); sis = karistir(zemin, beyaz, sis) alfa sisAlfa ile (elipsler yari saydam; opak hesap gercegi yansitmaz).
-  const kenar = rgb(ENGEL_KENAR), kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
+  const kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
   const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
   TUM_TEMA.forEach(t => {
-    const vur = rgb(t.p.vurgu), toz = rgb(t.p.toz), bey = [1, 1, 1];
-    const zem = bi => karistir(BOLGE[bi], t.p.isik, ISIK_KARISIM);
+    const vur = rgb(t.p.vurgu), toz = rgb(t.p.toz), bey = [1, 1, 1], kenar = rgb(t.p.engel.kenar);
+    const zem = bi => zeminOf(t.p, bi);
     const katmanlar = {
       'mantar kap': mix(zem(1), vur, KATMAN.mantarKap),
       'mantar hale': mix(zem(1), vur, KATMAN.mantarHale),
@@ -311,13 +432,13 @@ dene('mantar / ay / sis katmanlari: engel kenarindan her zaman koyu, kenar ve to
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
-dene('B4 derinlik katmanlari (uzak soluk mavi, yakin koyu siluet, huzme/sis bandi): kenardan koyu, kenar ve toz ile >= 3,0 (10 palet, 3 gorme bicimi)', () => {
-  // katmanCiz: uzak = karistir(zemin, UZAK_MAVI, uzak); yakin = karistir(zemin, siyah, yakin); huzme / sis bandi = acik (zemin + %15 beyaz) uzerine alfa (<= acik).
-  const UZAK_MAVI = sabit(OYUN, 'UZAK_MAVI'), kenar = rgb(ENGEL_KENAR), kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
+dene('B4 derinlik katmanlari (uzak = temanin uzak tonu, yakin koyu siluet, huzme/sis bandi): kenardan koyu, kenar ve toz ile >= 3,0 (10 palet, 3 gorme bicimi)', () => {
+  // katmanCiz: uzak = karistir(zemin, pal.uzak, uzak); yakin = karistir(zemin, siyah, yakin); huzme / sis bandi = acik (zemin + %15 beyaz) uzerine alfa (<= acik).
+  const kotu = [], L = (c, b) => parlaklik(dogrusal(c), b);
   const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
-  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
-    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), toz = rgb(t.p.toz);
-    const kat = { 'uzak mavi': mix(zem, rgb(UZAK_MAVI), KATMAN.uzak), 'yakin siluet': mix(zem, [0, 0, 0], KATMAN.yakin), 'huzme/sis bandi (acik)': mix(zem, [1, 1, 1], 0.15) };
+  TUM_TEMA.forEach(t => t.p.bolgeler.forEach((ton, bi) => {
+    const zem = zeminOf(t.p, bi), toz = rgb(t.p.toz), kenar = rgb(t.p.engel.kenar);
+    const kat = { 'uzak': mix(zem, rgb(t.p.uzak), KATMAN.uzak), 'yakin siluet': mix(zem, [0, 0, 0], KATMAN.yakin), 'huzme/sis bandi (acik)': mix(zem, [1, 1, 1], 0.15) };
     Object.keys(kat).forEach(ad => BICIMLER.forEach(b => {
       const c = kat[ad], ok = oran(kenar, c, b), ot = oran(toz, c, b);
       izle('B4 katman/kenar', ok); izle('B4 katman/toz', ot);
@@ -335,20 +456,20 @@ dene('uzak nokta (arka plan ates bocegi) tozdan ayrisir: yaricap*3 < R_TOZ_GORSE
   assert(r.length >= 3, 'uzakNokta cagrilari');
   r.forEach(q => assert(q[0] * 3 < h.R_TOZ_GORSEL, 'nokta yaricap ' + q[0]));
   const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x), kotu = [];
-  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => BICIMLER.forEach(b => {
-    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), nokta = mix(zem, mix(zem, rgb(t.p.vurgu), KATMAN.mantarKap), 0.8);   // alfa 0,8 (en yogun)
+  TUM_TEMA.forEach(t => t.p.bolgeler.forEach((ton, bi) => BICIMLER.forEach(b => {
+    const zem = zeminOf(t.p, bi), nokta = mix(zem, mix(zem, rgb(t.p.vurgu), KATMAN.mantarKap), 0.8);   // alfa 0,8 (en yogun)
     const on = oran(nokta, zem, b), ot = oran(rgb(t.p.toz), zem, b); izle('uzak nokta/zemin', on);
     if (!(on <= ot * 0.5)) kotu.push(t.id + ' b' + bi + ' ' + b + ' nokta ' + on.toFixed(2) + ' toz ' + ot.toFixed(2));
   })));
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
-dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 bicim: >= 3,0 YA DA koyu dis kontur (kodda var, >= ~1 px) ve kontur x tehlike >= 3,0', () => {
+dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 10 palet x 4 bolge x 3 bicim: >= 3,0 YA DA koyu dis kontur (kodda var, >= ~1 px) ve kontur (temanin engel dolgusu) x tehlike >= 3,0', () => {
   // Secim: renkleri degistirmek yerine (toz/tehlike ayrimi ve tema paletleri bozulmasin) koyu dis kontur zorunlu.
-  // Bomba: sprite'ta ENGEL_DOLGU (0,26 + 2*bant) genis kontur altta, acik kenar 0,26 ustte; bant = max(0,22, 1 cihaz pikseli).
-  // Sarmasik: ENGEL_DOLGU (0,7 + 2*max(0,3, pxD)) altta, yesil 0,7 ustte. Unlem: ENGEL_DOLGU kontur 2*max(0,23, pxD/k).
-  // Silüet / uc cizgisi / kenar isareti: ENGEL_DOLGU alt cizgi (ince + 2*max(0,2, pxD)) altta, UNLEM_RENK ince cizgi ustte, alfa 0,75.
-  const UZAK_MAVI = sabit(OYUN, 'UZAK_MAVI'), dolgu = rgb(ENGEL_DOLGU), mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
+  // Bomba: sprite'ta koyu (engel dolgusu) (0,26 + 2*bant) genis kontur altta, acik kenar 0,26 ustte; bant = max(0,22, 1 cihaz pikseli).
+  // Sarmasik: koyu (0,7 + 2*max(0,3, pxD)) altta, yesil 0,7 ustte. Unlem: koyu kontur 2*max(0,23, pxD/k).
+  // Silüet / uc cizgisi / kenar isareti: koyu alt cizgi (ince + 2*max(0,2, pxD)) altta, unlem rengi ince cizgi ustte, alfa 0,75.
+  const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
   const kaynakBomba = /function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0];
   assert(/var bant = Math\.max\(0\.22, pxD\), dis = 0\.26 \+ 2 \* bant/.test(kaynakBomba) && /x\.strokeStyle = ENGEL_DOLGU; x\.lineWidth = dis; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = BOMBA_KENAR; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur (>= 1 cihaz pikseli)');
   const sar = /function sarmasikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
@@ -362,28 +483,24 @@ dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 9 tema x 4 bolge x 3 
   const alfalar = (oz.match(/c\.globalAlpha = 0\.[0-9]+ \* \(1 - p\); (?:c\.setLineDash|c\.beginPath)/g) || []).map(m => +/= (0\.[0-9]+)/.exec(m)[1]);
   assert(alfalar.length === 2 && alfalar.every(a => a >= 0.7), 'siluet / kenar isareti alfa >= 0,7: ' + alfalar.join(','));
   const kotu = [], konturGereken = {}; let n = 0;
-  const tehlike = { BOMBA_KENAR, BOMBA_CEKIRDEK, UNLEM_RENK, SARMASIK_GOVDE, SARMASIK_YAPRAK };
-  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
-    const zem = karistir(ton, t.p.isik, ISIK_KARISIM), vur = rgb(t.p.vurgu), bey = [1, 1, 1], sif = [0, 0, 0];
+  TUM_TEMA.forEach(t => t.p.bolgeler.forEach((ton, bi) => {
+    const zem = zeminOf(t.p, bi), vur = rgb(t.p.vurgu), bey = [1, 1, 1], sif = [0, 0, 0], dolgu = rgb(t.p.engel.dolgu);
     const zeminler = {
-      'zemin': zem, 'k0 koyu': mix(zem, sif, 0.15), 'k1 koyu': mix(zem, sif, 0.07), 'acik': mix(zem, bey, 0.15), 'uzak mavi': mix(zem, rgb(UZAK_MAVI), KATMAN.uzak),
+      'zemin': zem, 'k0 koyu': mix(zem, sif, 0.15), 'k1 koyu': mix(zem, sif, 0.07), 'acik': mix(zem, bey, 0.15), 'uzak': mix(zem, rgb(t.p.uzak), KATMAN.uzak),
       'yakin siluet': mix(zem, sif, KATMAN.yakin), 'mantar kap': mix(zem, vur, KATMAN.mantarKap), 'mantar hale': mix(zem, vur, KATMAN.mantarHale),
       'ay': mix(zem, bey, KATMAN.ay), 'sis': mix(zem, mix(zem, bey, KATMAN.sis), KATMAN.sisAlfa)
     };
-    Object.keys(tehlike).forEach(ad => BICIMLER.forEach(b => {
-      const c = rgb(tehlike[ad]), kon = oran(c, dolgu, b); izle('O-3 tehlike/koyu kontur', kon);
-      if (kon < 3.0) kotu.push(ad + ' x koyu kontur ' + b + ' ' + kon.toFixed(2));
+    Object.keys(t.th).forEach(ad => BICIMLER.forEach(b => {
+      const c = t.th[ad], kon = oran(c, dolgu, b); izle('O-3 tehlike/koyu kontur', kon);
+      if (kon < 3.0) kotu.push(t.id + ' ' + ad + ' x koyu kontur ' + b + ' ' + kon.toFixed(2));
       Object.keys(zeminler).forEach(zn => {
         const o = oran(c, zeminler[zn], b); n++; izle('O-3 tehlike/katman (kontursuz)', o);
         if (o < 3.0) konturGereken[ad + ' x ' + zn] = 1;      // kontur sayesinde okunur
       });
     }));
-  }));
-  // alfa dahil: zemin uzerine koyu alt cizgi (alfa 0,75), onun uzerine UNLEM_RENK cizgi (alfa 0,75); cizgi / alt cizgi >= 3,0
-  TUM_TEMA.forEach(t => BOLGE.forEach((ton, bi) => {
-    const zem = karistir(ton, t.p.isik, ISIK_KARISIM);
-    [zem, mix(zem, [1, 1, 1], 0.15), mix(zem, rgb(UZAK_MAVI), KATMAN.uzak), mix(zem, [0, 0, 0], KATMAN.yakin)].forEach(z => BICIMLER.forEach(b => {
-      const alt = mix(z, dolgu, 0.75), cizgi = mix(alt, rgb(UNLEM_RENK), 0.75), o = oran(cizgi, alt, b); izle('O1 siluet cizgi/koyu alt cizgi (alfa dahil)', o);
+    // alfa dahil: zemin uzerine koyu alt cizgi (alfa 0,75), onun uzerine unlem rengi cizgi (alfa 0,75); cizgi / alt cizgi >= 3,0
+    [zem, mix(zem, [1, 1, 1], 0.15), mix(zem, rgb(t.p.uzak), KATMAN.uzak), mix(zem, [0, 0, 0], KATMAN.yakin)].forEach(z => BICIMLER.forEach(b => {
+      const alt = mix(z, dolgu, 0.75), cizgi = mix(alt, t.th.UNLEM_RENK, 0.75), o = oran(cizgi, alt, b); izle('O1 siluet cizgi/koyu alt cizgi (alfa dahil)', o);
       if (o < 3.0) kotu.push('siluet ' + t.id + ' b' + bi + ' ' + b + ' ' + o.toFixed(2));
     }));
   }));
@@ -407,13 +524,37 @@ dene('isikCoz: yerlesik / eksik / bozuk girdi -> tam palet', () => {
   };
   [{ yerlesik: true }, undefined, null, 5, 'x', [], {}, { isik: 'kirmizi', iz: 3 },
    { isik: '#12345', toz: 7, vurgu: null, karanlik: {}, iz: { renk: 'x', sekil: 'yildiz' }, animasyon: 4 },
-   { iz: { renkler: ['#111111', 'x'] } }, { iz: { renkler: [] } }].forEach(v => {
+   { iz: { renkler: ['#111111', 'x'] } }, { iz: { renkler: [] } },
+   { bolgeler: 'x', engel: 5, govde: { koyu: 'kirmizi' }, halo: 3, haloHalka: 2, uzak: [], tehlike: 7 }].forEach(v => {
     const p = M.isikCoz(v); tam(p);
     assert.strictEqual(p.iz.sekil, 'cizgi');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(p)).isik, '#FFE27A');
   });
   assert.deepStrictEqual(JSON.parse(JSON.stringify(M.isikCoz({ yerlesik: true }))),
-    { isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D', iz: { renk: '#FFD24A', renk2: '#FFD24A', sekil: 'cizgi' }, animasyon: '' });
+    { isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D', iz: { renk: '#FFD24A', renk2: '#FFD24A', sekil: 'cizgi' }, animasyon: '',
+      bolgeler: ['#24402F', '#2E2A44', '#1F3F4C', '#3A4031'], engel: { dolgu: '#0B0F14', kenar: '#E9EDF2' },
+      govde: { koyu: '#1A1410', kin: '#2E2219', plaka: '#3A2C20', kanat: '#FFFFFF' }, halo: '#FFE27A', haloHalka: 0, uzak: '#7F98C0', tehlike: { ton: '', bitki: '' } });
+});
+
+dene('isikCoz yeni alanlar (12.3): bozuk / kismi alan yerlesige duser, gecerli kisim korunur; halo yoksa isik; haloHalka [0, 0,3]', () => {
+  const Y = YERLESIK_PALET;
+  const b = M.isikCoz({ bolgeler: 'x', engel: 5, govde: { koyu: 'kirmizi' }, halo: 3, haloHalka: 2, uzak: [], tehlike: 7 });
+  assert.deepStrictEqual(Array.from(b.bolgeler), Array.from(Y.bolgeler));
+  assert.deepStrictEqual(JSON.parse(JSON.stringify([b.engel, b.govde, b.uzak, b.tehlike, b.haloHalka])), JSON.parse(JSON.stringify([Y.engel, Y.govde, Y.uzak, Y.tehlike, 0])));
+  const k = M.isikCoz({ isik: '#ABCDEF', bolgeler: ['#111111', 'x'], engel: { kenar: '#EEEEEE' }, govde: { kanat: '#FAFAFA' }, haloHalka: 0.31, tehlike: { ton: '#ABCDEF' } });
+  assert.deepStrictEqual(Array.from(k.bolgeler), ['#111111'].concat(Array.from(Y.bolgeler).slice(1)));
+  assert.strictEqual(k.engel.kenar, '#EEEEEE'); assert.strictEqual(k.engel.dolgu, Y.engel.dolgu);
+  assert.strictEqual(k.govde.kanat, '#FAFAFA'); assert.strictEqual(k.govde.koyu, Y.govde.koyu);
+  assert.strictEqual(k.halo, '#ABCDEF', 'halo yoksa isik'); assert.strictEqual(k.haloHalka, 0, 'tavan ustu');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(k.tehlike)), { ton: '#ABCDEF', bitki: '' });
+  assert.strictEqual(M.isikCoz({ haloHalka: 0.3 }).haloHalka, 0.3);
+});
+
+dene('CIEDE2000 uygulamasi Sharma (2005) referans ciftleriyle uyusur (+-0,0001)', () => {
+  [[[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425], [[50, 0, 0], [50, -1, 2], 2.3669], [[50, 2.5, 0], [73, 25, -18], 27.1492],
+   [[60.2574, -34.0099, 36.2677], [60.4626, -34.1751, 39.4387], 1.2644], [[50, 2.5, 0], [50, 0, -2.5], 4.3065]].forEach(c => {
+    const d = de2000(c[0], c[1]); assert(Math.abs(d - c[2]) < 1e-4, c[2] + ' != ' + d.toFixed(4));
+  });
 });
 
 dene('isikCoz: tanimsiz iz.sekil -> cizgi; gecerli tema aynen korunur; saf (girdi degismez)', () => {
@@ -677,6 +818,60 @@ function marketKartlariOlc(chrome, oto, port) {
   if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.ad + ' en parlak kanal ' + o.en).join('\n'));
   assert.strictEqual(kotu.length, 0, kotu.map(o => o.ad + ' kanal ' + o.en).join('; '));
 }));
+
+// ---- Tema gorselligi (12.3): ayni sahne 10 palette (9 tema + varsayilan) x 4 bolge, GERCEK oyun cizimi (tools/atesBocegiTemaYakala.js) ----
+// Yontem: tuval 300x600 px (dunya 50x100, olcek 6, dpr 1); 4x4 px bloklar dogrusal RGB'de ortalanir (kenar yumusatma gurultusu
+// ve goz olcegi), CIELAB'a cevrilir; iki temanin AYNI konumdaki bloklari arasinda CIEDE2000 hesaplanir, tum bloklarin ortalamasi alinir
+// (sahne geometrisi ayni oldugu icin fark yalniz renktir). Cift degeri = 4 bolgenin ortalamasi. Karanlik katman (cember disi) dahildir:
+// oyuncunun gordugu tum kare olculur.
+const DE_SINIR = null;     // 5d: olcumle belirlenir
+function temaGoruntuleri(chrome, port, kayit) {
+  const r = require('child_process').spawnSync(process.execPath, [path.join(KOK, 'tools', 'atesBocegiTemaYakala.js'), chrome, String(port)].concat(kayit ? [kayit] : []),
+    { encoding: 'utf8', maxBuffer: 1 << 29, timeout: 240000 });
+  assert(r.status === 0, 'atesBocegiTemaYakala basarisiz: ' + String(r.stderr || r.error).slice(0, 400));
+  return JSON.parse(r.stdout).sonuclar;
+}
+function blokLab(im, B) {
+  const lin = new Float64Array(256), out = [];
+  for (let v = 0; v < 256; v++) { const c = v / 255; lin[v] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  for (let y = 0; y + B <= im.h; y += B) for (let x = 0; x + B <= im.w; x += B) {
+    let r = 0, g = 0, b = 0;
+    for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) { const k = ((y + j) * im.w + x + i) * im.bpp; r += lin[im.px[k]]; g += lin[im.px[k + 1]]; b += lin[im.px[k + 2]]; }
+    out.push(labDogrusal(r / (B * B), g / (B * B), b / (B * B)));
+  }
+  return out;
+}
+function temaUzakliklari(sonuclar) {
+  const temalar = [], lab = {};
+  sonuclar.forEach(s => {
+    if (temalar.indexOf(s.tema) < 0) temalar.push(s.tema);
+    const im = pngCoz(Buffer.from(s.png, 'base64'));
+    assert(im.w === 300 && im.h === 600, s.tema + ' b' + s.bolge + ' boyut ' + im.w + 'x' + im.h);
+    lab[s.tema + '|' + s.bolge] = blokLab(im, 4);
+  });
+  const ciftler = [];
+  for (let i = 0; i < temalar.length; i++) for (let j = i + 1; j < temalar.length; j++) {
+    const bol = [0, 1, 2, 3].map(b => { const A = lab[temalar[i] + '|' + b], C = lab[temalar[j] + '|' + b]; let s = 0; for (let k = 0; k < A.length; k++) s += de2000(A[k], C[k]); return s / A.length; });
+    ciftler.push({ a: temalar[i], b: temalar[j], de: bol.reduce((x, y) => x + y, 0) / 4, bol });
+  }
+  // sahne gercekten bolgeye gore cizildi mi: her temada 4 bolge goruntusu birbirinden farkli
+  let bolgeEn = Infinity;
+  temalar.forEach(t => { for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) { const A = lab[t + '|' + i], C = lab[t + '|' + j]; let s = 0; for (let k = 0; k < A.length; k++) s += de2000(A[k], C[k]); bolgeEn = Math.min(bolgeEn, s / A.length); } });
+  return { temalar, ciftler: ciftler.sort((x, y) => x.de - y.de), bolgeEn };
+}
+dene('tema gorselligi: ayni sahne 10 palet x 4 bolge gercek cizimle; temalar arasi ortalama CIEDE2000' + (DE_SINIR ? ' >= ' + DE_SINIR : ' (olcum)') + ' (headless Chrome)', () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const sonuclar = temaGoruntuleri(chrome, 9446, process.env.ATES_TEMA_KAYIT || '');
+  assert.strictEqual(sonuclar.length, 40, 'goruntu sayisi ' + sonuclar.length);
+  const { temalar, ciftler, bolgeEn } = temaUzakliklari(sonuclar);
+  assert.strictEqual(temalar.length, 10); assert.strictEqual(ciftler.length, 45);
+  assert(bolgeEn > 1, 'ayni temada bolge goruntuleri ayni (bolge uygulanmadi?): ' + bolgeEn.toFixed(2));
+  const en = ciftler[0], ort = ciftler.reduce((x, c) => x + c.de, 0) / ciftler.length;
+  console.log('       en dusuk cift ' + en.a + '/' + en.b + ' dE00 ' + en.de.toFixed(2) + ' (bolgeler ' + en.bol.map(v => v.toFixed(2)).join(' ') + '), ciftlerin ortalamasi ' + ort.toFixed(2) + ', ayni temada bolgeler arasi en az ' + bolgeEn.toFixed(2));
+  if (process.env.ATES_DE_OLCUM) ciftler.forEach(c => console.log('       ' + c.a + '/' + c.b + ' ' + c.de.toFixed(2)));
+  if (DE_SINIR) { const kotu = ciftler.filter(c => c.de < DE_SINIR); assert.strictEqual(kotu.length, 0, kotu.map(c => c.a + '/' + c.b + ' ' + c.de.toFixed(2)).join('; ')); }
+});
 
 console.log(gecti + ' test gecti' + (atlandi ? ' (' + atlandi + ' atlandi)' : '') + (process.exitCode ? ', HATA VAR' : '') +
   '; en dusuk oran: ' + sonuclar.slice(0, ana).reduce((a, b) => (b.oran < a.oran ? b : a)).oran.toFixed(2));

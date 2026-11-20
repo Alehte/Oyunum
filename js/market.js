@@ -257,13 +257,28 @@ window.AppMarket = (function () {
   // ISIK — Ates Bocegi paleti. SAF islev: yerlesik / eksik / bozuk girdiyi
   // tam palete tamamlar (atesBocegiOyun.js paletTamamla ile birebir uyumlu).
   // iz.sekil tanimsizsa 'cizgi'; iz.renk yoksa iz.renkler[0] renk olur.
+  // Tema gorselligi (tasarim 12.3): bolgeler (4 bolge zemin tonu), engel {dolgu, kenar}, govde {koyu, kin,
+  // plaka, kanat}, halo + haloHalka (isik cemberi kenar halkasi opakligi), uzak (uzak katman tonu),
+  // tehlike {ton, bitki} (bomba/unlem ve sarmasik renk tonu; '' = sabit tehlike renkleri). Eksik alan
+  // yerlesige duser; halo yoksa temanin isik rengi olur.
   // ---------------------------------------------------------------
   var ISIK_YERLESIK = {
     isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D',
-    iz: { renk: '#FFD24A', sekil: 'cizgi' }, animasyon: ''
+    iz: { renk: '#FFD24A', sekil: 'cizgi' }, animasyon: '',
+    bolgeler: ['#24402F', '#2E2A44', '#1F3F4C', '#3A4031'],
+    engel: { dolgu: '#0B0F14', kenar: '#E9EDF2' },
+    govde: { koyu: '#1A1410', kin: '#2E2219', plaka: '#3A2C20', kanat: '#FFFFFF' },
+    uzak: '#7F98C0'
   };
   var IZ_SEKILLER = { cizgi: 1, damla: 1, baklava: 1, akkor: 1 };
+  var HALO_HALKA_TAVAN = 0.3;
   function hexMi(x) { return typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x); }
+  function hexAlanlar(k, y) {               // y'nin her alani: k'da gecerli hex varsa o, yoksa y'deki
+    var o = {}, a;
+    k = k && typeof k === 'object' ? k : {};
+    for (a in y) o[a] = hexMi(k[a]) ? k[a] : y[a];
+    return o;
+  }
 
   function isikCoz(v) {
     var y = ISIK_YERLESIK, o = { iz: {} };
@@ -276,6 +291,15 @@ window.AppMarket = (function () {
     o.iz.sekil = IZ_SEKILLER[iz.sekil] === 1 ? iz.sekil : 'cizgi';
     if (ler) o.iz.renkler = ler;
     o.animasyon = typeof v.animasyon === 'string' ? v.animasyon : '';
+    var bl = Array.isArray(v.bolgeler) ? v.bolgeler : [];
+    o.bolgeler = y.bolgeler.map(function (d, i) { return hexMi(bl[i]) ? bl[i] : d; });
+    o.engel = hexAlanlar(v.engel, y.engel);
+    o.govde = hexAlanlar(v.govde, y.govde);
+    o.halo = hexMi(v.halo) ? v.halo : o.isik;
+    o.haloHalka = typeof v.haloHalka === 'number' && v.haloHalka >= 0 && v.haloHalka <= HALO_HALKA_TAVAN ? v.haloHalka : 0;
+    o.uzak = hexMi(v.uzak) ? v.uzak : y.uzak;
+    var te = v.tehlike && typeof v.tehlike === 'object' ? v.tehlike : {};
+    o.tehlike = { ton: hexMi(te.ton) ? te.ton : '', bitki: hexMi(te.bitki) ? te.bitki : '' };
     return o;
   }
 

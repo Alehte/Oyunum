@@ -234,7 +234,7 @@ dene('gercek market.js + katalog: 10 temanin palet sonucu isikCoz ile birebir (p
     AppSaveProgress() {}, AppReset: [], addEventListener() {}, document: { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] } };
   win.window = win; vm.createContext(win);
   vm.runInContext(oku('marketKatalog.js'), win); vm.runInContext(oku('market.js'), win);
-  const a = KAYNAK.indexOf('  var YERLESIK = {'), qi = KAYNAK.indexOf('  function q(id)', a);
+  const a = KAYNAK.indexOf('  var MAKS_ADIM'), qi = KAYNAK.indexOf('  function q(id)', a);   // cizim sabitleri + YERLESIK (yerlesik palet sabitlere baglidir)
   const h = KAYNAK.indexOf('  function hexMi'), pt = KAYNAK.indexOf('  function paletTamamla'), c = KAYNAK.indexOf('  // ONBELLEKLI GORSELLER');
   assert(a > 0 && qi > a && h > 0 && pt > 0 && c > pt, 'oyun palet kodu bulunamadi');
   const kod = KAYNAK.slice(a, qi) + KAYNAK.slice(h, KAYNAK.indexOf('\n', h) + 1) + KAYNAK.slice(pt, c);
@@ -251,6 +251,9 @@ dene('gercek market.js + katalog: 10 temanin palet sonucu isikCoz ile birebir (p
     assert.strictEqual(p.iz.renk2, beklenen.iz.renk2, t.id + ' renk2');
     assert.deepStrictEqual(p.iz.renkler, Array.from(beklenen.iz.renkler || [beklenen.iz.renk, beklenen.iz.renk2]), t.id + ' renkler');
     if (t.isik && t.isik.iz && t.isik.iz.renkler) assert.deepStrictEqual(p.iz.renkler, Array.from(t.isik.iz.renkler), t.id + ' vitray renkler');
+    // tema gorselligi alanlari (tasarim 12.3): oyunun cozdugu palet market isikCoz ile birebir
+    ['bolgeler', 'engel', 'govde', 'halo', 'haloHalka', 'uzak', 'tehlike'].forEach(k => assert.deepStrictEqual(p[k], JSON.parse(JSON.stringify(beklenen[k])), t.id + '.' + k));
+    if (!t.varsayilan) assert.notDeepStrictEqual(p.bolgeler, JSON.parse(JSON.stringify(M.isikCoz({ yerlesik: true }).bolgeler)), t.id + ' bolgeler temadan');
   });
 });
 

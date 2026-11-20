@@ -19,8 +19,9 @@
   var MAKS_ADIM = 12;                 // kare basina en cok adim (tasarim 3.1); asan birikim atilir
   var MAKS_FARK = 0.1;                // bir karenin birikime en cok katkisi (sn)
   var KARANLIK_OPAKLIK = 0.94;        // tasarim 5
-  var ENGEL_DOLGU = '#0B0F14', ENGEL_KENAR = '#E9EDF2', KENAR_PX = 1.25;   // tema degistiremez (tasarim 5)
-  // Sabit tehlike renkleri (tema degistiremez; tasarim 11.5, 11.7). Kontrast: tools/atesBocegiTemaTest.js
+  var ENGEL_DOLGU = '#0B0F14', ENGEL_KENAR = '#E9EDF2', KENAR_PX = 1.25;   // yerlesik engel renkleri; tema pal.engel ile verir (tasarim 12.3)
+  // Tehlike taban renkleri (tasarim 11.5, 11.7): tema yalniz tonlar (TEHLIKE_KARISIM / BITKI_KARISIM, 12.3); silüet ve koyu kontur dili sabit.
+  // Kontrast: tools/atesBocegiTemaTest.js
   var BOMBA_KENAR = '#FF9566', BOMBA_CEKIRDEK = '#FF9A1F';       // bomba: koyu kure (ENGEL_DOLGU) + acik kenar + cekirdek
   var UNLEM_RENK = '#FFB02E';                                      // sarmasik uyarisi (unlem, koyu isaret ENGEL_DOLGU)
   var SARMASIK_GOVDE = '#7FBF3F', SARMASIK_YAPRAK = '#B6E26B';     // sarmasik (koyu dis cizgi ENGEL_DOLGU)
@@ -44,11 +45,20 @@
   // Sersemlik efekti: bocegin ustunde donen yildiz halkasi (renk temadan: pal.vurgu); azaltilmis harekette donmez.
   var SERSEM_YILDIZ = 3, SERSEM_HALKA_RX = 2.6, SERSEM_HALKA_RY = 0.8, SERSEM_YILDIZ_R = 0.75, SERSEM_DONUS = 6;   // rad/sn
 
+  // Yerlesik palet: varsayilan temanin gorunumu. Tema alanlari (tasarim 12.3) eksikse buradaki degerler kullanilir;
+  // engel / bolge / bocek / tehlike sabitleri (yukarida) yalniz yerlesik degerlerdir, cizim temadan cozulen `rk`'yi kullanir.
   var YERLESIK = {
     isik: '#FFE27A', toz: '#FFF3B0', vurgu: '#9BE86B', karanlik: '#05080D',
-    iz: { renk: '#FFD24A', sekil: 'cizgi' }, animasyon: ''
+    iz: { renk: '#FFD24A', sekil: 'cizgi' }, animasyon: '',
+    bolgeler: BOLGE_TON,
+    engel: { dolgu: ENGEL_DOLGU, kenar: ENGEL_KENAR },
+    govde: { koyu: BOCEK_KOYU, kin: BOCEK_KIN, plaka: BOCEK_PLAKA, kanat: BOCEK_KANAT },
+    uzak: UZAK_MAVI
   };
   var IZ_SEKILLER = { cizgi: 1, damla: 1, baklava: 1, akkor: 1 };
+  var HALO_HALKA_TAVAN = 0.3;          // isik cemberi kenar halkasi en yuksek opaklik (market.js ile ayni)
+  // Tehlike tonlama (tasarim 12.3): sabit tehlike rengi temanin tehlike tonuna bu oranda karisir (silüet ve kontur sabit).
+  var TEHLIKE_KARISIM = 0.15, BITKI_KARISIM = 0.25;
 
   function q(id) { return document.getElementById(id); }
   var ekran = q('screen-ates'), alan = q('abAlan'), tuval = q('abTuval');
@@ -63,6 +73,7 @@
   // ---------------------------------------------------------------
   var durum = null;                   // cekirdek durumu
   var pal = null;                     // etkin palet
+  var rk = renkCoz(paletTamamla(YERLESIK));   // paletten cozulen cizim renkleri (gorselKur'da yenilenir)
   var rafId = 0, sonZaman = 0, birikim = 0, zaman = 0, kare = 0;
   var calisiyor = false, duraklatildi = false, bekle = true, bitisIsleniyor = false;
   var kosuNo = 0;                     // her yeni kosu / durdurma ile artar
@@ -130,7 +141,33 @@
     o.iz.renkler = [o.iz.renk, o.iz.renk2];
     if (Array.isArray(iz.renkler) && iz.renkler.length > 0 && iz.renkler.every(hexMi)) o.iz.renkler = iz.renkler.slice();
     o.animasyon = p && typeof p.animasyon === 'string' ? p.animasyon : '';
+    var bl = p && Array.isArray(p.bolgeler) ? p.bolgeler : [], te = p && p.tehlike && typeof p.tehlike === 'object' ? p.tehlike : {};
+    o.bolgeler = y.bolgeler.map(function (d, i) { return hexMi(bl[i]) ? bl[i] : d; });
+    o.engel = hexAlanlar(p && p.engel, y.engel);
+    o.govde = hexAlanlar(p && p.govde, y.govde);
+    o.halo = p && hexMi(p.halo) ? p.halo : o.isik;
+    o.haloHalka = p && typeof p.haloHalka === 'number' && p.haloHalka >= 0 && p.haloHalka <= HALO_HALKA_TAVAN ? p.haloHalka : 0;
+    o.uzak = p && hexMi(p.uzak) ? p.uzak : y.uzak;
+    o.tehlike = { ton: hexMi(te.ton) ? te.ton : '', bitki: hexMi(te.bitki) ? te.bitki : '' };
     return o;
+  }
+  function hexAlanlar(k, y) {          // y'nin her alani: k'da gecerli hex varsa o, yoksa y'deki (market.js ile ayni)
+    var o = {}, a;
+    k = k && typeof k === 'object' ? k : {};
+    for (a in y) o[a] = hexMi(k[a]) ? k[a] : y[a];
+    return o;
+  }
+  // Temadan cozulen cizim renkleri: palet degisince bir kez (gorselKur); kare basina karisim hesabi yok.
+  // Tehlike: taban renk (BOMBA_*, UNLEM_RENK, SARMASIK_*) temanin tehlike tonuna sabit oranda karisir; ton yoksa aynen.
+  function renkCoz(p) {
+    var t = p.tehlike.ton, b = p.tehlike.bitki;
+    function ton(h, k, x) { return k ? karistir(h, k, x) : h; }
+    return {
+      dolgu: p.engel.dolgu, kenar: p.engel.kenar,
+      bombaKenar: ton(BOMBA_KENAR, t, TEHLIKE_KARISIM), bombaCekirdek: ton(BOMBA_CEKIRDEK, t, TEHLIKE_KARISIM), unlem: ton(UNLEM_RENK, t, TEHLIKE_KARISIM),
+      sarGovde: ton(SARMASIK_GOVDE, b, BITKI_KARISIM), sarYaprak: ton(SARMASIK_YAPRAK, b, BITKI_KARISIM),
+      koyu: p.govde.koyu, kin: p.govde.kin, plaka: p.govde.plaka, kanat: p.govde.kanat
+    };
   }
   function paletOku() {
     var p;
@@ -377,6 +414,7 @@
   function gorselKur() {
     var k;
     if (cssW <= 0 || cssH <= 0) return;
+    rk = renkCoz(pal);
     katmanlar = [null, null, null, null];
     for (k = 0; k < DAL_TAVAN; k++) { dalAnahtar[k] = -1; dalSira[k] = 0; dalTuval[k] = null; }   // olcek / dpr / tema degisti: dal onbellegi temizlenir
     sprBocek = parilti(M.R_GORSEL * 4, pal.isik);

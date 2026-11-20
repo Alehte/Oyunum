@@ -12,9 +12,10 @@
 //            ender    -> vazo (Cini), iksir (Vitray)
 //            efsanevi -> kum saati (Lav)
 //          Siluet yalnizca gorseldir; kapasite ve dokme degismez.
-//   isik : Ates Bocegi isigi, tozu, izi ve karanlik tonu
+//   isik : Ates Bocegi isigi, tozu, izi ve karanlik tonu; ayrica (tasarim 12.3) 4 bolge zemin tonu,
+//          engel dolgu/kenar, bocek govdesi, halo, uzak katman tonu ve tehlike tonu
 //   ton  : ana ekran + market icin renk tonu (yari saydam CSS gradyani)
-// Oyunlarin kendi arka planlari temayla DEGISMEZ.
+// Oyunlarin kendi arka planlari temayla DEGISMEZ (istisna: Karanlikta Suzul bolge tonlari, isik.bolgeler).
 //
 // KURAL: 'varsayilan' temanin butun parcalari { yerlesik:true } seklindedir;
 // bu "oyun hicbir seyi ezmesin, kendi cizimi aynen kalsin" demektir.
@@ -66,7 +67,11 @@ window.AppMarketKatalog = (function () {
       id: 'toprak', ad: 'Toprak', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(175deg, rgba(122,84,46,.46) 0%, rgba(58,40,22,.50) 55%, rgba(30,20,12,.62) 100%)' },
       isik: { isik: '#F2C078', toz: '#FFE0A8', vurgu: '#9CCB6A', karanlik: '#120C07',
-              iz: { renk: '#D99A4E', sekil: 'cizgi' } },
+              iz: { renk: '#D99A4E', sekil: 'cizgi' },
+              bolgeler: ['#3A3A1C', '#46281C', '#2A3A30', '#493919'],
+              engel: { dolgu: '#150D07', kenar: '#F3E3CC' }, uzak: '#C49A6C',
+              govde: { koyu: '#201408', kin: '#3C2814', plaka: '#4C341E', kanat: '#FFF2DE' },
+              halo: '#E8A050', haloHalka: 0.16, tehlike: { ton: '#C8501A', bitki: '#9CCB6A' } },
       deri: {
         govde: { tip: 'benekli', renkler: ['#9C7A55', '#7E5F3E', '#B69572', '#6A4C30'], kontur: '#3B2A1B' },
         // hedef: topragin altindaki canli kok — kesintili yesil damar
@@ -95,7 +100,11 @@ window.AppMarketKatalog = (function () {
       id: 'buz', ad: 'Buz', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(178deg, rgba(110,170,215,.40) 0%, rgba(40,84,128,.40) 55%, rgba(14,30,52,.58) 100%)' },
       isik: { isik: '#BFE9FF', toz: '#E6F7FF', vurgu: '#7FF0D0', karanlik: '#060D16',
-              iz: { renk: '#8FD0F2', sekil: 'cizgi' } },
+              iz: { renk: '#8FD0F2', sekil: 'cizgi' },
+              bolgeler: ['#193847', '#283456', '#103752', '#34363F'],
+              engel: { dolgu: '#07101A', kenar: '#E2F4FF' }, uzak: '#A8D8F4',
+              govde: { koyu: '#0E1620', kin: '#1E2C3C', plaka: '#2A3A4C', kanat: '#EAF8FF' },
+              halo: '#8FD8FF', haloHalka: 0.16, tehlike: { ton: '#FF5A6A', bitki: '#7FF0D0' } },
       deri: {
         govde: { tip: 'duz', renkler: ['#BBD4E4', '#9CBBD0', '#D8E9F2', '#8AA9C0'], kontur: '#3E5C74', parlak: true },
         // hedef: buzun altindan gorunen tek canli renk — parlak yesil kontur
@@ -124,7 +133,11 @@ window.AppMarketKatalog = (function () {
       id: 'kumsal', ad: 'Kumsal', nadirlik: 'siradan',
       ton: { css: 'linear-gradient(180deg, rgba(64,150,144,.42) 0%, rgba(60,104,104,.32) 50%, rgba(196,160,104,.46) 100%)' },
       isik: { isik: '#FFE9B8', toz: '#FFF4D6', vurgu: '#58C4B4', karanlik: '#08110F',
-              iz: { renk: '#5CC4B4', sekil: 'cizgi' } },
+              iz: { renk: '#5CC4B4', sekil: 'cizgi' },
+              bolgeler: ['#183C32', '#283847', '#103B3D', '#3E3921'],
+              engel: { dolgu: '#09130F', kenar: '#F5ECD8' }, uzak: '#8ED2C6',
+              govde: { koyu: '#14201C', kin: '#22362E', plaka: '#2E463C', kanat: '#F2FFFA' },
+              halo: '#5CC4B4', haloHalka: 0.16, tehlike: { ton: '#FF6A3C', bitki: '#58C4B4' } },
       deri: {
         govde: { tip: 'duz', renkler: ['#E0C79B', '#C9A87A', '#8FC7C2', '#EFDCBC'], kontur: '#6E5B41' },
         // hedef: govdeye sarilmis deniz yosunu seridi
@@ -153,7 +166,11 @@ window.AppMarketKatalog = (function () {
       id: 'murekkep', ad: 'Mürekkep', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(176deg, rgba(86,96,200,.44) 0%, rgba(52,40,128,.46) 55%, rgba(12,14,36,.66) 100%)' },
       isik: { isik: '#AEB8FF', toz: '#DCE1FF', vurgu: '#7FE0C0', karanlik: '#07081A',
-              iz: { renk: '#7C88F0', sekil: 'cizgi' } },
+              iz: { renk: '#7C88F0', sekil: 'cizgi' },
+              bolgeler: ['#163A48', '#30225A', '#162E5A', '#383048'],
+              engel: { dolgu: '#090A1E', kenar: '#E4E6FF' }, uzak: '#8C94E8',
+              govde: { koyu: '#10102A', kin: '#1E1E44', plaka: '#2A2A58', kanat: '#ECEEFF' },
+              halo: '#7C88F0', haloHalka: 0.18, tehlike: { ton: '#FF5C8C', bitki: '#7FE0C0' } },
       deri: {
         govde: { tip: 'benekli', renkler: ['#4A4A8C', '#42427E', '#5E5EA6', '#3A3A74'], kontur: '#16162E' },
         // hedef: kagida dusen ikinci renk — govde boyunca yesil murekkep cizgisi
@@ -182,7 +199,11 @@ window.AppMarketKatalog = (function () {
       id: 'kiraz', ad: 'Kiraz', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(174deg, rgba(190,60,92,.42) 0%, rgba(110,24,52,.46) 55%, rgba(26,8,14,.64) 100%)' },
       isik: { isik: '#FFB3C6', toz: '#FFDCE5', vurgu: '#A6E08A', karanlik: '#14060B',
-              iz: { renk: '#F07A98', sekil: 'cizgi' } },
+              iz: { renk: '#F07A98', sekil: 'cizgi' },
+              bolgeler: ['#3C2430', '#48203E', '#2E2840', '#46282A'],
+              engel: { dolgu: '#16080E', kenar: '#FFE4EC' }, uzak: '#D88EAE',
+              govde: { koyu: '#200A12', kin: '#3A1424', plaka: '#4C1C30', kanat: '#FFEEF3' },
+              halo: '#FF8FB0', haloHalka: 0.16, tehlike: { ton: '#FF4060', bitki: '#A6E08A' } },
       deri: {
         govde: { tip: 'seritli', renkler: ['#A8324E', '#7E203A', '#C45E76', '#5E1428'], kontur: '#3A0C1C' },
         // hedef: meyvenin sapi ve yapragi — govdeyi saran yesil kontur
@@ -211,7 +232,11 @@ window.AppMarketKatalog = (function () {
       id: 'sedef', ad: 'Sedef', nadirlik: 'nadir',
       ton: { css: 'linear-gradient(168deg, rgba(244,190,220,.38) 0%, rgba(190,180,230,.30) 50%, rgba(150,196,236,.36) 100%)' },
       isik: { isik: '#F6E6FF', toz: '#FFF0FA', vurgu: '#9FE0D0', karanlik: '#120D16',
-              iz: { renk: '#E3A9C8', sekil: 'cizgi' } },
+              iz: { renk: '#E3A9C8', sekil: 'cizgi' },
+              bolgeler: ['#353746', '#413452', '#2A384B', '#3D373E'],
+              engel: { dolgu: '#130E18', kenar: '#F7EEFF' }, uzak: '#CABAEA',
+              govde: { koyu: '#1E1424', kin: '#342640', plaka: '#44344E', kanat: '#FFF6FF' },
+              halo: '#E3B8FF', haloHalka: 0.14, tehlike: { ton: '#FF6AA0', bitki: '#9FE0D0' } },
       deri: {
         govde: { tip: 'kristal', renkler: ['#F0E3EA', '#E6D8E8', '#DCE7F2', '#F2E6D8'], kontur: '#B596B0', parlak: true },
         // hedef: inci icindeki yesil su — ince yesil cizgi
@@ -243,7 +268,11 @@ window.AppMarketKatalog = (function () {
       id: 'cini', ad: 'Çini', nadirlik: 'ender',
       ton: { css: 'linear-gradient(172deg, rgba(58,121,198,.50) 0%, rgba(30,74,140,.44) 52%, rgba(46,158,158,.38) 100%)' },
       isik: { isik: '#9FD0FF', toz: '#F4EEDF', vurgu: '#FFA892', karanlik: '#06101E',
-              iz: { renk: '#3F9FE0', sekil: 'damla' } },
+              iz: { renk: '#3F9FE0', sekil: 'damla' },
+              bolgeler: ['#0C3A3C', '#1C2A66', '#0A3561', '#2A3A2A'],
+              engel: { dolgu: '#06122A', kenar: '#F4EEDF' }, uzak: '#5C97D8',
+              govde: { koyu: '#0A1830', kin: '#16305A', plaka: '#1E3E70', kanat: '#F4EEDF' },
+              halo: '#3F9FE0', haloHalka: 0.18, tehlike: { ton: '#E8402C', bitki: '#2EC4A0' } },
       deri: {
         govde: { tip: 'seritli', renkler: ['#2E5FA8', '#3F79C6', '#2E9E9E', '#25518E'], kontur: '#F4EEDF' },
         // hedef: beyaz cini uzerine yesil firca borduru
@@ -274,7 +303,11 @@ window.AppMarketKatalog = (function () {
       id: 'vitray', ad: 'Vitray', nadirlik: 'ender',
       ton: { css: 'linear-gradient(160deg, rgba(196,58,74,.40) 0%, rgba(126,58,180,.38) 48%, rgba(58,110,196,.42) 100%)' },
       isik: { isik: '#FFD36A', toz: '#FFE9A8', vurgu: '#4FD98A', karanlik: '#0A0B12',
-              iz: { renkler: ['#E8566A', '#5C8FE8', '#A06AE0'], sekil: 'baklava' } },
+              iz: { renkler: ['#E8566A', '#5C8FE8', '#A06AE0'], sekil: 'baklava' },
+              bolgeler: ['#0A3E25', '#3E1660', '#0E2A6E', '#56301A'],
+              engel: { dolgu: '#0E1018', kenar: '#FFE7A8' }, uzak: '#A06AE0',
+              govde: { koyu: '#0E1018', kin: '#5A1A2C', plaka: '#1C3C78', kanat: '#FFF2C8' },
+              halo: '#C080FF', haloHalka: 0.18, tehlike: { ton: '#E8566A', bitki: '#4FD98A' } },
       deri: {
         govde: { tip: 'kristal', renkler: ['#C43A4A', '#3A6EC4', '#7E3AB4', '#D8A32E'], kontur: '#0E1018', parlak: true },
         // hedef: yesil cam panel, kursun konturun yerini yesil aliyor
@@ -308,7 +341,11 @@ window.AppMarketKatalog = (function () {
       ton: { css: 'linear-gradient(172deg, rgba(190,44,26,.44) 0%, rgba(96,26,12,.48) 50%, rgba(240,110,24,.42) 100%)' },
       isik: { isik: '#FFA64A', toz: '#FFD98A', vurgu: '#7CF0A0', karanlik: '#120604',
               iz: { renk: '#FF6A2A', renk2: '#FFD07A', sekil: 'akkor' },
-              animasyon: 'lav' },
+              animasyon: 'lav',
+              bolgeler: ['#3A1C10', '#46141A', '#2E2020', '#4A2C0E'],
+              engel: { dolgu: '#140604', kenar: '#FFDCC0' }, uzak: '#C0583A',
+              govde: { koyu: '#140806', kin: '#3A140A', plaka: '#4E1E0E', kanat: '#FFE6C0' },
+              halo: '#FF6A2A', haloHalka: 0.2, tehlike: { ton: '#FF3A0A', bitki: '#7CF0A0' } },
       deri: {
         animasyon: 'lav',
         govde: { tip: 'seritli', renkler: ['#4A3024', '#E8622A', '#744E3A', '#C47A10'], kontur: '#0A0503', parlak: true },
