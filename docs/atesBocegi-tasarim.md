@@ -603,3 +603,75 @@ Mıknatıs açıkken güvenceyi statik bir değişmezle vermek için tozun güve
 - Mıknatısın risk tozunu çekmemesi oyuncunun fark edebileceği bir davranış farkıdır (güvenli yoldan geçerken o toz kıpırdamaz). Renk/şekil aynı; görsel ayrım eklenmedi. Cihazda his kontrolü gerekir.
 - Risk tozu yalnız dikenli dalda; ağ/kuş/düşen dal kullanılmadı (yukarıdaki gerekçe). Dokunulmazlık süresi içinde risk tozu hasarsız alınabilir (önceki hasarın bedeli zaten ödenmiştir).
 - Üretim özetleri (`2e61cd7b`, `6a4bf060`) üretici bilerek değiştirilirse yeniden hesaplanmalıdır.
+
+### 12.3 Tema görselliği
+
+Bu bölüm 5'teki "Engel rengi bütün temalarda sabittir", "bölge zemin tonları tema bağımsız" kuralları ile 11.10'daki "Tehlike renkleri sabittir" kuralının yerine geçer. Oyun yapısı (fizik, üretim, çarpışma, ekonomi, kayıt şeması) değişmedi; yalnız renkler temadan gelir.
+
+**Temadan gelenler (her 9 temada; `marketKatalog.js` `isik` alanı)**
+
+| Alan | Anlam | Çizimde |
+|---|---|---|
+| `isik`, `toz`, `vurgu`, `karanlik`, `iz` | (bölüm 5, değişmedi) | fener, toz, kıvılcım/sersemlik, karanlık örtü, iz |
+| `bolgeler` (4 hex) | orman, mağara, nehir, bataklık zemin tonu | `zemin = karistir(bolgeler[b], isik, 0,12)`; paralaks katmanları bu zeminden türer |
+| `uzak` | uzak katman tonu (yerleşikte soluk mavi `#7F98C0`) | `karistir(zemin, uzak, KATMAN.uzak)` |
+| `engel {dolgu, kenar}` | engel koyu dolgu + açık kenar | dikenli dal, ağ, kuş, düşen dal; bomba küresi ve tüm koyu tehlike konturları `dolgu` |
+| `govde {koyu, kin, plaka, kanat}` | böcek karın/baş, kanat kını, göğüs, kanat | böcek; `bocekParlak = karistir(isik, kanat, 0,55)` |
+| `halo`, `haloHalka` | böcek halesi ve ışık çemberi kenar halkası rengi / opaklığı | hale sprite'ı `halo`; karanlık geçiş bandında halka (aşağıda) |
+| `tehlike {ton, bitki}` | tehlike tonlama kaynağı | bomba kenar/çekirdek ve ünlem `ton`'a %15, sarmaşık gövde/yaprak `bitki`'ye %25 karışır |
+
+Toz çekirdeği (`BOCEK_KANAT` beyaz) her temada aynıdır; risk tozu normal tozla birebir aynı çizilir (12.2).
+
+**Yerleşik (varsayılan) palet:** `isikCoz({yerlesik:true})` eski sabitleri birebir verir (`BOLGE_TON`, `ENGEL_*`, `BOCEK_*`, `UZAK_MAVI`; `haloHalka = 0`, tehlike tonu yok, `halo = isik`). Varsayılan temada oyun pikselleri değişmez (ölçüm: ölçüm sahnesinin 4 bölge tuvali 5a öncesiyle bayt bayt aynı). Market önizlemesinin zemini artık `karistir(karistir(bolgeler[0], siyah, 0,36), isik, 0,06)`; varsayılanda eski `#162A1E` yerine `#17291E` (1 birimlik yuvarlama farkı).
+
+**Çözüm ve önbellek:** `market.js isikCoz` ve oyundaki `paletTamamla` aynı kuralla çözer (alan alan doğrulama; geçersiz alan yerleşiğe, `halo` yoksa temanın `isik`'ine düşer; `haloHalka ∈ [0, 0,3]`). `renkCoz(pal)` engel/gövde/tehlike çizim renklerini (`rk`) **tema değişince bir kez** `gorselKur`'da hesaplar; bölge katmanları, bomba sprite'ları, hale ve halo gradyanı aynı anda yeniden kurulur, dal sprite önbelleği temizlenir. Kare başına karışım hesabı, yeni gradyan ya da nesne yok (oyun testi denetler).
+
+**Halo halkası:** karanlık deliğinden sonra aynı dönüşümle tek `fillRect`: radyal gradyan `R`'de saydam, `HALO_TEPE = 1,07·R`'de `haloHalka`, `1,25·R`'de saydam. Çemberin içine girmez, dolayısıyla çember içindeki kontrastı etkilemez; sönmede ışıkla birlikte solar.
+
+**Silüet dili sabit:** bomba (8 dikenli koyu küre + açık kenar + nabızlı çekirdek + dişli hale), dikenli dal (kabuk, eğri dikenler, budak), sarmaşık (koyu dış çizgili kıvrık gövde + yapraklar + filiz, kesik çizgili hayalet silüet, üçgen ünlem) şekil ve kontur kalınlıkları değişmedi. Tehlike renk ailesi testle korunur: tonlama oranları ≤ 0,25, tonlu renk taban renge CIEDE2000 ≤ 12 ve ton açısı farkı ≤ 25°.
+
+**Palet kuralları (`tools/atesBocegiTemaTest.js`, 3 görme biçimi: normal, protanopi, deuteranopi)**
+- K1–K5 (bölüm 6) her temanın **kendi** bölge tonu ve engel renkleriyle: 9 tema × 4 bölge × 5 kural × 3 = 540 oran + yerleşik 60. En düşük 3,74.
+- Paralaks katmanları (koyu, açık, uzak, yakın, mantar, ay, sis) temanın kenarından koyu, kenar ve tozla ≥ 3,0; uzak nokta tozdan belirgin sönük.
+- Böcek: fener (`isik`) / `govde.koyu` ≥ 3,0, `govde.kanat` / zemin ≥ 3,0, `govde.koyu` her bölge zemininden koyu.
+- Tehlike (temadan tonlu 5 renk × 10 palet × 4 bölge × 3): zemine ≥ 3,0 (600 oran); koyu kontur (`engel.dolgu`) ile ≥ 3,0; bomba kenarı/çekirdeği toz ile parlaklık oranı ≥ 1,5 / 1,4; sarmaşık silüet çizgisi / koyu alt çizgi (alfa dahil) ≥ 3,0.
+- Bölge kimliği: her temada 4 bölge tonu birbirinden CIEDE2000 ≥ 5 (en düşük 5,18). Kimliği asıl taşıyan katman şekilleridir (orman gövdeleri ve eğreltiler, sarkıt/dikit ve mantarlar, ay/tepeler/sazlar, ölü ağaçlar ve sis).
+- Kapsam denetimi: her temanın bölge/engel/gövde/uzak/tehlike değerleri yerleşikten farklı; bozuk palet (kenar = bölge tonu, toz = dolgu, bölge = ışık) kontrast hesabında yakalanır (negatif kontrol); oyun testinde tema karesinde yerleşik engel/tehlike renkleri hiç kullanılmaz ve tema değişince dal sprite'ı yeni renklerle yeniden çizilir.
+- Bölge tonları önce temanın kimliğine göre seçildi, sonra tüm kurallar ≥ 3,1 payla geçene dek siyaha doğru koyulaştırıldı (en çok %20; protanopide bomba turuncusu bağlayıcı).
+
+**Temalar arası renk uzaklığı (ölçüm yöntemi)** — `tools/atesBocegiTemaYakala.js` gerçek `index` betiklerini (katalog, market, çekirdek, `atesBocegiOyun.js`) headless Chrome'da açar; sabit tohum, azaltılmış hareket (animasyon yok), aynı yapay sahne: üst/alt dikenli dal, ağ, kuş, düşen dal, bomba, büyümüş sarmaşık, uyarı fazında sarmaşık (ünlem + silüet), 4 toz, kıvılcım, böcek (ışık 1). Tuval 300 × 600 px (dünya ölçeği 6, dpr 1), 10 palet (9 tema + varsayılan) × 4 bölge = 40 görüntü.
+- Uzaklık: görüntü 4 × 4 px bloklara bölünür, bloklar doğrusal RGB'de ortalanır, CIELAB'a (D65) çevrilir; iki temanın **aynı konumdaki** blokları arasında CIEDE2000, tüm blokların ortalaması; çift değeri 4 bölgenin ortalaması (45 çift).
+- Gerekçe: sahne geometrisi her temada aynı olduğundan piksel bazlı fark yalnız rengi ölçer (histogram uzaklığı konumu yok sayar, ortalama renk zıt değişimleri birbirine götürür). CIEDE2000, karanlık ve doygun tonlarda CIE76'dan daha algısaldır. Blok ortalaması kenar yumuşatma gürültüsünü ve ince çizgi titreşimini bastırır. Karanlık örtü (çember dışı) dahildir: oyuncunun gördüğü karenin tamamı.
+- CIEDE2000 uygulaması Sharma (2005) referans çiftleriyle sınanır (±0,0001).
+
+| Ölçüm | En düşük çift | Çiftlerin ortalaması |
+|---|---|---|
+| Taban (5a öncesi kod) | varsayılan / vitray **1,42** | 5,97 |
+| 5b (ışık, halo, gövde) | buz / çini 2,78 | 7,48 |
+| 5c (bölge paletleri) | buz / çini 7,47 | 16,14 |
+| **Son (5d, engeller)** | buz / çini **7,61** | **16,51** |
+
+Sonraki en yakın çiftler: mürekkep/sedef 9,26, varsayılan/kumsal 9,37. **Sınır: her çift ΔE00 ≥ 6,0** (testte `DE_SINIR`): tabanın en düşüğünün ~4 katı ve taban ortalamasının üstü; en düşük ölçülen çiftin %21 altında pay (Chrome sürümü / yazılım çiziminden gelebilecek küçük sapmalar için). Ayrıca her temada 4 bölge görüntüsü birbirinden farklı olmalı (sahnenin gerçekten bölgeye göre çizildiğinin denetimi; en az 4,23).
+
+**Bölge tonları**
+
+| Tema | Orman | Mağara | Nehir | Bataklık | Engel dolgu / kenar | Halo (halka) |
+|---|---|---|---|---|---|---|
+| Varsayılan | `#24402F` | `#2E2A44` | `#1F3F4C` | `#3A4031` | `#0B0F14` / `#E9EDF2` | `#FFE27A` (0) |
+| Toprak | `#3A3A1C` | `#46281C` | `#2A3A30` | `#493919` | `#150D07` / `#F3E3CC` | `#E8A050` (0,16) |
+| Buz | `#26383C` | `#30344A` | `#1D3846` | `#34363F` | `#07101A` / `#E2F4FF` | `#8FD8FF` (0,16) |
+| Kumsal | `#123B44` | `#283847` | `#003D33` | `#3E3825` | `#09130F` / `#F5ECD8` | `#5CC4B4` (0,16) |
+| Mürekkep | `#163A48` | `#30225A` | `#1E2858` | `#383048` | `#090A1E` / `#E4E6FF` | `#7C88F0` (0,18) |
+| Kiraz | `#3C2430` | `#48203E` | `#2E2840` | `#46282A` | `#16080E` / `#FFE4EC` | `#FF8FB0` (0,16) |
+| Sedef | `#353746` | `#413452` | `#2A384B` | `#3D373E` | `#130E18` / `#F7EEFF` | `#E3B8FF` (0,14) |
+| Çini | `#093A33` | `#1C2A66` | `#083657` | `#2A392A` | `#06122A` / `#F4EEDF` | `#3F9FE0` (0,18) |
+| Vitray | `#0A3E25` | `#3E1660` | `#0E2A6E` | `#56301A` | `#0E1018` / `#FFE7A8` | `#C080FF` (0,18) |
+| Lav | `#3A1C10` | `#46141A` | `#2E2020` | `#4A2C0E` | `#140604` / `#FFDCC0` | `#FF6A2A` (0,20) |
+
+**Market önizlemesi:** zemin (orman tonu), böcek gövdesi ve dal dolgu/kenarı (`style` özniteliği; CSS sınıfı yerleşik değerleri taşımaya devam eder) temadan. Aşama 1 düzeltmesi korundu: CSS zemin `#05080D`, SVG zemin `rect`'i yok; normal ve otomatik karanlık modda kart köşe/kenar testi geçer.
+
+**Sapmalar / açık noktalar**
+- Tehlike renkleri yalnız %15 (bomba, ünlem) / %25 (sarmaşık) tonlanır; protanopide bomba turuncusunun zemine ≥ 3,0 kalması daha güçlü tonlamaya izin vermedi. Tema hissi tehlikede çoğunlukla koyu küre/kontur (`engel.dolgu`) ve dişli halenin tonundan gelir.
+- Lav, Toprak gibi sıcak temalarda bomba halesi zeminle aynı renk ailesindedir; ayrım koyu dikenli küre + açık kenar + nabızla sağlanır (kontrast testleri geçer). Cihazda göz kontrolü önerilir.
+- En yakın çift buz/çini (7,61): ikisi de mavi aileden (buz soluk gri-mavi, çini doygun kobalt/turkuaz). Sınırın üstünde ama en zayıf ayrım budur.
+- `tools/atesBocegiTemaTest.js` birkaç saniye uzadı (40 görüntü + CIEDE2000; toplam ~16 sn).

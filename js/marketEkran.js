@@ -211,7 +211,7 @@ window.MarketEkran = (function () {
       '<ellipse cx="26.6" cy="29.5" rx="2.2" ry="1.7" fill="' + p.isik + '"/>' +
       '<ellipse cx="31" cy="29.5" rx="3" ry="2.4" fill="' + g.kin + '" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
       '<circle cx="35" cy="29" r="2" fill="' + g.koyu + '" stroke="#fff" stroke-opacity=".35" stroke-width=".4"/>' +
-      '<path class="mo-ates-dal" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
+      '<path class="mo-ates-dal" style="fill:' + p.engel.dolgu + ';stroke:' + p.engel.kenar + '" d="M52 10H56V48H52Z M52 20L47.5 17.5L52 16Z M52 35L47.5 32.5L52 31Z"/>' +
       '</svg>';
   }
 

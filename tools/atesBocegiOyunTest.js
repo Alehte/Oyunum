@@ -16,7 +16,7 @@ function ortam() {
   const o = { oyuk: 0, rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0, sesLog: [], titresim: [], log: null };
   const proxyCtx = () => new Proxy({}, {
     get(h, k) { if (k in h) return h[k]; return (...a) => { if (o.log) o.log.push([k, a]); return /Gradient/.test(k) ? { addColorStop() {} } : undefined; }; },
-    set(h, k, v) { if (k === 'globalAlpha' && o.alfaAc && o.log) o.log.push(['alpha', [v]]); if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
+    set(h, k, v) { if (k === 'globalAlpha' && o.alfaAc && o.log) o.log.push(['alpha', [v]]); if ((k === 'fillStyle' || k === 'strokeStyle') && o.stilAc && o.log) o.log.push([k, [v]]); if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
   });
   const els = {};
   const el = id => els[id] || (els[id] = (() => {
@@ -308,6 +308,24 @@ dene('arka plan katmanlari tema degisince yeniden kurulur (gorselKur), kare basi
   o.log = []; temali(o, TEMA_PAL); o.kare(1); const kur = o.log; o.log = null;   // temaDegisti gorselKur'u hemen calistirir
   assert(say(kur) >= once + 12, 'tema degisince 4 bolge x 3 katman yeniden kurulmali: ' + say(kur) + ' / ' + once);
   l = kayitliKare(o); assert.strictEqual(say(l), once, 'sonraki karede yeniden kurulum yok');
+});
+
+dene('engeller ve tehlikeler temadan cizilir: tema degisince dal sprite onbellegi yeniden cizilir; yerlesik engel / tehlike renkleri karede kalmaz', () => {
+  const o = ortam(); o.yeni(); o.kare(2);
+  const s = o.durum.dilimler[0];      // her tur engel + bomba + sarmasik (faz 3) gorunur alanda
+  s.engeller = [{ tur: 'dal', yon: 'ust', x: o.durum.mesafe + 14, y: 0, w: 5, h: 30 }, { tur: 'ag', x: o.durum.mesafe + 26, y: 10, w: 7, h: 16 },
+    { tur: 'kus', x: o.durum.mesafe + 30, y: 66, w: 5, h: 3.5 }, { tur: 'dusen', x: o.durum.mesafe + 40, y: 14, w: 5, h: 8, faz: 0, sure: 0 }];
+  s.bomba = { x: o.durum.mesafe + 25, y: 36, alindi: 0 };
+  s.sarmasik = { yon: 'alt', faz: 3, ilerleme: 1, x1: o.durum.mesafe + 34, x2: o.durum.mesafe + 37, sutunlar: [{ x: o.durum.mesafe + 34, y: 76, w: 3, h: 24 }] };
+  const stiller = () => { o.stilAc = true; o.log = []; o.kare(1); const l = o.log; o.log = null; o.stilAc = false; return new Set(l.filter(c => c[0] === 'fillStyle' || c[0] === 'strokeStyle').map(c => String(c[1][0]).toUpperCase())); };
+  const yer = stiller();
+  ['#0B0F14', '#E9EDF2'].forEach(r => assert(yer.has(r), 'yerlesik karede ' + r + ' yok'));
+  o.stilAc = true; o.log = []; temali(o, TEMA_PAL); o.kare(1); const kur = o.log; o.log = null; o.stilAc = false;
+  const kurS = new Set(kur.filter(c => c[0] === 'fillStyle' || c[0] === 'strokeStyle').map(c => String(c[1][0]).toUpperCase()));
+  assert(kurS.has(TEMA_PAL.engel.dolgu) && kurS.has(TEMA_PAL.engel.kenar), 'dal sprite / engeller tema renkleriyle cizilmedi');
+  const tema = stiller();
+  ['#0B0F14', '#E9EDF2', '#FF9566', '#FF9A1F', '#FFB02E', '#7FBF3F', '#B6E26B'].forEach(r => assert(!tema.has(r), 'tema karesinde yerlesik renk ' + r));
+  assert(tema.has(TEMA_PAL.engel.dolgu) && tema.has(TEMA_PAL.engel.kenar), 'engel renkleri karede');
 });
 
 dene('bocek govdesi temadan: bocekCiz sabit BOCEK_KOYU/KIN/PLAKA/KANAT kullanmaz, rk (temadan) kullanir (kaynak)', () => {

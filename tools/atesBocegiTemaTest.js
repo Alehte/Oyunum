@@ -372,6 +372,18 @@ dene('bomba kenari ile toz renk korlugunde de ayrisir: parlaklik orani >= 1,5 (c
   assert.strictEqual(kotu.length, 0, kotu.join('; '));
 });
 
+dene('renkCoz (oyun) tehlike formulu testteki tehlikeRenk ile ayni: taban rengi tema tonuna TEHLIKE_KARISIM / BITKI_KARISIM; engel ve govde aynen', () => {
+  const g = /function renkCoz[\s\S]*?\n  \}/.exec(OYUN);
+  assert(g, 'renkCoz yok');
+  ['bombaKenar: ton\\(BOMBA_KENAR, t, TEHLIKE_KARISIM\\)', 'bombaCekirdek: ton\\(BOMBA_CEKIRDEK, t, TEHLIKE_KARISIM\\)', 'unlem: ton\\(UNLEM_RENK, t, TEHLIKE_KARISIM\\)',
+   'sarGovde: ton\\(SARMASIK_GOVDE, b, BITKI_KARISIM\\)', 'sarYaprak: ton\\(SARMASIK_YAPRAK, b, BITKI_KARISIM\\)', 'dolgu: p\\.engel\\.dolgu, kenar: p\\.engel\\.kenar',
+   'var t = p\\.tehlike\\.ton, b = p\\.tehlike\\.bitki', 'return k \\? karistir\\(h, k, x\\) : h'].forEach(r => assert(new RegExp(r).test(g[0]), 'renkCoz: ' + r));
+  // cizim tehlike / engel renklerini yalniz rk'den alir: sabit adlar yalniz tanim, YERLESIK ve renkCoz'da
+  const say = ad => (OYUN.match(new RegExp('\\b' + ad + '\\b', 'g')) || []).length;
+  ['ENGEL_DOLGU', 'ENGEL_KENAR'].forEach(ad => assert.strictEqual(say(ad), 2, ad + ' cizimde sabit kullaniliyor'));
+  Object.keys(TABAN).forEach(ad => assert.strictEqual(say(ad), 2, ad + ' cizimde sabit kullaniliyor'));
+});
+
 dene('tehlike renk ailesi korunur (12.3): ton orani <= 0,25; tonlu renk tabana CIEDE2000 <= 12, ton acisi farki <= 25 derece', () => {
   assert(TEHLIKE_KARISIM > 0 && TEHLIKE_KARISIM <= 0.25 && BITKI_KARISIM > 0 && BITKI_KARISIM <= 0.25, 'oranlar ' + TEHLIKE_KARISIM + ' ' + BITKI_KARISIM);
   const aci = c => { const l = labOf(c); return Math.atan2(l[2], l[1]) * 180 / Math.PI; }, kotu = [];
@@ -388,8 +400,9 @@ dene('bomba / toz SEKIL ayrimi (renkten bagimsiz): diken sayisi 6-8, tozdan buyu
   assert(dk >= 6 && dk <= 8, 'diken ' + dk);
   assert(h.R_BOMBA / h.R_TOZ_GORSEL >= 1.4, 'bomba/toz yaricap orani ' + (h.R_BOMBA / h.R_TOZ_GORSEL));
   assert(/function bombaSprite\(\)/.test(OYUN) && /BOMBA_DIKEN \* 2/.test(OYUN), 'dikenli dis hat');
-  assert(/ENGEL_DOLGU; x\.strokeStyle = BOMBA_KENAR/.test(OYUN), 'koyu kure + sabit acik kenar');
-  assert(!/pal\.(isik|toz|vurgu|karanlik)/.test(/function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0]), 'bomba sprite temaya bagli degil');
+  const bs = /function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0];
+  assert(/x\.fillStyle = rk\.dolgu; x\.strokeStyle = rk\.bombaKenar/.test(bs), 'koyu kure (engel dolgusu) + acik kenar (tonlu)');
+  assert(!/pal\./.test(bs), 'bomba sprite tema alanini dogrudan okumaz (renkler rk: gorselKur, 12.3)');
 });
 
 dene('tehlike taban renkleri js/*.js icinde tek yerde (atesBocegiOyun.js); temalar taban rengi degil yalniz ton tasir', () => {
@@ -471,14 +484,14 @@ dene('O-3: tehlike renkleri x (zemin + her katman rengi) x 10 palet x 4 bolge x 
   // Silüet / uc cizgisi / kenar isareti: koyu alt cizgi (ince + 2*max(0,2, pxD)) altta, unlem rengi ince cizgi ustte, alfa 0,75.
   const mix = (a, b, x) => a.map((v, i) => v + (b[i] - v) * x);
   const kaynakBomba = /function bombaSprite[\s\S]*?\n  \}/.exec(OYUN)[0];
-  assert(/var bant = Math\.max\(0\.22, pxD\), dis = 0\.26 \+ 2 \* bant/.test(kaynakBomba) && /x\.strokeStyle = ENGEL_DOLGU; x\.lineWidth = dis; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = BOMBA_KENAR; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur (>= 1 cihaz pikseli)');
+  assert(/var bant = Math\.max\(0\.22, pxD\), dis = 0\.26 \+ 2 \* bant/.test(kaynakBomba) && /x\.strokeStyle = rk\.dolgu; x\.lineWidth = dis; x\.stroke\(\);\s*\/\/[^\n]*\n\s*x\.strokeStyle = rk\.bombaKenar; x\.lineWidth = 0\.26; x\.stroke\(\);/.test(kaynakBomba), 'bomba koyu dis kontur (>= 1 cihaz pikseli)');
   const sar = /function sarmasikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
-  assert(/u \? SARMASIK_GOVDE : ENGEL_DOLGU; c\.lineWidth = u \? 0\.7 : 0\.7 \+ 2 \* Math\.max\(0\.3, pxD\)/.test(sar), 'sarmasik koyu dis cizgi (>= 1 cihaz pikseli)');
-  assert(/c\.fillStyle = UNLEM_RENK; c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 2 \* Math\.max\(0\.23, pxD \/ k\)/.test(OYUN), 'unlem koyu kontur (>= 1 cihaz pikseli)');
-  assert(/c\.strokeStyle = ENGEL_DOLGU; c\.lineWidth = 2 \* Math\.max\(0\.06, pxD\)/.test(sar), 'sarmasik yaprak koyu kontur (>= 1 cihaz pikseli)');
+  assert(/u \? rk\.sarGovde : rk\.dolgu; c\.lineWidth = u \? 0\.7 : 0\.7 \+ 2 \* Math\.max\(0\.3, pxD\)/.test(sar), 'sarmasik koyu dis cizgi (>= 1 cihaz pikseli)');
+  assert(/c\.fillStyle = rk\.unlem; c\.strokeStyle = rk\.dolgu; c\.lineWidth = 2 \* Math\.max\(0\.23, pxD \/ k\)/.test(OYUN), 'unlem koyu kontur (>= 1 cihaz pikseli)');
+  assert(/c\.fillStyle = rk\.sarYaprak; c\.strokeStyle = rk\.dolgu; c\.lineWidth = 2 \* Math\.max\(0\.06, pxD\)/.test(sar), 'sarmasik yaprak koyu kontur (>= 1 cihaz pikseli)');
   assert(/c\.lineWidth = u \? 0\.3 : 0\.3 \+ 2 \* Math\.max\(0\.16, pxD\)/.test(sar), 'sarmasik filiz koyu bant (>= 1 cihaz pikseli)');
   const oz = /function ozIsikCiz[\s\S]*?\n  \}/.exec(OYUN)[0];
-  const altCizgi = ince => new RegExp('c\\.strokeStyle = ENGEL_DOLGU; c\\.lineWidth = ' + ince + ' \\+ 2 \\* Math\\.max\\(0\\.2, pxD\\); c\\.stroke\\(\\);[^\\n]*\\n\\s*c\\.strokeStyle = UNLEM_RENK; c\\.lineWidth = ' + ince + '; c\\.stroke\\(\\);');
+  const altCizgi = ince => new RegExp('c\\.strokeStyle = rk\\.dolgu; c\\.lineWidth = ' + ince + ' \\+ 2 \\* Math\\.max\\(0\\.2, pxD\\); c\\.stroke\\(\\);[^\\n]*\\n\\s*c\\.strokeStyle = rk\\.unlem; c\\.lineWidth = ' + ince + '; c\\.stroke\\(\\);');
   assert(altCizgi('0\\.5').test(oz) && altCizgi('0\\.3').test(oz), 'siluet / uc cizgisi / kenar isareti koyu alt cizgi');
   const alfalar = (oz.match(/c\.globalAlpha = 0\.[0-9]+ \* \(1 - p\); (?:c\.setLineDash|c\.beginPath)/g) || []).map(m => +/= (0\.[0-9]+)/.exec(m)[1]);
   assert(alfalar.length === 2 && alfalar.every(a => a >= 0.7), 'siluet / kenar isareti alfa >= 0,7: ' + alfalar.join(','));
@@ -844,7 +857,9 @@ function marketKartlariOlc(chrome, oto, port) {
 // ve goz olcegi), CIELAB'a cevrilir; iki temanin AYNI konumdaki bloklari arasinda CIEDE2000 hesaplanir, tum bloklarin ortalamasi alinir
 // (sahne geometrisi ayni oldugu icin fark yalniz renktir). Cift degeri = 4 bolgenin ortalamasi. Karanlik katman (cember disi) dahildir:
 // oyuncunun gordugu tum kare olculur.
-const DE_SINIR = null;     // 5d: olcumle belirlenir
+// Sinir (12.3): taban (tema gorselligi oncesi) en dusuk cift varsayilan/vitray 1,42, ciftlerin ortalamasi 5,97; son olcum en dusuk
+// cift buz/cini 7,61, ortalama 16,51. 6,0 = tabanin en dusugunun ~4 kati ve taban ortalamasinin ustu; en dusuk ciftin %21 altinda pay.
+const DE_SINIR = 6.0;
 function temaGoruntuleri(chrome, port, kayit) {
   const r = require('child_process').spawnSync(process.execPath, [path.join(KOK, 'tools', 'atesBocegiTemaYakala.js'), chrome, String(port)].concat(kayit ? [kayit] : []),
     { encoding: 'utf8', maxBuffer: 1 << 29, timeout: 240000 });
