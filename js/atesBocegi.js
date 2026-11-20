@@ -12,6 +12,7 @@
 //           Miknatis tozun x/y'sini adim'da kaydirir. Olaylar: bomba, sarmasik, sarmasikUyari, yutuldu (x, y).
 // TASARIM 12.1: durumda sersem (kalan sn), zeminKoruma (kalan sn), sebep ('' | 'isik' | 'zemin'). Olaylar: sersem,
 //           uyandi, zemin (x, y); bitti olayi sebep tasir.
+// TASARIM 12.2: risk tozu dilimin toz dizisinin sonunda, risk: 1 alaniyla (yol tozunda alan yok); miknatis cekmez.
 (function (kok, fabrika) {
   if (typeof module === 'object' && module.exports) module.exports = fabrika();
   else kok.AtesBocegi = fabrika();
@@ -79,7 +80,13 @@
       SARMASIK_GEN: 3, SARMASIK_TASMA: 1,
       SARMASIK_ONCE: 1.26, SARMASIK_UYARI: 0.91, SARMASIK_BUYUME: 0.25,
       // Cakisma (11.8): CAKISMA_SERBEST puanin altinda sarmasik ile tozsuz dilim arasi >= CAKISMA_ARA dilim.
-      CAKISMA_SERBEST: 5000, CAKISMA_ARA: 2
+      CAKISMA_SERBEST: 5000, CAKISMA_ARA: 2,
+      // Toz deseni zorlugu (12.2): RISK_PUAN'dan sonra siradan dilimde, olasilikla, dikenli dalin ucunda boslugun
+      // RISK_DERIN otesine bir risk tozu (dal ortasinda; yan ust/alt donusumlu). Almak dala carpmayi gerektirir;
+      // miknatis cekmez, puan/isik normal toz kadar. Olasilik RISK_OLASILIK + RISK_ARTIS * floor((puan - RISK_PUAN)
+      // / RISK_ADIM), en cok RISK_TAVAN. Ayri rng akisi: risk disi uretim (ve 800 oncesi desen) aynen kalir.
+      RISK_PUAN: 800, RISK_OLASILIK: 0.20, RISK_ARTIS: 0.10, RISK_ADIM: 400, RISK_TAVAN: 0.65,
+      RISK_DERIN: 4, RISK_PAY: 0.4, RISK_Y_MIN: 12, RISK_Y_MAX: 88
     },
     zorluk: {
       Z_OLCEK: 9000, HIZ_TABAN: 24, HIZ_Z: 18, HIZ_LOG: 2, HIZ_LOG_OLCEK: 40000, HIZ_TAVAN: 44,
@@ -203,6 +210,20 @@
     var icPay = m.R_CARPMA + ad.PAY_KACIS;
     if (!(u.MERKEZ_MAX + u.TOZ_SAPMA <= u.SERIT_ALT - icPay && u.MERKEZ_MIN - u.TOZ_SAPMA >= u.SERIT_UST + icPay))
       h.push('tozsuz yedek dal tutma araligina sigmiyor');
+    // risk tozu (12.2). Miknatis risk tozuna uygulanmaz; toplama yalniz R_TOPLA. Toz dalin x ortasinda, ucundan
+    // RISK_DERIN otede. Carpmayan bocek dalin x araligindaki her adimda uctan R_CARPMA otededir; o adimlardan
+    // once/sonra dikey hiz siniriyla (en dik egim kE = max(VY) / HIZ_TABAN) uzaklasir. Adim ayrikligi (HIZ_TAVAN * DT)
+    // dalin yarim genisliginden dusulur. Bu bolgenin toza uzakligi > R_TOPLA + RISK_PAY: carpmadan alinamaz
+    // (dokunulmazken carpma islemez; o istisna kabul). Duz kenar: RISK_DERIN + R_CARPMA; egik kenar: dogruya uzaklik.
+    var kE = Math.max(m.VY_YUKARI, m.VY_ASAGI) / z.HIZ_TABAN, yarim = u.DAL_GEN / 2 - z.HIZ_TAVAN * d.DT;
+    var rDuz = u.RISK_DERIN + m.R_CARPMA, rEgik = (rDuz + kE * yarim) / Math.sqrt(1 + kE * kE);
+    if (!(yarim > 0 && Math.min(rDuz, rEgik) > m.R_TOPLA + u.RISK_PAY)) h.push('risk tozu dala carpmadan alinabilir (' + Math.min(rDuz, rEgik).toFixed(3) + ')');
+    // risk = engel hasari, tavan/zemin degil: toza tam hizla giden bocek R_TOPLA'da alip frenlese de duvara degmez
+    if (!(u.RISK_Y_MIN + m.R_TOPLA - frenMesafesi(m, d.DT, -1) > d.Y_UST && u.RISK_Y_MAX - m.R_TOPLA + frenMesafesi(m, d.DT, 1) < d.Y_ALT))
+      h.push('risk tozu frenle tavana/zemine degdirir');
+    if (!(u.RISK_DERIN > 0 && u.RISK_PAY >= 0 && u.RISK_Y_MIN < u.RISK_Y_MAX && u.RISK_PUAN > 0 && u.RISK_ADIM > 0 && u.RISK_ARTIS >= 0 &&
+          u.RISK_OLASILIK <= u.RISK_TAVAN)) h.push('risk tozu ayarlari gecersiz');
+    ['RISK_OLASILIK', 'RISK_TAVAN'].forEach(function (q) { if (!(u[q] >= 0 && u[q] <= 1)) h.push(q + ' [0, 1] disinda'); });
     return h;
   }
 
@@ -468,6 +489,29 @@
     return null;
   }
 
+  // Risk tozu (12.2): ayri rng akisi (ur.rs); ana akisin tuketimi degismez. Siradan dilimde (acilis, nefes, tozsuz,
+  // bomba, sarmasik disi) bir cekis: olasilik tutarsa once son risk tozunun ters yani (ust/alt donusumlu), o yanda
+  // dikenli dal yoksa ya da toz RISK_Y araligina sigmazsa diger yan denenir. Toz dalin x ortasinda, dal ucundan
+  // (= guvenli boslugun kenari) RISK_DERIN otede: guvenli zarfin disinda, dalin icinde.
+  function riskSec(ur, e, puan) {
+    var o = { s: ur.rs }, q = rngAdim(o), sonuc = null, i, j, yan, dl, y;
+    ur.rs = o.s;
+    if (!(q < Math.min(U.RISK_TAVAN, U.RISK_OLASILIK + U.RISK_ARTIS * Math.floor((puan - U.RISK_PUAN) / U.RISK_ADIM)))) return null;
+    for (j = 0; j < 2 && !sonuc; j++) {
+      yan = (ur.riskYan > 0) === (j === 0) ? 'alt' : 'ust';
+      for (i = 0; i < e.length; i++) {
+        dl = e[i];
+        if (dl.tur !== 'dal' || dl.yon !== yan) continue;
+        y = yan === 'ust' ? dl.y + dl.h - U.RISK_DERIN : dl.y + U.RISK_DERIN;
+        if (y < U.RISK_Y_MIN || y > U.RISK_Y_MAX) continue;
+        sonuc = { x: dl.x + dl.w / 2, y: y, alindi: 0, yutuldu: 0, risk: 1 };
+        ur.riskYan = yan === 'ust' ? 1 : -1;             // sonraki: ters yan
+        break;
+      }
+    }
+    return sonuc;
+  }
+
   // ur = uretici verisi (duz nesne). bolge: dilimin engel agirliklarini secer; degisirse once nefes dilimi gelir.
   // puan: tozsuz/bomba/sarmasik esikleri ve cakisma kurali (11.5-11.8); dilim dizisi bu yuzden puana da baglidir.
   function uret(ur, bolge, puan) {
@@ -581,13 +625,16 @@
     if (tozsuz) { tA = Math.min(c, ur.tA); tU = Math.max(c, ur.tU); }
     else if (toz.length) { yy = toz[toz.length - 1].y; tA = Math.min(tA, yy); tU = Math.max(tU, yy); }
     for (i = 0; i < gk.Y.length; i++) { yy = kistir(gk.Y[i], c - g / 2 + ic, c + g / 2 - ic); tA = Math.min(tA, yy); tU = Math.max(tU, yy); }
+    // Risk tozu (12.2): tutma araligindan sonra (yol tozu sayilmaz), yayin sonuna (x = dal ortasi > yay: sira korunur).
+    if (puan >= U.RISK_PUAN && !acilis && !nefes && !tozsuz && !sa && !bomba) { var rt = riskSec(ur, e, puan); if (rt) toz.push(rt); }
     ur.n++; ur.x = x; ur.w = w; ur.c = c; ur.tA = tA; ur.tU = tU; ur.tehlikeOnce = sa || bomba ? 1 : 0;
     return dl;
   }
   // Uretici durumu duz veridir (rng durumu dahil sayi): durum JSON gidis-donusunden sonra aynen devam eder.
   function ureticiVerisi(tohum) {
     return { s: tohum >>> 0, n: 0, x: D.X_BOCEK, w: 0, c: D.Y_BASLA, bolge: 0, ustSay: 0, altSay: 0,
-             tzKalan: 0, tzSon: -1000, saNo: -1000, saPuan: 0, tA: D.Y_BASLA, tU: D.Y_BASLA, tehlikeOnce: 0 };
+             tzKalan: 0, tzSon: -1000, saNo: -1000, saPuan: 0, tA: D.Y_BASLA, tU: D.Y_BASLA, tehlikeOnce: 0,
+             rs: (Math.imul((tohum >>> 0) ^ 0x5BD1E995, 0x9E3779B1) + 0x632BE5AB) >>> 0, riskYan: 0 };   // 12.2: risk tozu akisi
   }
   function ureticiOlustur(tohum) {
     var v = ureticiVerisi(tohum);
@@ -737,7 +784,8 @@
     }
     // Toz: miknatis (11.2) R_MIKNATIS icindeki alinmamis/yutulmamis tozu bocege MIKNATIS_HIZ ile kaydirir
     // (dunya koordinati, deterministik); sonra R_TOPLA icindeyse alinir. Kivilcim cekilmez.
-    // Sersemken (12.1) miknatis kapali: yalniz dogrudan temas (R_TOPLA) toplar.
+    // Sersemken (12.1) miknatis kapali: yalniz dogrudan temas (R_TOPLA) toplar. Risk tozu (12.2) hic cekilmez;
+    // puan ve isik normal tozla ayni.
     var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt;
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
@@ -751,6 +799,7 @@
         q = (t.x - bx) * (t.x - bx) + (t.y - d.y) * (t.y - d.y);
         if (q > rm2) continue;
         if (q > r2) {
+          if (t.risk) continue;                      // 12.2: risk tozu cekilmez (yalniz dogrudan temas)
           L = Math.sqrt(q);
           t.x += (bx - t.x) / L * adimM; t.y += (d.y - t.y) / L * adimM;
           q = (t.x - bx) * (t.x - bx) + (t.y - d.y) * (t.y - d.y);

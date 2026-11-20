@@ -611,6 +611,47 @@ dene('miknatis yutulan ve alinan tozu cekmez', () => {
   assert.strictEqual(say(o, 'toz'), 0); assert.strictEqual(y1.x, XB + 3); assert.strictEqual(a1.x, XB + 5);
   assert.strictEqual(y1.alindi, 0, 'yutulan toz toplanmaz');
 });
+dene('risk tozu (12.2): miknatis cekmez (R_MIKNATIS icinde kipirdamaz); dogrudan temasla alinir', () => {
+  const d = bosDurum(); d.y = 50; d.vy = 0; d.ay = 0;
+  const rt = { x: XB + 5, y: 52, alindi: 0, yutuldu: 0, risk: 1 }, nt = { x: XB + 5, y: 48, alindi: 0, yutuldu: 0 };
+  d.dilimler = [dilim([], [nt, rt])];
+  AB.adim(d, false);
+  assert.strictEqual(rt.x, XB + 5); assert.strictEqual(rt.y, 52); assert.ok(nt.x !== XB + 5, 'normal toz cekilmeli');
+  const e = bosDurum(); e.y = 50; e.vy = 0;
+  const r2 = { x: XB + 0.2, y: 50 + A.hareket.R_TOPLA - 0.5, alindi: 0, yutuldu: 0, risk: 1 };
+  e.dilimler = [dilim([], [r2])];
+  assert.strictEqual(say(AB.adim(e, false), 'toz'), 1); assert.strictEqual(r2.alindi, 1);
+});
+dene('risk tozu puan ve isigi normal tozla ayni (ekstra yok), zincir ayni', () => {
+  const sonuc = risk => {
+    const d = bosDurum(); d.y = 50; d.vy = 0; d.isik = 0.5; d.zincir = 7;
+    d.dilimler = [dilim([], [Object.assign({ x: XB + 0.2, y: 50, alindi: 0, yutuldu: 0 }, risk ? { risk: 1 } : {})])];
+    const o = AB.adim(d, false);
+    return [o.filter(q => q.tur === 'toz').map(q => q.puan), d.puan, d.isik, d.zincir, d.zincirSure, d.toz];
+  };
+  assert.deepStrictEqual(sonuc(true), sonuc(false));
+});
+dene('bozuk ayar: risk tozu carpmadan alinabilir (RISK_DERIN kucuk) / duvara yakin / olasilik', () => {
+  const a = ayarKopya(); a.uretici.RISK_DERIN = 2.5; assert.ok(AB.ayarDogrula(a).some(h => /risk tozu dala/.test(h)), JSON.stringify(AB.ayarDogrula(a)));
+  const b = ayarKopya(); b.hareket.R_TOPLA = 5.2; assert.ok(AB.ayarDogrula(b).some(h => /risk tozu dala/.test(h)));
+  const c = ayarKopya(); c.uretici.RISK_Y_MIN = 8; assert.ok(AB.ayarDogrula(c).some(h => /risk tozu frenle/.test(h)));
+  const e = ayarKopya(); e.uretici.RISK_TAVAN = 1.2; assert.ok(AB.ayarDogrula(e).length > 0);
+  const f = ayarKopya(); f.uretici.RISK_OLASILIK = 0.9; assert.ok(AB.ayarDogrula(f).length > 0);
+});
+dene('risk tozu (12.2): RISK_PUAN altinda yok; ustunde dikenli dalda, guvenli zarf disinda, toz dizisinin sonunda', () => {
+  let n = 0;
+  for (let t = 1; t <= 60; t++) {
+    surucu(t, 600, rampaPuan).forEach(s => {
+      const rk = s.toz.filter(z => z.risk); if (!rk.length) return; n++;
+      assert.ok(s._p >= A.uretici.RISK_PUAN && rk.length === 1 && s.toz[s.toz.length - 1] === rk[0]);
+      assert.ok(!s.nefes && !s.tozsuz && !s.bomba && !s.sarmasik);
+      const r = rk[0], z = AB.dilimZarfi(s);
+      assert.ok(r.y <= z.ust - A.uretici.RISK_DERIN + 1e-9 || r.y >= z.alt + A.uretici.RISK_DERIN - 1e-9);
+      assert.ok(s.engeller.some(e => e.tur === 'dal' && Math.abs(e.x + e.w / 2 - r.x) < 1e-9 && r.y >= e.y && r.y <= e.y + e.h));
+    });
+  }
+  assert.ok(n > 500, n);
+});
 
 console.log('Tavan sersemlemesi ve zemin olumu (12.1)');
 const MH = A.hareket, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;

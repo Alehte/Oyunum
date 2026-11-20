@@ -533,3 +533,73 @@ Uyanış durumu (73'te durgun) süreden bağımsız olduğu için toparlanma pay
 - Görev "yavaşça aşağı süzülür" ve "0,8–1,0 sn sonra zeminin %25 yukarısında uyanır" diyor; ikisi birlikte ortalama 69–86 b/sn iniş ister (normal süzülme `VY_ASAGI = 30`). Smoothstep eğrisi başı ve sonu yumuşatır (durgun başlar, durgun uyanır) ama ortası hızlıdır; cihazda his kontrolü gerekir. Daha yavaş iniş için ya süre uzamalı ya uyanma yüksekliği yükselmeli.
 - Tavana çarpmanın pratik bedeli ışık değil konumdur: 73'te uyanan oyuncu sıradaki boşluğa çoğu zaman yetişemez (ölçümde sersemlik başına toplam ~0,7 çarpma).
 - Bitiş kartı başlığı zemin ölümünde de "Işık Söndü"dür (akış aynen korundu).
+
+### 12.2 Toz deseni zorluğu
+
+Hedef: yüksek skorda "her tozu toplamaya çalışan kaybeder", güvenli yolu izleyen yaşar. Sayılar `AtesBocegi.AYAR.uretici`'dedir.
+
+**Sabitler**
+
+| Sabit | Değer | Anlam |
+|---|---|---|
+| `RISK_PUAN` | **800** | Risk tozunun başladığı üretim puanı (altında desen eskisiyle bayt bayt aynı) |
+| `RISK_OLASILIK` | **0,20** | 800'de dilim başına risk tozu olasılığı |
+| `RISK_ARTIS` / `RISK_ADIM` | **0,10** / **400** puan | Kademeli artış: `min(RISK_TAVAN, 0,20 + 0,10·floor((puan − 800)/400))` |
+| `RISK_TAVAN` | **0,65** | Olasılık tavanı (puan ≥ 2400'de 0,60, ≥ 2800'de 0,65) |
+| `RISK_DERIN` | **4** birim | Tozun dal ucundan (= güvenli boşluğun kenarı) dalın içine uzaklığı |
+| `RISK_PAY` | **0,4** birim | Çarpmasız uzaklık değişmezinde `R_TOPLA`'nın üstüne pay |
+| `RISK_Y_MIN` / `RISK_Y_MAX` | **12** / **88** | Risk tozunun y aralığı (tavan/zemin kuralı) |
+
+**Yerleşim kuralı (üretici)**
+- Yalnız sıradan dilimde: açılış, nefes, tozsuz (11.6), bomba (11.5) ve sarmaşık (11.7) dilimlerinde risk tozu yoktur; dilim başına en çok **bir** tane.
+- Olasılık tutarsa önce son risk tozunun **ters yanı** (üst/alt dönüşümlü), o yanda dikenli dal yoksa ya da toz y aralığına sığmıyorsa diğer yan denenir. Toz o yanın **dikenli dalının** x ortasına (`dal.x + DAL_GEN/2`), dal ucundan `RISK_DERIN` içeri konur: üst dalda `y = ust − 4`, alt dalda `y = alt + 4`. Yani güvenli zarfın (`dilimZarfi`) dışında, dalın içindedir; dikenli dal hasarı (`DAL_HASAR` 0,50) alınmadan toplanamaz. Ağ, kuş ve düşen dal kullanılmaz (ağın arkası açık olabilir, kuş hareketli, düşen dal varışta henüz düşmemiş olabilir).
+- Risk tozu dilimin `toz` dizisinin **sonuna** `risk: 1` alanıyla eklenir (x sırası korunur; yol tozlarında bu alan yoktur). Tutma aralığı (11.6), bomba/sarmaşık seçimi ve kaçış modeli yalnız yol tozlarını kullanır; risk tozu onlardan sonra eklenir.
+- **Ayrı rng akışı:** `uretici.rs` (tohumdan türetilir) dilim başına bir çekiş yapar; ana akışın tüketimi değişmez. Sonuç: 800 öncesi üretim aynen, 800 sonrası da risk tozları çıkarılınca aynen eskisi (bkz. ölçüm). Güvenli yol üzerindeki normal tozlar olduğu gibi durur; risk tozu ekstradır.
+- **Puan/ışık:** risk tozu normal toz gibi `P.TOZ · carpan`, `+0,035` ışık, zincir +1 verir; ekstra yok. Koşu tavanı 40 / günlük 200 değişmedi (ekonomi bloğuna dokunulmadı).
+
+**Mıknatıs çözümü (ölçerek seçildi): risk tozuna mıknatıs uygulanmaz.** Risk tozu yalnız doğrudan temasla (`R_TOPLA`) alınır, çekilmez; UI mıknatıs kuyruğunu risk tozunda çizmez (çekilmeyen toza kuyruk çizilmesin; renk/şekil aynı). Ölçüm (60 tohum × 20.000 birim, Bot K = güvenli boşluğun risk tarafındaki kenarından `R_CARPMA + 0,5` geçen ideal bot):
+
+| Seçenek | Bot A (merkez) bedava risk tozu | Bot K (kenar) bedava |
+|---|---|---|
+| Mıknatıs açık, `RISK_DERIN` 4 | 73 / 6323 | 61 / 6369 |
+| Mıknatıs açık, `RISK_DERIN` 5–8 | 0 | 0 |
+| **Mıknatıs kapalı, `RISK_DERIN` 4** | **0** | **0** |
+
+Mıknatıs açıkken güvenceyi statik bir değişmezle vermek için tozun güvenli bölgeden `R_MIKNATIS` + çekme süresince kayma kadar uzak olması gerekir (düz kenarda `RISK_DERIN ≥ 6,4`, köşe yaklaşımında ≈ 9,4 ve üstü; çekim dinamiği ayrıca); bu derinlik dal boyunu ve uygun dilimleri çok daraltır. 5–8'de ölçülen 0 yalnız ampiriktir. Mıknatıs kapalıyken güvence statiktir:
+
+**`ayarDogrula` değişmezleri**
+- *Çarpmadan alınamaz:* çarpmayan böcek dalın x aralığındaki her adımda dal ucundan `R_CARPMA` ötededir; o adımlardan önce/sonra en dik eğimle `kE = max(VY_YUKARI, VY_ASAGI)/HIZ_TABAN = 1,667` uzaklaşabilir; adım ayrıklığı `HIZ_TAVAN·DT = 0,367` dalın yarım genişliğinden düşülür (`yarim = 2,133`). Toza bu bölgenin uzaklığı `min(RISK_DERIN + R_CARPMA, (RISK_DERIN + R_CARPMA + kE·yarim)/√(1 + kE²)) = min(5,6, 4,709) > R_TOPLA + RISK_PAY = 4,6`. (İstisna: önceki bir hasarın `DOKUNULMAZ` süresi içinde çarpma işlemez; bu durumda zaten hasar alınmıştır.)
+- *Tavan/zemin:* toza tam hızla giden böcek `R_TOPLA`'da alıp frenlese de duvara değmez: `RISK_Y_MIN + R_TOPLA − FREN_UST = 4,89 > Y_UST`, `RISK_Y_MAX − R_TOPLA + FREN_ALT = 89,03 < Y_ALT`. Risk = engel hasarı; sersemlik/zemin ölümü değil.
+- Olasılıklar `[0, 1]`, `RISK_OLASILIK ≤ RISK_TAVAN`, `RISK_ADIM > 0`, `RISK_DERIN > 0`, `RISK_Y_MIN < RISK_Y_MAX`.
+
+**Adalet testi (`tools/atesBocegiAdaletTest.js`)**
+- Yapısal (her koşuda, her dilim): risk tozu yalnız `RISK_PUAN` ve sonrasında, sıradan dilimde, en çok bir, dizinin sonunda; bir dikenli dalın x ortasında ve içinde, güvenli zarftan `RISK_DERIN` uzakta, y aralığında; gerçek dal geometrisiyle sayısal çarpmasız uzaklık `> R_TOPLA`. Dikkat: yapısal denetimde toz sayısı, eğri sapması ve tutma aralığı yalnız yol tozlarıyla yapılır.
+- **800 öncesi aynılık:** 200 tohum × 120 dilim (puan 0–799) üretim özeti (FNV-1a, dilim JSON'u) HEAD çekirdeğiyle hesaplanan `2e61cd7b`'ye eşit; 100 tohum × 600 dilim (puan 0–8400) risk tozları çıkarılınca `6a4bf060`'a eşit (ana rng akışı bozulmadı). Bot A/B/D sonuçları değişmedi (aynı puan ortalamaları, aynı dilim/tozsuz/bomba/sarmaşık sayıları).
+- **Bot T (tam toplayıcı):** Bot A gibi; sıradaki dilimde alınmamış risk tozu varsa önündeki yol tozlarını izler, yetişme payı kalmayınca risk tozunu hedefler. Işık sabit (ölüm değil hasar ölçülür). **Ölçüt (a):** üretim puanı `≥ 2400` olan dilimlerde ardışık, örtüşmeyen **7 dilimlik** pencerelerde ortalama **≥ 2 hasar**, ve dilim başına hasar seçici Bot A'nın ≥ 3 katı (mutlak fark ≥ 0,2).
+- **Seçici botlar (b):** Bot A ve Bot B (gerçek ışık, `T_MIN` gecikmeli; engelin x aralığındaki tozu yol saymaz — o toz dalın içinde olduğu için ışık çemberine girdiği adımda dal da girmiştir, gizli bilgi değildir) 20.000 birimi tamamlar, 800 sonrası 0 hasar, 0 risk tozu. Mevcut 1000 tohumluk Bot A/B/Bg ve uzun koşu ölçütleri aynen geçer.
+- **Bot K:** risk tozunu çarpmadan (alımdan önce 1 sn / sonra 0,5 sn içinde hasarsız) almak: 0. Bot T'nin de bedava alımı 0.
+- Her toz olayının puanı (risk dahil) `P.TOZ · carpan(o anki zincir)`. Çekirdek testinde (`atesBocegiTest.js`) risk tozu ile normal tozun puan/ışık/zincir sonucu birebir aynı ve risk tozu `R_MIKNATIS` içinde kıpırdamaz.
+
+**Ölçüm sonuçları** (Bot T/K/A: 100 tohum × 20.000 birim; gerçek ışıklı Bot T ve Bot B: bu tohumların ilk 50'si; tohumlar ana kümeden ayrı)
+
+| Üretim puanı | Bot T dilim başına hasar | Risk tozlu dilim oranı |
+|---|---|---|
+| 800–1600 | 0,140 | %14,0 |
+| 1600–2400 | 0,239 | %23,9 |
+| 2400–3200 | 0,338 | %34,0 |
+| 3200–6400 | 0,321 | %32,5 |
+| ≥ 6400 | 0,348 | %35,6 |
+
+- Etkin oran nominalin altında: tavanda nominal 0,65, gerçekleşen ≈ %33–36 (dilimlerin ~%24'ü özel — tozsuz/bomba/sarmaşık/nefes —, kalanların ~%70'inde uygun dikenli dal var). Eşik **2400** seçildi: kovalar orada doyuyor (≥ 2800'de nominal tavan).
+- Bot T, puan ≥ 2400: 28.455 dilim, dilim başına **0,334** hasar; 7 dilimlik pencere ortalaması **2,34** (≥ 2 hasarlı pencere %74). Risk tozlarının %93,4'ünü aldı (10.012 / 10.718). Bot A (seçici): **0,000** (0 / 10.588 risk tozu). 6 dilimlik pencerede ortalama 2,0'a çok yakın (60 tohumda 2,01) çıktığı için sınır ölçütü 7 dilim seçildi.
+- Gerçek ışıkla Bot T 50 / 50 koşuda ölür, puan medyanı **1769**; seçici Bot B gerçek ışıkla 50 / 50 tamamlar, medyan 13.832, 0 hasar, 0 risk tozu.
+- Bot K: 0 / 10.561 risk tozu, 0 bedava, 0 hasar.
+- Yapısal: 1000 tohumluk ana küme + uzun koşularda 392.054 risk tozu (aday sıradan dilimlerin %42,9'u), en kısa çarpmasız uzaklık **4,710** (> `R_TOPLA` 4,2; değişmezdeki alt sınır 4,709), üst 189.048 / alt 203.006, ardışık risk tozlarında yan değişimi %64 (diğer yanda dal yoksa aynı yan).
+- Test süresi: adalet testi 226 → 257 sn (yeni botlar 100 tohum, gerçek ışıklılar 50).
+
+**Sapmalar / açık noktalar**
+- Görev "tozların bir kısmı risk tozu olsun" diyor; yol tozu risk tozuna **dönüştürülmedi**, risk tozu yolun üstüne **eklendi**. Gerekçe: yol tozunu çıkarmak seçici oyuncunun ışık ekonomisini (Bot B gerçek ışık ≥ 0,25) ve tutma aralığı/bomba/sarmaşık seçimini değiştirirdi; "güvenli yol üzerindeki normal tozlar devam etsin" kuralı da bunu gerektirir. Açgözlü oyuncu tozun karşılığında 0,035 ışık alıp 0,50 kaybeder ve zinciri sıfırlanır.
+- "Üst/alt dönüşümlü" yalnız tercih sırasıdır; tercih edilen yanda dikenli dal yoksa aynı yan kullanılır (ölçülen değişim %64).
+- Mıknatısın risk tozunu çekmemesi oyuncunun fark edebileceği bir davranış farkıdır (güvenli yoldan geçerken o toz kıpırdamaz). Renk/şekil aynı; görsel ayrım eklenmedi. Cihazda his kontrolü gerekir.
+- Risk tozu yalnız dikenli dalda; ağ/kuş/düşen dal kullanılmadı (yukarıdaki gerekçe). Dokunulmazlık süresi içinde risk tozu hasarsız alınabilir (önceki hasarın bedeli zaten ödenmiştir).
+- Üretim özetleri (`2e61cd7b`, `6a4bf060`) üretici bilerek değiştirilirse yeniden hesaplanmalıdır.

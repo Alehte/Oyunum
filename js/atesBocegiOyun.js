@@ -879,7 +879,7 @@
         c.globalAlpha = 1; c.fillStyle = pal.toz; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL, 0, 6.2832); c.fill();
         c.globalAlpha = 0.8; c.fillStyle = BOCEK_KANAT; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL * 0.5, 0, 6.2832); c.fill();      // sicak cekirdek
         mx = x - XB; my = t.y - durum.y; md = mx * mx + my * my;
-        if (md < rm2 && md > 1 && !(durum.sersem > 0)) {                                                                                // miknatisla cekiliyor: kisa kuyruk (sersemken miknatis kapali)
+        if (md < rm2 && md > 1 && !(durum.sersem > 0) && !t.risk) {                                                                    // miknatisla cekiliyor: kisa kuyruk (sersemken ve risk tozunda miknatis kapali, 12.2)
           md = Math.sqrt(md); c.globalAlpha = 0.4; c.strokeStyle = pal.toz; c.lineWidth = M.R_TOZ_GORSEL;
           c.beginPath(); c.moveTo(x, t.y); c.lineTo(x + mx / md * 2.4, t.y + my / md * 2.4); c.stroke();
         }
