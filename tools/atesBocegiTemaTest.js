@@ -756,6 +756,26 @@ function onizlemeOlc(chrome, kaynak) {   // kaynak: {ekran, css} verilirse (HEAD
     });
   } finally { try { fs.rmSync(dizin, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch (e) { /* gecici dizin silinemedi: test sonucunu etkilemez */ } }
 }
+dene('onizleme zemini temanin orman tonundan (12.3): oyunla ayni kaynak, temalar arasi farkli, koyu', () => {
+  const { win, doc, ctx } = yukle(false);
+  const src = oku('js/marketEkran.js').replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');
+  const hata = console.error; console.error = () => {};
+  try { vm.runInContext(src, ctx, { filename: 'marketEkran.js' }); } finally { console.error = hata; }
+  const hexK = (a, b, x) => '#' + [1, 3, 5].map(i => { const p = parseInt(a.substr(i, 2), 16), q = parseInt(b.substr(i, 2), 16); return Math.round(p + (q - p) * x).toString(16).padStart(2, '0'); }).join('').toUpperCase();   // marketEkran hexKaristir (tamsayi)
+  const goruldu = new Set();
+  win.AppMarket.temalar().forEach(t => {
+    const k = doc.createElement(); win.MarketEkran.onizlemeKur(k, t);
+    const svg = k.cocuklar[k.cocuklar.length - 1].innerHTML, P = M.isikCoz(t.isik);
+    const z = /<stop offset="\.72" stop-color="(#[0-9A-Fa-f]{6})"/.exec(svg);
+    assert(z, t.id + ': zemin duragi yok');
+    assert.strictEqual(z[1].toUpperCase(), hexK(hexK(P.bolgeler[0], '#000000', 0.36), P.isik, 0.06), t.id + ': zemin orman tonundan degil');
+    assert(parlaklik(dogrusal(rgb(z[1])), 'normal') < 0.03, t.id + ': zemin acik');
+    goruldu.add(z[1].toUpperCase());
+    assert(svg.indexOf(P.govde.koyu) > 0 && svg.indexOf(P.govde.kin) > 0, t.id + ': bocek govdesi temadan degil');
+  });
+  assert.strictEqual(goruldu.size, 10, 'onizleme zeminleri temalar arasi farkli olmali');
+});
+
 dene('onizleme halo (Chrome disi, statik): merkez opaklik <= .35, r 11.6-14.5 (58 px sahnenin %20-25i), renk p.isik', () => {
   const { win, doc, ctx } = yukle(false);
   const src = oku('js/marketEkran.js').replace('return { ac: ac, kapat: kapat, ciz: ciz };', 'return { ac: ac, kapat: kapat, ciz: ciz, onizlemeKur: onizlemeKur };');

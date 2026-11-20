@@ -292,6 +292,24 @@ dene('halo halkasi cemberin icine girmez (kaynak): ilk durak 1/KARARTMA saydam, 
   assert(/if \(haloGrad\) \{[^}]*kctx\.globalAlpha = f;/.test(KAYNAK), 'sonmeyle solar');
 });
 
+dene('arka plan temadan (kaynak): bolgeKur temanin bolge tonunu, katmanCiz temanin uzak tonunu kullanir; sabit BOLGE_TON / UZAK_MAVI yalniz yerlesikte', () => {
+  const bk = /function bolgeKur[\s\S]*?\n  \}/.exec(KAYNAK)[0], kc = /function katmanCiz[\s\S]*?\n  \}/.exec(KAYNAK)[0];
+  assert(/karistir\(pal\.bolgeler\[b\], pal\.isik, ISIK_KARISIM\)/.test(bk), 'bolgeKur pal.bolgeler');
+  assert(!/BOLGE_TON|UZAK_MAVI/.test(bk + kc), 'sabit bolge/uzak tonu cizimde');
+  assert(/karistir\(zemin, pal\.uzak, KATMAN\.uzak\)/.test(kc), 'katmanCiz pal.uzak');
+  assert.strictEqual((KAYNAK.match(/BOLGE_TON/g) || []).length, 2, 'BOLGE_TON yalniz tanim + YERLESIK');
+  assert.strictEqual((KAYNAK.match(/UZAK_MAVI/g) || []).length, 2, 'UZAK_MAVI yalniz tanim + YERLESIK');
+});
+
+dene('arka plan katmanlari tema degisince yeniden kurulur (gorselKur), kare basina kurulmaz', () => {
+  const o = ortam(); o.yeni(); o.kare(2);
+  const say = l => l.filter(c => c[0] === 'scale').length;   // bolgeKur her katman tuvalinde bir kez scale cagirir
+  let l = kayitliKare(o); const once = say(l);
+  o.log = []; temali(o, TEMA_PAL); o.kare(1); const kur = o.log; o.log = null;   // temaDegisti gorselKur'u hemen calistirir
+  assert(say(kur) >= once + 12, 'tema degisince 4 bolge x 3 katman yeniden kurulmali: ' + say(kur) + ' / ' + once);
+  l = kayitliKare(o); assert.strictEqual(say(l), once, 'sonraki karede yeniden kurulum yok');
+});
+
 dene('bocek govdesi temadan: bocekCiz sabit BOCEK_KOYU/KIN/PLAKA/KANAT kullanmaz, rk (temadan) kullanir (kaynak)', () => {
   const g = /function bocekCiz[\s\S]*?\n  \}/.exec(KAYNAK)[0];
   assert(!/BOCEK_(KOYU|KIN|PLAKA|KANAT)/.test(g), 'bocekCiz sabit govde rengi kullaniyor');

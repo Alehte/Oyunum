@@ -164,8 +164,8 @@ window.MarketEkran = (function () {
     M.siseYaz(tahta, tema.sise);
   }
 
-  // --- Ates Bocegi: 58x58 inline SVG (tasarim 7.6). Renk gercek isikCoz
-  // ciktisindan gelir; engel (dal) renkleri CSS'te (.mo-ates-dal) sabittir.
+  // --- Ates Bocegi: 58x58 inline SVG (tasarim 7.6, 12.3). Renkler gercek isikCoz
+  // ciktisindan gelir (isik, toz, iz, orman bolge tonu, bocek govdesi, engel).
   var ATES_SAYAC = 0;
   function hexKaristir(a, b, t) {
     var s = '#', i, x, y, v;
@@ -196,7 +196,7 @@ window.MarketEkran = (function () {
   function atesSahnesi(ana, tema) {
     var sahne = kutu('mo-sahne mo-ates', ana);
     var p = M.isikCoz(tema.isik), id = 'moAtes' + (++ATES_SAYAC), g = p.govde;     // bocek govdesi temadan (oyunla ayni, 12.3)
-    var zemin = hexKaristir('#162A1E', p.isik, 0.06);
+    var zemin = hexKaristir(hexKaristir(p.bolgeler[0], '#000000', 0.36), p.isik, 0.06);   // temanin orman tonu (oyunla ayni kaynak, 12.3)
     sahne.innerHTML =
       '<svg viewBox="0 0 58 58" aria-hidden="true" focusable="false">' +
       '<defs><radialGradient id="' + id + 'z"><stop offset=".72" stop-color="' + zemin + '"/><stop offset="1" stop-color="' + zemin + '" stop-opacity="0"/></radialGradient>' +

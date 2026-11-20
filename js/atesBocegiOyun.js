@@ -28,9 +28,9 @@
   var SILUET_CIZGI = [0.8, 0.8], SILUET_YOK = [];                  // sarmasik hayalet silueti kesik cizgi (onceden kurulu, kare basina dizi uretilmez)
   var BOMBA_DIKEN = 8;                                             // diken sayisi (renk korlugunde sekil ayrimi: toz duz daire)
   var KATMAN = { mantarKap: 0.3, mantarHale: 0.16, ay: 0.12, sis: 0.5, sisAlfa: 0.14, uzak: 0.22, huzme: 0.16, sisBant: 0.16, yakin: 0.42 };   // arka plan katman karisimlari (test okur)
-  var UZAK_MAVI = '#7F98C0';                                        // uzak katman soluk mavi tonu (tema testi okur)
+  var UZAK_MAVI = '#7F98C0';                                        // yerlesik uzak katman tonu (soluk mavi); tema pal.uzak ile verir
   var BOCEK_KOYU = '#1A1410', BOCEK_KIN = '#2E2219', BOCEK_PLAKA = '#3A2C20', BOCEK_KANAT = '#FFFFFF';   // yerlesik bocek govdesi (tema pal.govde; toz cekirdegi her temada BOCEK_KANAT)
-  var BOLGE_TON = ['#24402F', '#2E2A44', '#1F3F4C', '#3A4031'];            // orman, magara, nehir, bataklik
+  var BOLGE_TON = ['#24402F', '#2E2A44', '#1F3F4C', '#3A4031'];            // yerlesik bolge tonlari: orman, magara, nehir, bataklik (tema pal.bolgeler)
   var PARALAKS = [0.2, 0.5, 1];       // uc katmanin hiz carpani
   var ISIK_KARISIM = 0.12;            // zemine isik tonu bindirme (tasarim 5)
   var HALO_TEPE = 1.07;               // halo halkasinin en yogun yeri (R'nin kati); halka R ile KARARTMA*R arasinda, cember icine girmez (12.3)
@@ -235,11 +235,11 @@
   }
 
   // Bir bolgenin bir paralaks katmani (dunya birimiyle; c olcekli).
-  // Derinlik: kat 0 uzak (soluk mavimsi), kat 1 orta, kat 2 yakin (koyu siluet). Tum renkler acik'tan (zemin + %15 beyaz) koyu kalir.
+  // Derinlik: kat 0 uzak (temanin uzak tonu; yerlesikte soluk mavi), kat 1 orta, kat 2 yakin (koyu siluet). Tum renkler acik'tan (zemin + %15 beyaz) koyu kalir.
   function katmanCiz(c, bolge, kat, zemin) {
     var r = rastgele(bolge * 31 + kat * 7 + 11), i, x, y, n, w;
     var koyu = karistir(zemin, '#000000', kat === 0 ? 0.15 : 0.07), acik = karistir(zemin, '#FFFFFF', 0.15);
-    var uzak = karistir(zemin, UZAK_MAVI, KATMAN.uzak), yakin = karistir(zemin, '#000000', KATMAN.yakin), nokta = karistir(zemin, pal.vurgu, KATMAN.mantarKap);
+    var uzak = karistir(zemin, pal.uzak, KATMAN.uzak), yakin = karistir(zemin, '#000000', KATMAN.yakin), nokta = karistir(zemin, pal.vurgu, KATMAN.mantarKap);
     var renk = kat === 2 ? yakin : (kat === 0 ? uzak : koyu);
     if (kat === 0) { c.fillStyle = zemin; c.fillRect(0, 0, W, H); }
     c.lineCap = 'round';
@@ -362,7 +362,7 @@
 
   var ARKA_DPR = 1.5;                 // arka plan cozunurlugu (bellek icin cihaz DPR'inden dusuk)
   function bolgeKur(b) {              // yalniz ilk gerektiginde; bir kez cizilir
-    var zemin = karistir(BOLGE_TON[b], pal.isik, ISIK_KARISIM);
+    var zemin = karistir(pal.bolgeler[b], pal.isik, ISIK_KARISIM);       // bolge tonu temadan (12.3); kimlik katman sekilleriyle korunur
     var d = Math.min(dpr, ARKA_DPR), tw = Math.round(olcek * W * d), th = Math.round(olcek * H * d), k, c, x, set = [];
     for (k = 0; k < 3; k++) {
       c = yeniTuval(tw, th); x = c.getContext('2d');
