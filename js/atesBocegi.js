@@ -3,6 +3,8 @@
 // tools/atesBocegiTest.js ve tools/atesBocegiAdaletTest.js ayni kodu bassiz calistirir.
 //
 // DUNYA   : W x H = 50 x 100 birim, y asagi artar. Bocek dunya x'i = mesafe + X_BOCEK.
+//           Gorunen genislik ekran oranina gore W .. H * ORAN_MAX (cizim, atesBocegiOyun.js); oyun mantigi ve
+//           adalet modeli W'yi (en dar ekran) varsayar. Uretim ufku (UFUK) cihazdan bagimsiz: her cihazda ayni dunya.
 // DILIM   : bir ya da daha cok engel + tek garantili bosluk [ust, alt] + onundeki tozlar.
 //           Engeller eksene hizali dikdortgendir (x, y, w, h; dunya koordinati), cizim
 //           icin gereken her alan dilim nesnesindedir. Kusun ve dusen dalin x/y'si adim'da guncellenir.
@@ -28,7 +30,8 @@
   // AYAR — butun denge sayilari burada (tasarim 3.8)
   // ---------------------------------------------------------------
   var AYAR = dondur({
-    dunya: { W: 50, H: 100, X_BOCEK: 8, DT: 1 / 120, Y_UST: 4, Y_ALT: 96, Y_BASLA: 50 },
+    dunya: { W: 50, H: 100, X_BOCEK: 8, DT: 1 / 120, Y_UST: 4, Y_ALT: 96, Y_BASLA: 50,
+             ORAN_MAX: 20 / 9 },                            // gorunen genislik en cok H * ORAN_MAX (20:9); fazlasi yalniz atmosfer
     hareket: {
       A_YUKSEL: 170, G_SUZUL: 120, VY_YUKARI: 40, VY_ASAGI: 30,   // tasarim 11.1 (suzulme hissi)
       T_RAMPA: 0.07,                                 // ivme rampasi: ay hedefe birinci dereceden yaklasir
@@ -52,7 +55,14 @@
       PAY_KACIS_SN: 0.05                             // kacis suresine eklenen zaman payi
     },
     uretici: {
-      ONDE: 2,                                       // boceğin ONDE*W ilerisine kadar uret
+      // Uretim ufku: bocegin UFUK birim ilerisine kadar uret. En genis gorunur alanin (H * ORAN_MAX - X_BOCEK = 214,2)
+      // ve en genis engelin otesinde: hicbir nesne gorunur alanin icinde dogmaz (cihazdan bagimsiz sabit).
+      // ESIK_UFUK: puan esikleri (TOZSUZ/BOMBA/SARMASIK/RISK_PUAN, bolge) bu ufka gore olculur. Dilim UFUK'ta
+      // uretildigi icin uretimde, bocegin aradaki L = UFUK - ESIK_UFUK birimde kazanacagi puan tahmini eklenir
+      // (uretimPuani): mesafe puani L / MESAFE_BIRIM + son ~L birimdeki toz puani hizi (durum.tozHiz, ustel ortalama) * L.
+      // Kullanilan deger kosu boyunca azalmaz (durum.esikPuan = en buyugu): bolge ve esikler geri donmez.
+      // Esigi asan ilk dilim boylece eski ufuktaki (100) konumuna yakin dogar; cihazdan bagimsiz, deterministik.
+      UFUK: 230, ESIK_UFUK: 100,
       ACILIS_DILIM: 3, ACILIS_BOSLUK: 30, ACILIS_FARK: 10,
       MERKEZ_MIN: 18, MERKEZ_MAX: 82,
       SERIT_UST: 10, SERIT_ALT: 90, SERIT_PENCERE: 4,
@@ -183,7 +193,11 @@
     var kSa = benzet(m, d.DT, u.SARMASIK_TASMA + m.R_CARPMA + ad.PAY_KACIS, 0, undefined, ayTers);
     if (!(ad.T_MIN + ad.T_IVME + kSa + ad.PAY_KACIS_SN + d.DT <= u.SARMASIK_ONCE))   // +DT: uyari->varis suresi bir adim kisa olabilir
       h.push("sarmasik kacis degismezi: T_MIN + T_IVME + kacis(" + kSa.toFixed(4) + ") + PAY_KACIS_SN + DT > SARMASIK_ONCE");
-    if (!(u.SARMASIK_ONCE * z.HIZ_TAVAN <= u.ONDE * d.W)) h.push('sarmasik uyarisi uretim ufkunun otesinde');
+    if (!(u.SARMASIK_ONCE * z.HIZ_TAVAN <= u.UFUK)) h.push('sarmasik uyarisi uretim ufkunun otesinde');
+    // ufuk: en genis gorunur alanin sag kenari + en genis engel (dilimin tum nesneleri onceki dilimin x'inin otesinde)
+    if (!(u.UFUK >= d.H * d.ORAN_MAX - d.X_BOCEK + enGenis)) h.push('uretim ufku en genis gorunur alanin icinde');
+    if (!(d.ORAN_MAX * d.H >= d.W)) h.push('ORAN_MAX * H < W');
+    if (!(u.ESIK_UFUK > 0 && u.ESIK_UFUK <= u.UFUK)) h.push('ESIK_UFUK (0, UFUK] disinda');
     if (!(z.HIZ_TABAN * (u.SARMASIK_ONCE - u.SARMASIK_UYARI) + m.R_CARPMA + u.SARMASIK_GEN / 2 > m.R_MIKNATIS))
       h.push('sarmasik sutun tozu buyumeden once miknatisla cekilir');
     if (!(u.SARMASIK_SUTUN_MIN >= 1 && u.SARMASIK_SUTUN_MAX >= u.SARMASIK_SUTUN_MIN && u.SARMASIK_SUTUN_MAX + 2 <= u.TOZ_MAX))
@@ -645,13 +659,25 @@
   // ---------------------------------------------------------------
   // OYUN
   // ---------------------------------------------------------------
+  // Esik telafisi (bkz. U.UFUK): uretim ve agirlik bolgesi icin puan = o anki puan + dilimin ESIK_UFUK'a varmasina
+  // kadarki (L birim) mesafe puani + toz puani tahmini (tozHiz: birim basina toz puani, ustel ortalama, pencere L).
+  // Yalniz toplama/cikarma/carpma ve en buyuk: her cihazda ayni sonuc. tozHiz yoksa (eski durum nesnesi) 0 sayilir.
+  // Tahmin toz hizi sonunce dusebilir; durum.esikPuan tahminin kosu boyunca en buyugudur (azalmaz): bolge/esik
+  // sinirinda ileri-geri gidip gelmez (ornegin nefes dilimi olmadan eski bolgeye donus).
+  var ESIK_L = U.UFUK - U.ESIK_UFUK, ESIK_EK = ESIK_L / P.MESAFE_BIRIM;
+  function uretimPuani(puan, tozHiz) { return puan + ESIK_EK + (tozHiz > 0 ? tozHiz * ESIK_L : 0); }
+  function esikGuncelle(d) {
+    var p = uretimPuani(d.puan, d.tozHiz);
+    if (!(d.esikPuan >= p)) d.esikPuan = p;
+    return d.esikPuan;
+  }
   function doldur(d) {
-    while (d.uretici.x <= d.mesafe + D.X_BOCEK + U.ONDE * D.W) d.dilimler.push(uret(d.uretici, d.bolge, d.puan));
+    while (d.uretici.x <= d.mesafe + D.X_BOCEK + U.UFUK) d.dilimler.push(uret(d.uretici, d.bolge, esikGuncelle(d)));
   }
   function oyunOlustur(tohum) {
     var d = {
       t: 0, mesafe: 0, puan: 0, y: D.Y_BASLA, vy: 0, ay: 0, isik: I.BASLANGIC, dokunulmaz: 0,
-      zincir: 0, zincirSure: 0, toz: 0, bolge: 0, gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
+      zincir: 0, zincirSure: 0, toz: 0, bolge: bolgeNo(uretimPuani(0, 0)), tozHiz: 0, esikPuan: uretimPuani(0, 0), gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
       sersem: 0, zeminKoruma: 0, sebep: '',          // 12.1: kalan sersemlik / zemin korumasi (sn); bitis sebebi 'isik' | 'zemin'
       uretici: ureticiVerisi(tohum)
     };
@@ -786,7 +812,7 @@
     // (dunya koordinati, deterministik); sonra R_TOPLA icindeyse alinir. Kivilcim cekilmez.
     // Sersemken (12.1) miknatis kapali: yalniz dogrudan temas (R_TOPLA) toplar. Risk tozu (12.2) hic cekilmez;
     // puan ve isik normal tozla ayni.
-    var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt;
+    var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt, tozPuan = 0;
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
       // Toz ve kivilcim dilimin onunde (x < s.x), x'e gore sirali: uzaktakileri atla. Cekilen toz yalniz bocege
@@ -807,7 +833,7 @@
         }
         t.alindi = 1;
         var kz = P.TOZ * carpan(d.zincir);
-        d.puan += kz; d.isik = Math.min(1, d.isik + I.TOZ);
+        d.puan += kz; tozPuan += kz; d.isik = Math.min(1, d.isik + I.TOZ);
         d.zincir++; d.zincirSure = P.ZINCIR_SURE; d.toz++;
         olay.push({ tur: 'toz', puan: kz, x: t.x, y: t.y });
       }
@@ -819,9 +845,11 @@
         olay.push({ tur: 'kivilcim', puan: kk, x: t.x, y: t.y });
       }
     }
-    // bolge: uretici agirliklari icin puanla hemen degisir (olay yok).
+    // toz puani hizi (esik telafisi): bu adimin toz puani / alinan yol, pencere ESIK_L birim (kivilcim sayilmaz)
+    d.tozHiz = (d.tozHiz > 0 ? d.tozHiz : 0) + (tozPuan - (d.tozHiz > 0 ? d.tozHiz : 0) * zr.hiz * dt) / ESIK_L;
+    // bolge: uretici agirliklari icin uretim puaniyla (esik telafisi dahil) hemen degisir (olay yok).
     // gorunenBolge: arka plan ve SIS; nefes dilimi bocege varinca degisir, 'bolge' olayi o an.
-    d.bolge = bolgeNo(d.puan);
+    d.bolge = bolgeNo(esikGuncelle(d));
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
       if (s.x > bx) break;
@@ -857,7 +885,7 @@
     kacisSuresi: kacisSuresi, kacisMesafesi: kacisMesafesi, cikisSuresi: cikisSuresi,
     uyanmaY: Y_UYAN, frenMesafesi: function (yon) { return frenMesafesi(M, D.DT, yon); },
     uyanmaDususu: function (tepki) { return uyanmaDususu(M, D.DT, tepki); },
-    bolgeNo: bolgeNo, carpan: carpan,
+    bolgeNo: bolgeNo, carpan: carpan, uretimPuani: uretimPuani,
     ureticiOlustur: ureticiOlustur, dilimZarfi: dilimZarfi,
     oyunOlustur: oyunOlustur, adim: adim,
     esikOdulu: esikOdulu, kosuJetonu: kosuJetonu

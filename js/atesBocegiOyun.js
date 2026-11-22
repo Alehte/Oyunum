@@ -12,6 +12,11 @@
 
   var AYAR = AB.AYAR, D = AYAR.dunya, M = AYAR.hareket, AD = AYAR.adalet;
   var W = D.W, H = D.H, XB = D.X_BOCEK, DT = D.DT;
+  // Gorunen genislik (boyutla): olcek yukseklige gore (H sabit), GA = tuval genisligi (dunya birimi, >= W; daha dar
+  // ekranda genislige sigar, dikey bant kalabilir). Oyun dunyasi GW = min(GA, GW_MAX) (20:9); GW..GA yalniz atmosfer
+  // (arka plan + karanlik). Bocek solda (XB); ek genislik saga, ileriye acilir. Cekirdegin uretim ufku GW_MAX'in otesinde.
+  var GW_MAX = H * D.ORAN_MAX, GW = W, GA = W;
+  var KENAR_SOLMA = 6;                // GW sinirindaki kendi isikli nesne (bomba) bu kadar birimde belirir (yalniz GA > GW_MAX)
 
   // ---------------------------------------------------------------
   // CIZIM SABITLERI (denge degil; gorunum ve dongu)
@@ -424,7 +429,7 @@
     sprBomba = bombaSprite();
     sprBombaHale = bombaHaleSprite();
     bocekParlak = karistir(pal.isik, rk.kanat, 0.55);
-    kc = yeniTuval(W * S, H * S); kctx = kc.getContext('2d');
+    kc = yeniTuval(GA * S, H * S); kctx = kc.getContext('2d');   // karanlik tum tuval genisligini (atmosfer dahil) kaplar
     karanlikGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
     karanlikGrad.addColorStop(0, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
@@ -452,8 +457,10 @@
     if (cssW && r.width === cssW && r.height === cssH && yeniDpr === dpr) return true;   // boyut degismedi: yeniden kurma
     dpr = yeniDpr;
     cssW = r.width; cssH = r.height;
-    olcek = Math.min(cssW / W, cssH / H);
-    ox = (cssW - W * olcek) / 2; oy = (cssH - H * olcek) / 2;
+    olcek = cssH / H; GA = cssW / olcek;
+    if (GA < W) { olcek = cssW / W; GA = W; }                     // cok dar ekran: genislige sigdir (dikey bant)
+    GW = Math.min(GA, GW_MAX);
+    ox = 0; oy = (cssH - H * olcek) / 2;
     S = olcek * dpr; pxD = 1 / S;
     tuval.width = Math.round(cssW * dpr); tuval.height = Math.round(cssH * dpr);
     gorselKur();
@@ -720,7 +727,7 @@
     for (i = 0; i < sa.sutunlar.length; i++) {
       sut = sa.sutunlar[i];
       kx = sut.x - mesafe;
-      if (kx > W + 2 || kx + sut.w < -2) continue;
+      if (kx > GW + 2 || kx + sut.w < -2) continue;
       cx = kx + sut.w / 2; kok = yon > 0 ? 0 : H;
       len = sut.h * sa.ilerleme; if (len < 0.3) continue;
       n = Math.max(2, Math.ceil(len / 2.2));
@@ -750,24 +757,25 @@
   // Yontem: karanlik tuvale basildiktan sonra ayni dunya donusumuyle ikinci gecis; kare basina yeni gradyan yok.
   // Dilim onu sinirlamasi yoktur: ufuktaki (ekran disi) sutunun uyarisi, faz 1'e girdigi ilk karede cizilir.
   function ozIsikCiz(c, p) {
-    var d = durum, dl = d.dilimler, i, j, s, t, x, y, nabiz, tit, a, mesafe = d.mesafe, sa, e, k, kx, uc, kok, disarda, en, ust, ha;
+    var d = durum, dl = d.dilimler, i, j, s, t, x, y, nabiz, tit, a, mesafe = d.mesafe, sa, e, k, kx, uc, kok, disarda, en, ust, ha, sol;
     if (p >= 1) return;
     for (i = 0; i < dl.length; i++) {
       s = dl[i];
       t = s.bomba;
       if (t && !t.alindi) {
         x = t.x - mesafe;
-        if (x > -4 && x < W + 4) {
+        if (x > -4 && x < GW + 4) {
           a = azHareketOn ? 1 : 0.55 + 0.45 * (Math.floor(zaman * 7) & 1);                    // ~3,5 Hz; azaltilmis harekette sabit
+          sol = GW < GA ? Math.max(0, Math.min(1, (GW - x) / KENAR_SOLMA)) : 1;               // oyun dunyasinin sag siniri (yalniz atmosferli ekran): yumusak belir
           tit = azHareketOn ? 0 : 0.12;
           nabiz = azHareketOn ? 1 : 0.8 + 0.2 * Math.sin(zaman * 22);
           ha = M.R_BOMBA * 2.2;
           c.save(); c.translate(x + (tit ? Math.sin(zaman * 61) * tit : 0), t.y + (tit ? Math.cos(zaman * 53) * tit : 0));
           if (!azHareketOn) c.rotate(zaman * 0.9);
-          c.globalAlpha = (0.35 + 0.35 * a) * (1 - p); c.drawImage(sprBombaHale, -ha, -ha, ha * 2, ha * 2);   // disli tehlike halesi (carpisma degil)
+          c.globalAlpha = (0.35 + 0.35 * a) * sol * (1 - p); c.drawImage(sprBombaHale, -ha, -ha, ha * 2, ha * 2);   // disli tehlike halesi (carpisma degil)
           if (!azHareketOn) c.rotate(-zaman * 0.9);
-          c.globalAlpha = 1 - p; c.drawImage(sprBomba, -M.R_BOMBA, -M.R_BOMBA, M.R_BOMBA * 2, M.R_BOMBA * 2);
-          c.globalAlpha = a * (1 - p); c.fillStyle = rk.bombaCekirdek;
+          c.globalAlpha = sol * (1 - p); c.drawImage(sprBomba, -M.R_BOMBA, -M.R_BOMBA, M.R_BOMBA * 2, M.R_BOMBA * 2);
+          c.globalAlpha = a * sol * (1 - p); c.fillStyle = rk.bombaCekirdek;
           c.beginPath(); c.arc(0, 0, M.R_BOMBA * 0.36 * nabiz, 0, 6.2832); c.fill();
           c.restore();
         }
@@ -777,14 +785,14 @@
         ust = sa.yon === 'ust'; en = -1;
         for (j = 0; j < sa.sutunlar.length; j++) {                    // ekran disi sutunlar arasinda en tehlikeli uc (tek unlem icin)
           e = sa.sutunlar[j];
-          if (e.x - mesafe > W && (en < 0 || (ust ? e.y + e.h > sa.sutunlar[en].y + sa.sutunlar[en].h : e.y < sa.sutunlar[en].y))) en = j;
+          if (e.x - mesafe > GW && (en < 0 || (ust ? e.y + e.h > sa.sutunlar[en].y + sa.sutunlar[en].h : e.y < sa.sutunlar[en].y))) en = j;
         }
         for (j = 0; j < sa.sutunlar.length; j++) {
           e = sa.sutunlar[j];
-          kx = e.x - mesafe; uc = ust ? e.y + e.h : e.y; kok = ust ? 0 : H; disarda = kx > W;
+          kx = e.x - mesafe; uc = ust ? e.y + e.h : e.y; kok = ust ? 0 : H; disarda = kx > GW;
           a = azHareketOn ? 1 : 0.8 + 0.2 * Math.sin(zaman * 14);
           if (disarda) {                                              // kenar isareti: ufuktaki sutunun uc seviyesi (faz 1 ve 2)
-            c.globalAlpha = 0.75 * (1 - p); c.beginPath(); c.moveTo(W - 2.4, uc); c.lineTo(W, uc);
+            c.globalAlpha = 0.75 * (1 - p); c.beginPath(); c.moveTo(GW - 2.4, uc); c.lineTo(GW, uc);
             c.strokeStyle = rk.dolgu; c.lineWidth = 0.5 + 2 * Math.max(0.2, pxD); c.stroke();     // koyu alt cizgi
             c.strokeStyle = rk.unlem; c.lineWidth = 0.5; c.stroke();
           } else if (kx + e.w > -2) {                                 // hayalet silüet: tam boy zarf, faz 1-3 boyunca (carpma zarfi = ciz)
@@ -798,7 +806,7 @@
           }
           if (sa.faz !== 1) continue;
           if (disarda && j !== en) continue;                          // ekran disi sutunlar tek unlemi paylasir
-          x = Math.min(kx + e.w / 2, W - 3.2);                           // ekran disindaysa sag kenara kistir
+          x = Math.min(kx + e.w / 2, GW - 3.2);                          // ekran disindaysa (oyun dunyasinin) sag kenarina kistir
           y = disarda ? Math.max(4, Math.min(H - 4, uc + (ust ? 1 : -1) * (M.R_CARPMA + AD.PAY_KACIS))) : (ust ? 7 : H - 7);   // disarda: kacis seviyesi (uc + carpma + pay)
           if (x < -3) continue;
           k = azHareketOn ? 1 : 1 + 0.14 * Math.sin(zaman * 14);
@@ -882,19 +890,21 @@
     c.restore();
   }
 
+  // Katman tuvalleri W periyotlu (dikissiz): tuval genisligini (GA, atmosfer dahil) kaplayacak kadar yan yana dosenir.
+  function katmanDose(c, set, off) {
+    for (var x = -off; x < GA; x += W) c.drawImage(set, x, 0, W, H);
+  }
   function arkaPlanCiz(c) {
-    var b = durum.gorunenBolge, set, kat, off;
+    var b = durum.gorunenBolge, kat, off;
     if (!katmanlar[b]) bolgeKur(b);
     if (gecis < 1 && !katmanlar[eskiBolge]) bolgeKur(eskiBolge);
     for (kat = 0; kat < 3; kat++) {
       off = (durum.mesafe * PARALAKS[kat]) % W;
       if (gecis < 1) {
-        set = katmanlar[eskiBolge][kat];
-        c.drawImage(set, -off, 0, W, H); c.drawImage(set, W - off, 0, W, H);
+        katmanDose(c, katmanlar[eskiBolge][kat], off);
         c.globalAlpha = gecis;
       }
-      set = katmanlar[b][kat];
-      c.drawImage(set, -off, 0, W, H); c.drawImage(set, W - off, 0, W, H);
+      katmanDose(c, katmanlar[b][kat], off);
       c.globalAlpha = 1;
     }
   }
@@ -907,7 +917,7 @@
       s = dl[i];
       for (j = 0; j < s.engeller.length; j++) {
         e = s.engeller[j]; x = e.x - mesafe;
-        if (x > W + 2 || x + e.w < -2) continue;
+        if (x > GW + 2 || x + e.w < -2) continue;
         c.save(); c.translate(-mesafe, 0);
         engelCiz(c, e);
         c.restore();
@@ -921,7 +931,7 @@
       s = dl[i];
       for (j = 0; j < s.toz.length; j++) {
         t = s.toz[j]; x = t.x - mesafe;
-        if (t.alindi || t.yutuldu || x < -3 || x > W + 3) continue;       // yutulan toz (sarmasik) cizilmez
+        if (t.alindi || t.yutuldu || x < -3 || x > GW + 3) continue;       // yutulan toz (sarmasik) cizilmez
         c.globalAlpha = 0.8; c.drawImage(sprToz, x - M.R_TOZ_GORSEL * 3.2, t.y - M.R_TOZ_GORSEL * 3.2, M.R_TOZ_GORSEL * 6.4, M.R_TOZ_GORSEL * 6.4);
         c.globalAlpha = 1; c.fillStyle = pal.toz; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL, 0, 6.2832); c.fill();
         c.globalAlpha = 0.8; c.fillStyle = BOCEK_KANAT; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL * 0.5, 0, 6.2832); c.fill();      // sicak cekirdek
@@ -934,7 +944,7 @@
       t = s.kivilcim;
       if (t && !t.alindi) {
         x = t.x - mesafe;
-        if (x > -4 && x < W + 4) {
+        if (x > -4 && x < GW + 4) {
           c.globalAlpha = 0.9; c.drawImage(sprKivilcim, x - M.R_KIVILCIM_GORSEL * 3, t.y - M.R_KIVILCIM_GORSEL * 3, M.R_KIVILCIM_GORSEL * 6, M.R_KIVILCIM_GORSEL * 6);
           c.globalAlpha = 1; c.fillStyle = pal.vurgu; yildizCiz(c, x, t.y, M.R_KIVILCIM_GORSEL, azHareketOn ? 0 : zaman * 3);
         }
@@ -971,7 +981,7 @@
   }
 
   function karanlikCiz(p) {
-    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / W, by = bocekY();
+    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / GA, by = bocekY();
     kctx.setTransform(1, 0, 0, 1, 0, 0);
     kctx.globalCompositeOperation = 'source-over';
     kctx.fillStyle = p > 0 ? rgba(pal.karanlik, KARANLIK_OPAKLIK + (1 - KARANLIK_OPAKLIK) * p) : karanlikRenkStr;
@@ -996,9 +1006,10 @@
     ctx.fillRect(0, 0, tuval.width, tuval.height);
     ctx.save();
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
-    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    ctx.beginPath(); ctx.rect(0, 0, GA, H); ctx.clip();          // arka plan: tum genislik (atmosfer dahil)
     arkaPlanCiz(ctx);
     var p = sonmeIlerleme();
+    if (GW < GA) { ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip(); }   // oyun dunyasi en cok GW_MAX
     dunyaCiz(ctx, dt, p);
     ctx.restore();
     karanlikCiz(p);
@@ -1006,7 +1017,7 @@
     ctx.drawImage(kc, Math.round(ox * dpr), Math.round(oy * dpr));
     ctx.save();                                    // kendi isigiyla gorunenler karanligin ustunde
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
-    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip();
     ozIsikCiz(ctx, p);
     ctx.restore();
     hudYaz();

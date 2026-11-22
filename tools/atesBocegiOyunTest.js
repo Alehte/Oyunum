@@ -339,6 +339,8 @@ dene('bocek govdesi temadan: bocekCiz sabit BOCEK_KOYU/KIN/PLAKA/KANAT kullanmaz
 // ---------------------------------------------------------------
 const CORE = fs.readFileSync(path.join(__dirname, '..', 'js', 'core.js'), 'utf8');
 const M = AB.AYAR.hareket, XB = AB.AYAR.dunya.X_BOCEK, W = AB.AYAR.dunya.W, H = AB.AYAR.dunya.H;
+// Sahte alan 360x560: olcek yukseklige gore (560 / H), gorunen genislik GW = 360 / olcek (W'den genis, 20:9 altinda).
+const GW = Math.min(360 / (560 / H), H * AB.AYAR.dunya.ORAN_MAX);
 
 dene('geri tusu (kaynak): core.js atesBackBtn tiklamasi ve popstate (last[1] === ates) dur() cagirir, ekran gecisinden once', () => {
   const b = /atesBackBtn\.addEventListener\('click', \(\) => \{([^}]*)\}\);/.exec(CORE);
@@ -454,21 +456,21 @@ dene('sarmasik hayalet siluet: faz 1-3 karanligin USTUNDE kesik cizgi (sutun zar
   });
 });
 
-dene('sarmasik ekran disi sutun (x - mesafe > W): unlem sag kenarda, uc yuksekliginde (kacis seviyesi)', () => {
+dene('sarmasik ekran disi sutun (x - mesafe > GW): unlem sag kenarda, uc yuksekliginde (kacis seviyesi)', () => {
   ['ust', 'alt'].forEach(yon => {
     const o = ortam(); o.O.start(); o.kare(1);
-    const m = o.durum.mesafe, x1 = m + W + 20;
+    const m = o.durum.mesafe, x1 = m + GW + 20;
     o.durum.dilimler[0].sarmasik = { yon, x1, x2: x1 + 3, sutunlar: [sutunlu(x1, 40, yon)], faz: 1, sure: 0, ilerleme: 0 };
     const l = ciziliyor(o), after = l.slice(sonKaranlik(l));
-    const tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9);
+    const tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (GW - 3.2)) < 1e-9);
     assert.strictEqual(tr.length, 1, yon + ' unlem sag kenarda');
     assert.ok(Math.abs(tr[0][1][1] - (yon === 'ust' ? 40 + M.R_CARPMA + AB.AYAR.adalet.PAY_KACIS : H - 40 - M.R_CARPMA - AB.AYAR.adalet.PAY_KACIS)) < 1e-9, yon + ' unlem y uc yuksekligi ' + tr[0][1][1]);
   });
 });
 
-dene('bomba her ekran konumunda karanligin ustunde cizilir (x = 0..W)', () => {
+dene('bomba her ekran konumunda karanligin ustunde cizilir (x = 0..GW)', () => {
   const o = ortam(); o.O.start(); o.kare(1);
-  [0.5, 8, 25, 40, W - 0.5].forEach(sx => {
+  [0.5, 8, 25, 40, W - 0.5, GW - 0.5].forEach(sx => {
     o.durum.dilimler[0].bomba = { x: o.durum.mesafe + sx, y: 30, alindi: 0 };
     const l = ciziliyor(o), after = l.slice(sonKaranlik(l));
     assert.strictEqual(after.filter(c => c[0] === 'drawImage' && c[1].length === 5 && Math.abs(c[1][3] - M.R_BOMBA * 2) < 1e-6).length, 1, 'x=' + sx);
@@ -504,19 +506,19 @@ dene('K-1: uzak dilimdeki (dilimler[0] degil) sarmasik faz 1 ilk karede unlem ci
     s.x = m + 140;                                           // dilim onu ekranin cok otesinde
     s.sarmasik = { yon, x1, x2: x1 + 3, sutunlar: [sutunlu(x1, 40, yon)], faz: 1, sure: 0, ilerleme: 0 };
     const l = ciziliyor(o), after = l.slice(sonKaranlik(l));
-    assert.strictEqual(after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9).length, 1, yon + ' unlem ilk karede');
+    assert.strictEqual(after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (GW - 3.2)) < 1e-9).length, 1, yon + ' unlem ilk karede');
     s.sarmasik.faz = 2;
     const l2 = ciziliyor(o), a2 = l2.slice(sonKaranlik(l2));          // faz 2: unlem yok, kenar isareti kalir
-    assert.strictEqual(a2.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9).length, 0);
-    assert.ok(a2.some(c => c[0] === 'moveTo' && Math.abs(c[1][0] - (W - 2.4)) < 1e-9), 'kenar isareti');
+    assert.strictEqual(a2.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (GW - 3.2)) < 1e-9).length, 0);
+    assert.ok(a2.some(c => c[0] === 'moveTo' && Math.abs(c[1][0] - (GW - 2.4)) < 1e-9), 'kenar isareti');
   });
 });
 
 dene('K-a: ekran disi birden cok sutun tek unlem cizer (ust uste binmez)', () => {
   const o = ortam(); o.O.start(); o.kare(1);
-  const m = o.durum.mesafe, x1 = m + W + 20, sut = [sutunlu(x1, 30, 'ust'), sutunlu(x1 + 5, 45, 'ust'), sutunlu(x1 + 10, 20, 'ust')];
+  const m = o.durum.mesafe, x1 = m + GW + 20, sut = [sutunlu(x1, 30, 'ust'), sutunlu(x1 + 5, 45, 'ust'), sutunlu(x1 + 10, 20, 'ust')];
   o.durum.dilimler[0].sarmasik = { yon: 'ust', x1, x2: x1 + 13, sutunlar: sut, faz: 1, sure: 0, ilerleme: 0 };
-  const l = ciziliyor(o), after = l.slice(sonKaranlik(l)), tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 3.2)) < 1e-9);
+  const l = ciziliyor(o), after = l.slice(sonKaranlik(l)), tr = after.filter(c => c[0] === 'translate' && Math.abs(c[1][0] - (GW - 3.2)) < 1e-9);
   assert.strictEqual(tr.length, 1, 'tek unlem');
   assert.ok(Math.abs(tr[0][1][1] - (45 + M.R_CARPMA + AB.AYAR.adalet.PAY_KACIS)) < 1e-9, 'en tehlikeli (en uzun) uc seviyesi');
 });
@@ -524,7 +526,7 @@ dene('K-a: ekran disi birden cok sutun tek unlem cizer (ust uste binmez)', () =>
 dene('O-1: ekrandaki her alinmamis toz cizilir (tozun dilimi ekranin otesinde olsa da)', () => {
   const o = ortam(); o.O.start(); o.kare(1);
   const m = o.durum.mesafe, s = sonDilim(o);
-  s.x = m + W + 60;
+  s.x = m + GW + 60;
   s.toz = [{ x: m + 30, y: 50, alindi: 0, yutuldu: 0 }];
   const say = () => ciziliyor(o).filter(c => c[0] === 'drawImage' && c[1].length === 5 && Math.abs(c[1][2] - (50 - M.R_TOZ_GORSEL * 3.2)) < 1e-6 && Math.abs(c[1][3] - M.R_TOZ_GORSEL * 6.4) < 1e-6).length;
   assert.strictEqual(say(), 1);

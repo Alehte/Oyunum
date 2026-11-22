@@ -13,7 +13,7 @@ const A = AB.AYAR, DT = A.dunya.DT, XB = A.dunya.X_BOCEK, H = A.dunya.H, RC = A.
 const T_MIN = A.adalet.T_MIN, K = A.adalet.KUS_EK, V = A.adalet.V_GUVENLI, T_IVME = A.adalet.T_IVME;
 const U = A.uretici, EPS = 1e-9, NEFES_SURE = U.NEFES_SURE, RT = A.hareket.R_TOPLA;
 const RB = A.hareket.R_BOMBA + RC, PAYK = A.adalet.PAY_KACIS, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;
-const EKRAN = A.dunya.W - XB;            // bomba kendi isigiyla ekrana girince gorunur
+const EKRAN = A.dunya.W - XB;            // bomba kendi isigiyla ekrana girince gorunur (en dar ekran W; genis ekran yalniz daha erken gosterir)
 
 const TOHUM_SAYI = +process.argv[2] || 1000, MESAFE = +process.argv[3] || 20000;
 // 5000+ (cakisma serbest) bolgesi icin uzun mesafe alt kumesi: UZUN_TOHUM tohum x UZUN_MESAFE (Bot A ve Bot B).
@@ -167,8 +167,8 @@ function riskDenetle(dn, s, zf, puan, ozel) {
   });
 }
 function dilimDenetle(dn, s, gorPuan) {
-  const puan = s.puan;                                        // uretim puani (tasarim 11.8)
-  if (!(puan <= gorPuan)) kusur(dn.t, s, 'uretim puani gorulen puandan buyuk');
+  const puan = s.puan;                                        // uretim puani (tasarim 11.8; esik telafisi dahil, AB.uretimPuani)
+  if (!(puan <= gorPuan)) kusur(dn.t, s, 'uretim puani gorulen puandan (telafili) buyuk');
   const t = dn.t, p = dn.son, zf = AB.dilimZarfi(s), c = (zf.ust + zf.alt) / 2;
   const zr = AB.zorluk(s.x - XB), zs = zarflar(s);
   ist.dilim++; if (s.nefes) ist.nefes++; if (s.kivilcim) ist.kivilcim++;
@@ -639,7 +639,7 @@ function kos(t, bot, secenek) {
     for (; i < L.length; i++) {
       const s = L[i];
       if (s.tozsuz) mek.tozsuz.push(s); if (s.bomba) mek.bomba.push(s); if (s.sarmasik) mek.sarmasik.push(s);
-      if (secenek.yapi || secenek.zaman) dilimDenetle(dn, s, d.puan);
+      if (secenek.yapi || secenek.zaman) dilimDenetle(dn, s, d.esikPuan);   // telafili gorulen puan (esik telafisi, azalmaz)
       else dn.sonNo = s.no;
       if (secenek.zaman) izBaslat(dn, s);
     }
