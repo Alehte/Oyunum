@@ -1,7 +1,7 @@
 // atesBocegiGenislikTest.js — Karanlikta Suzul oyun alani genisligi (gorev 3, Asama 2), GERCEK index.html + style.css + js/
 // ile headless Chrome'da. Ana ekrandan oyun karti acilir, kosu birkac saniye oynanir (isik/zemin korumasi testte acik).
-// Her boyutta: tuval css genisligi == .ab-alan genisligi (dokunma alani tum alan); sol ve sag kenar piksel sutunlari duz
-// renk degil (sahne icerigi); "Dokun ve basla" ve HUD alanda ortali. Genis/yatay oranda (GA > GW_MAX): oyun dunyasi
+// Her boyutta: tuval css genisligi == .ab-alan genisligi (dokunma alani tum alan); sol ve sag kenar piksel sutunlari ile ust ve
+// alt kenar piksel satirlari duz renk degil (sahne icerigi; dar ekranin ust/alt bandi dahil); "Dokun ve basla" ve HUD alanda ortali. Genis/yatay oranda (GA > GW_MAX): oyun dunyasi
 // GW_MAX'ta kirpilir (otesindeki bomba cizilmez, icindeki cizilir), fazlasi atmosfer (arka plan + karanlik) ile dolar.
 // Kullanim:  node tools/atesBocegiGenislikTest.js [kayitDizini]   (ekran goruntuleri PNG olarak kayitDizini'ne)
 // Chrome: CHROME_YOL ya da varsayilan yollar; yoksa ATLANDI (basarisiz sayilmaz). Port 9470.
@@ -18,7 +18,9 @@ const BOYUTLAR = [
   ['telefon-412x915', 412, 915, 2, true, false],
   ['telefon-390x844', 390, 844, 3, true, false],
   ['masaustu-cerceve-1280x900', 1280, 900, 1, false, false],
-  ['yatay-915x412', 915, 412, 2, true, true]
+  ['yatay-915x412', 915, 412, 2, true, true],
+  // 21:9 telefon, kurulu uygulama tam ekran: alan en/boy < W/H (0,5) -> genislige sigar, ust/alt bant (BY > 0) yalniz atmosfer
+  ['kurulu-21x9-411x960', 411, 960, 2, true, true]
 ];
 
 function chromeBul() {
@@ -47,9 +49,17 @@ window.__olc = function () {
            bw: tuval.width, bh: tuval.height, ekran: getComputedStyle(document.getElementById('screen-ates')).transform };
 };
 window.__sutun = function (x) {           // tuvalin x. piksel sutunu: farkli renk sayisi, ort parlaklik, (0,0,0) ve duz dolgu sayisi
+  var t = document.getElementById('abTuval');
+  return window.__dizi(t.getContext('2d').getImageData(x, 0, 1, t.height).data);
+};
+window.__satir = function (y) {           // tuvalin y. piksel satiri (ayni olcumler)
+  var t = document.getElementById('abTuval');
+  return window.__dizi(t.getContext('2d').getImageData(0, y, t.width, 1).data);
+};
+window.__dizi = function (d) {
   var h = getComputedStyle(document.getElementById('screen-ates')).getPropertyValue('--ab-karanlik').trim();
   window.__karanlik = [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)];   // tuvalin duz zemin dolgusu (eski bant rengi)
-  var t = document.getElementById('abTuval'), c = t.getContext('2d'), d = c.getImageData(x, 0, 1, t.height).data, s = {}, n = 0, top = 0, enc = 0, i, l;
+  var s = {}, n = 0, top = 0, enc = 0, i, l;
   for (i = 0; i < d.length; i += 4) { var k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; if (!s[k]) { s[k] = 1; n++; } l = d[i] + d[i + 1] + d[i + 2]; top += l; if (l > enc) enc = l; }
   var siyah = 0, duz = 0, kr = window.__karanlik; for (i = 0; i < d.length; i += 4) {
     if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0) siyah++;
@@ -68,12 +78,12 @@ window.__kutu = function (x0, y0, x1, y1) {   // piksel kutusunda en turuncu (R 
 // Karanlik katmani (kc) cizilmeden hemen once tuvalin verilen sutunlari (arka plan + dunya) ve kc genisligi. Karanlik
 // tuvali her karede ust uste %94 dolgu aldigindan isik disinda pratikte opaktir (onceden var olan davranis); bu yuzden
 // arka planin kenara kadar cizildigi karanliktan ONCE olculur, son goruntude ise sutun (0,0,0) olmamali.
-window.__oncesi = function (xs) {
+window.__oncesi = function (xs, ys) {
   var t = document.getElementById('abTuval'), c = t.getContext('2d'), o = c.drawImage, out = null;
   return new Promise(function (bitti) {
     c.drawImage = function (img) {
       if (!out && img.width === t.width && img.height === t.height) {
-        out = { kcW: img.width, kcH: img.height, sutun: xs.map(function (x) { return window.__sutun(x); }) };
+        out = { kcW: img.width, kcH: img.height, sutun: xs.map(function (x) { return window.__sutun(x); }), satir: (ys || []).map(function (y) { return window.__satir(y); }) };
       }
       return o.apply(c, arguments);
     };
@@ -121,12 +131,14 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
   const kosu = await deger('__koru(), __bas(false), [window.__durum.t, window.__durum.bitti]');   // olcumler sirasinda bocek dusebilir: kosu burada
   const sonra = await deger('__olc()');
   const sol = await deger('__sutun(0)'), sag = await deger('__sutun(document.getElementById("abTuval").width - 1)');
-  const once = await deger('__oncesi([0, document.getElementById("abTuval").width - 1])');
+  const ust = await deger('__satir(0)'), alt = await deger('__satir(document.getElementById("abTuval").height - 1)');
+  const once = await deger('__oncesi([0, document.getElementById("abTuval").width - 1], [0, document.getElementById("abTuval").height - 1])');
   const g2 = await gonder('Page.captureScreenshot', { format: 'png' });
   // GW_MAX kirpma: bocegin y'sinde iki bomba (biri GW icinde, biri GW_MAX otesinde, atmosferde), 2 kare sonra pikselden
   const kirp = await deger(`(async function () {
     var d = window.__durum, a = document.getElementById('abAlan').getBoundingClientRect(), olcek = a.height / ${H}, GA = a.width / olcek;
     if (GA < ${W}) { olcek = a.width / ${W}; GA = ${W}; }
+    var bant = (a.height - ${H} * olcek) / 2;
     var GW = Math.min(GA, ${GW_MAX}), t = document.getElementById('abTuval'), k = t.width / a.width, y = 50;
     var ic = Math.min(GW - 12, 40), dis = GW + Math.min(14, (GA - GW) / 2);
     __koru();
@@ -136,7 +148,7 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
     await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
     var px = function (sx) { return sx * olcek * k; }, oy = (a.height - ${H} * olcek) / 2 * k, R = 4 * olcek * k;
     var m = d.mesafe;
-    return { GA: GA, GW: GW, ic: __kutu(px(bi.x - m) - R, oy + px(y) - R, px(bi.x - m) + R, oy + px(y) + R),
+    return { GA: GA, GW: GW, bant: bant, ic: __kutu(px(bi.x - m) - R, oy + px(y) - R, px(bi.x - m) + R, oy + px(y) + R),
              dis: bd ? __kutu(px(bd.x - m) - R, oy + px(y) - R, px(bd.x - m) + R, oy + px(y) + R) : null,
              atmosferX: GA > GW + 2 ? Math.round(px(GW + (GA - GW) / 2)) : null };
   })()`);
@@ -148,7 +160,7 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
     fs.writeFileSync(path.join(kayit, 'genislik-' + ad + '-kosu.png'), Buffer.from(g2.result.data, 'base64'));
     fs.writeFileSync(path.join(kayit, 'genislik-' + ad + '-bomba.png'), Buffer.from(g3.result.data, 'base64'));
   }
-  return { once: ilk, sonra, sol, sag, oncesi: once, kirp, durumT: kosu[0], bitti: kosu[1] };
+  return { once: ilk, sonra, sol, sag, ust, alt, oncesi: once, kirp, durumT: kosu[0], bitti: kosu[1] };
 }
 
 (async () => {
@@ -182,12 +194,13 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
   }
   const yakin = (a, b, t) => Math.abs(a - b) <= t;
   for (const [[ad, gen, boy, dpr], r] of sonuclar) {
-    const o = r.sonra, A = o.alan, k = r.kirp;
+    const o = r.sonra, A = o.alan, k = r.kirp, ob0 = r.oncesi || { sutun: [], satir: [] };   // oncesi null: karanlik tuvali tuval boyutunda degil (asagida HATA)
     console.log('       ' + ad + ': alan ' + A.w + 'x' + A.h.toFixed(1) + ' css, tuval ' + o.bw + 'x' + o.bh + ' px, GA ' + k.GA.toFixed(1) + ', GW ' + k.GW.toFixed(1) +
       ', sol sutun ' + r.sol.renk + ' renk (ort ' + r.sol.ort.toFixed(1) + ', siyah ' + r.sol.siyah + ', duz dolgu ' + r.sol.duz + '/' + r.sol.boy + '), sag sutun ' + r.sag.renk + ' renk (ort ' + r.sag.ort.toFixed(1) +
       ', siyah ' + r.sag.siyah + ', duz dolgu ' + r.sag.duz + ', ornek ' + r.sag.ornek.join(' ') + '), bomba ic ' + k.ic + ' dis ' + k.dis +
       (k.atmosferSutun ? ', atmosfer sutunu (karanliktan once) ' + k.atmosferSutun.renk + ' renk' : '') +
-      ', karanliktan once sol/sag ' + r.oncesi.sutun.map(s => s.renk + ' renk duz ' + s.duz).join(' / ') + ', kosu ' + r.durumT.toFixed(2) + ' sn');
+      ', karanliktan once sol/sag ' + ob0.sutun.map(s => s.renk + ' renk duz ' + s.duz).join(' / ') + ', ust/alt satir ' + [r.ust, r.alt].map(s => s.renk + ' renk duz ' + s.duz + '/' + s.boy).join(' / ') +
+      ', karanliktan once ust/alt ' + ob0.satir.map(s => s.renk + ' renk duz ' + s.duz).join(' / ') + ', bant ' + k.bant.toFixed(1) + ' css px, kosu ' + r.durumT.toFixed(2) + ' sn');
     dene(ad + ': oyun ekrani acik, kosu surdu', () => {
       assert.ok(/matrix\(1, 0, 0, 1, 0, 0\)|none/.test(o.ekran), 'ekran gecisi: ' + o.ekran);
       assert.ok(r.durumT > 1.5 && !r.bitti, 'kosu ' + r.durumT);
@@ -206,6 +219,15 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
         assert.ok(s.duz < s.boy * 0.5 && s.renk >= 8, (j ? 'sag' : 'sol') + ' sutun karanliktan once duz (arka plan yok): ' + JSON.stringify(s));
       });
     });
+    dene(ad + ': ust ve alt kenar piksel satirlari duz degil (dar ekranda bant da arka plan + karanlik), hicbiri (0,0,0) satir degil', () => {
+      // Dar ekranda (bant > 0) satir 0 ve son satir bantin icindedir: eski cizimde tamamen duz zemin dolgusu (pal.karanlik) idi
+      // (karanliktan once duz = boy). Genis ekranda ayni satirlar sahnenin ust/alt kenaridir.
+      [['ust', r.ust], ['alt', r.alt]].forEach(([y, s]) => assert.ok(s.siyah < s.boy, y + ' satir tamamen (0,0,0)'));
+      assert.ok(r.oncesi && r.oncesi.satir.length === 2, 'karanlik tuvali tum tuvali (bantlar dahil) kaplamiyor: karanliktan once olculemedi');
+      r.oncesi.satir.forEach((s, j) => {
+        assert.ok(s.duz < s.boy * 0.5 && s.renk >= 8, (j ? 'alt' : 'ust') + ' satir karanliktan once duz (arka plan yok): ' + JSON.stringify(s));
+      });
+    });
     dene(ad + ': "Dokun ve basla" alanda yatay ortali, HUD ekranda ortali', () => {
       const b = r.once, ipx = b.ipucu.x + b.ipucu.w / 2, ax = b.alan.x + b.alan.w / 2;
       assert.ok(b.ipucuGorunur === '1', 'ipucu gorunur degil ' + b.ipucuGorunur);
@@ -222,6 +244,10 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
       }
     });
   }
+  // 411x960 kurulu: alan 411x829 css (HUD dahil degil), GA 49,6 -> bant ~3,5 css px = 7 cihaz pikseli: satir 0 ve son satir bantin icinde
+  dene('dar ekran sinandi: en az bir boyutta ust/alt bant var (alan en/boy < W/H) ve kenar satirlari bantin icinde (bant >= 2 cihaz pikseli)', () => {
+    assert.ok(sonuclar.some(([b, r]) => r.kirp.bant * Math.min(b[3], 2) >= 2), sonuclar.map(([b, r]) => b[0] + ' bant ' + r.kirp.bant.toFixed(1)).join(', '));
+  });
   dene('genis/yatay oran sinandi: en az bir boyutta GA > GW_MAX (atmosfer dolgusu ve kirpma)', () => {
     assert.ok(sonuclar.some(([, r]) => r.kirp.GA > GW_MAX + 6 && r.kirp.dis !== null), sonuclar.map(([b, r]) => b[0] + ' GA ' + r.kirp.GA.toFixed(1)).join(', '));
   });

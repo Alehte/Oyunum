@@ -14,6 +14,19 @@ const T_MIN = A.adalet.T_MIN, K = A.adalet.KUS_EK, V = A.adalet.V_GUVENLI, T_IVM
 const U = A.uretici, EPS = 1e-9, NEFES_SURE = U.NEFES_SURE, RT = A.hareket.R_TOPLA;
 const RB = A.hareket.R_BOMBA + RC, PAYK = A.adalet.PAY_KACIS, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;
 const EKRAN = A.dunya.W - XB;            // bomba kendi isigiyla ekrana girince gorunur (en dar ekran W; genis ekran yalniz daha erken gosterir)
+// Esik telafisi (atesBocegi.js uretimPuani; dilim UFUK'ta uretilir, esikler ESIK_UFUK'a gore). Cekirdekten bagimsiz AYAR'dan:
+// (a) TELAFI_TAVAN: uretildigi adimda dilim.puan <= puan + L / MESAFE_BIRIM + ESIK_TOZ_TAVAN (L = UFUK - ESIK_UFUK). puan azalmaz,
+//     uretim puani en cok bu kadar ileri bakar; ustel toz hizi gibi sinirsiz bir tahmin bu denetimi gecemez.
+// (b) ESIK_TOL: her esik turu icin esigi gecen ilk (nefes olmayan) dilim ekran x = W'ye (en dar ekranin sag kenari) vardiginda
+//     bocegin gercek puani >= esik - ESIK_TOL. Olcum (bu test, 1000 tohum; Bot A/B/Bg/uzun A/B; ayrica denetci takip botu 150 tohum):
+//     esik oncesi telafisiz eski uretimde (ufuk 2W) en kotu +29 (geometri tabani +14,5: dilim 108'den 50'ye 58 birim = 14,5 mesafe
+//     puani); 50552c8 ustel toz hizi telafisinde -39 (zincir kopunca tahmin en yuksekte kilitli; bu testte 60 tohumda Bot B bomba -21,
+//     uzun B -49); ileri toz telafisinde 1000 tohumda en kotu -3 (Bot A sarmasik), diger tur/botlarda >= +19; denetci botu >= +29.
+//     ESIK_TOL = 5: olculen en kotunun 2 puan altinda; kucuk tahmin hatasina izin verir, -21/-39 turu erken tehlikeyi yakalar.
+const ESIK_L = U.UFUK - U.ESIK_UFUK, TELAFI_TAVAN = ESIK_L / A.puan.MESAFE_BIRIM + U.ESIK_TOZ_TAVAN, ESIK_TOL = 5;
+const ESIK_TUR = [['risk tozu', U.RISK_PUAN], ['tozsuz', U.TOZSUZ_PUAN], ['bomba', U.BOMBA_PUAN], ['sarmasik', U.SARMASIK_PUAN]];
+const ESIK_EKRAN = [A.dunya.W, 82, H * A.dunya.ORAN_MAX];   // en dar ekran (denetlenen), 82 (ornek orta), 20:9 (bilgi)
+const esikOlc = {};                                          // kosu adi -> esik turu -> ekran -> [gercek puan - esik]
 
 const TOHUM_SAYI = +process.argv[2] || 1000, MESAFE = +process.argv[3] || 20000;
 // 5000+ (cakisma serbest) bolgesi icin uzun mesafe alt kumesi: UZUN_TOHUM tohum x UZUN_MESAFE (Bot A ve Bot B).
@@ -168,7 +181,8 @@ function riskDenetle(dn, s, zf, puan, ozel) {
 }
 function dilimDenetle(dn, s, gorPuan) {
   const puan = s.puan;                                        // uretim puani (tasarim 11.8; esik telafisi dahil, AB.uretimPuani)
-  if (!(puan <= gorPuan)) kusur(dn.t, s, 'uretim puani gorulen puandan (telafili) buyuk');
+  // (a) telafi ust siniri: gorPuan = uretildigi adimin sonundaki gercek puan (uretimdeki puandan kucuk olamaz)
+  if (!(puan <= gorPuan + TELAFI_TAVAN + EPS)) kusur(dn.t, s, 'uretim puani gercek puan + telafi tavanini asiyor (' + puan.toFixed(1) + ' > ' + gorPuan + ' + ' + TELAFI_TAVAN + ')');
   const t = dn.t, p = dn.son, zf = AB.dilimZarfi(s), c = (zf.ust + zf.alt) / 2;
   const zr = AB.zorluk(s.x - XB), zs = zarflar(s);
   ist.dilim++; if (s.nefes) ist.nefes++; if (s.kivilcim) ist.kivilcim++;
@@ -634,13 +648,29 @@ function botB(sabit) {
 function kos(t, bot, secenek) {
   const d = AB.oyunOlustur(t), dn = yeniDenetci(t), hedefMesafe = secenek.mesafe || MESAFE;
   const mek = { tozsuz: [], bomba: [], sarmasik: [] };
+  // (b) esik: her tur icin esigi gecen ilk nefes olmayan dilim; ekrana (ESIK_EKRAN) varista gercek puan - esik
+  const denetle = secenek.yapi || secenek.zaman, izE = ESIK_TUR.map(() => null), kayE = ESIK_TUR.map(() => ESIK_EKRAN.map(() => false));
+  const olcE = denetle && secenek.ad ? (esikOlc[secenek.ad] = esikOlc[secenek.ad] || ESIK_TUR.map(() => ESIK_EKRAN.map(() => []))) : null;
+  const esikBak = () => {
+    for (let j = 0; j < ESIK_TUR.length; j++) {
+      const s = izE[j]; if (!s) continue;
+      for (let e = 0; e < ESIK_EKRAN.length; e++) {
+        if (kayE[j][e] || s.x - d.mesafe > ESIK_EKRAN[e]) continue;
+        kayE[j][e] = true; const fark = d.puan - ESIK_TUR[j][1];
+        if (olcE) olcE[j][e].push(fark);
+        if (e === 0 && !(fark >= -ESIK_TOL)) kusur(t, s, ESIK_TUR[j][0] + ' esigi erken: esigi gecen ilk dilim ekran x = W konumunda, gercek puan ' + d.puan + ' < ' + ESIK_TUR[j][1] + ' - ' + ESIK_TOL);
+      }
+    }
+  };
   const yeni = () => {
     const L = d.dilimler; let i = L.length; while (i > 0 && L[i - 1].no > dn.sonNo) i--;
     for (; i < L.length; i++) {
       const s = L[i];
       if (s.tozsuz) mek.tozsuz.push(s); if (s.bomba) mek.bomba.push(s); if (s.sarmasik) mek.sarmasik.push(s);
-      if (secenek.yapi || secenek.zaman) dilimDenetle(dn, s, d.esikPuan);   // telafili gorulen puan (esik telafisi, azalmaz)
-      else dn.sonNo = s.no;
+      if (denetle) {
+        dilimDenetle(dn, s, d.puan);
+        if (!s.nefes) ESIK_TUR.forEach(([, T], j) => { if (!izE[j] && s.puan >= T) izE[j] = s; });
+      } else dn.sonNo = s.no;
       if (secenek.zaman) izBaslat(dn, s);
     }
   };
@@ -652,6 +682,7 @@ function kos(t, bot, secenek) {
     const olay = AB.adim(d, bot(d));
     adimSay++;
     yeni();
+    if (denetle) esikBak();
     if (d.bolge !== bolge) { bolge = d.bolge; dn.nefesBekle = true; }   // sonraki uretilen dilim nefes olmali
     for (const o of olay) {
       if (o.tur === 'yutuldu') yutuldu++;
@@ -685,7 +716,7 @@ const ozet = r => ({ t: r.t, c: r.carpma, b: r.bomba, s: r.sersem, z: r.zemin, m
                      sarmasik: r.sarmasikDilim, yutuldu: r.yutuldu, uyari: r.uyari });
 for (let i = 0; i < TOHUM_SAYI; i++) {
   const t = tohum(i);
-  const a = kos(t, botA(), { isikSabit: true, zaman: true });   // zaman denetimi geometriye bagli: A kosusunda
+  const a = kos(t, botA(), { isikSabit: true, zaman: true, ad: 'A' });   // zaman denetimi geometriye bagli: A kosusunda
   sonuc.A.push(Object.assign(ozet(Object.assign(a, { t: t }))));
   const kayit = new Map(), dk = kos(t, botD(kayit), { isikSabit: true, kayit: kayit });
   kivD.carpma += dk.carpma; if (dk.carpma) kivD.tohumCarpma++; kivD.sersem += dk.sersem; kivD.zemin += dk.zemin;
@@ -695,9 +726,9 @@ for (let i = 0; i < TOHUM_SAYI; i++) {
     if (s.kivilcim.alindi) kivD.alinan++;
     if (s.kivilcim.alindi && !k.carpti) kivD.temiz++;
   }
-  const b = kos(t, botB(true), { isikSabit: true, yapi: true });
+  const b = kos(t, botB(true), { isikSabit: true, yapi: true, ad: 'B' });
   sonuc.B.push(ozet(Object.assign(b, { t: t })));
-  const bg = kos(t, botB(false), { yapi: true });
+  const bg = kos(t, botB(false), { yapi: true, ad: 'Bg' });
   sonuc.Bg.push(Object.assign(ozet(Object.assign(bg, { t: t })), { isik: bg.enAzIsik, bitti: bg.d.bitti }));
   [[false, 'C0'], [true, 'C1']].forEach(([bas, ad]) => {
     const c = kos(t, () => bas, {});
@@ -708,8 +739,8 @@ for (let i = 0; i < TOHUM_SAYI; i++) {
 // Uzun mesafe alt kumesi: 5000+ puanda (cakisma serbest) tozsuz + sarmasik birlikte; Bot A ve Bot B (isik 0).
 for (let i = 0; i < UZUN_TOHUM; i++) {
   const t = tohum(100000 + i);
-  sonuc.uA.push(ozet(Object.assign(kos(t, botA(), { isikSabit: true, zaman: true, mesafe: UZUN_MESAFE }), { t: t })));
-  sonuc.uB.push(ozet(Object.assign(kos(t, botB(true), { isikSabit: true, yapi: true, mesafe: UZUN_MESAFE }), { t: t })));
+  sonuc.uA.push(ozet(Object.assign(kos(t, botA(), { isikSabit: true, zaman: true, mesafe: UZUN_MESAFE, ad: 'uA' }), { t: t })));
+  sonuc.uB.push(ozet(Object.assign(kos(t, botB(true), { isikSabit: true, yapi: true, mesafe: UZUN_MESAFE, ad: 'uB' }), { t: t })));
 }
 // Bot S (12.1, tavan sersemlemesi): Bot A her 3-6 sn'de bir bilerek tavana carpar; sersemken girdisi rastgele
 // (etkisiz olmali), uyandiktan sonra T_MIN boyunca birakili kalir (en kotu tepki), sonra Bot A'ya doner.
@@ -802,6 +833,21 @@ const kotu = (dizi, f) => dizi.filter(f).slice(0, 5).map(x => x.t).join(',');
 dene('yapisal kurallar 1-9 + T_MIN gorunurluk (' + ist.dilim + ' dilim)', () => {
   assert.strictEqual(ist.kusur.length, 0, ist.kusur.length + ' kusur: ' + ist.kusur.slice(0, 8).join(' | '));
 });
+// (b) esik telafisi: ayrinti kusur listesinde de (yukaridaki yapisal test); burada tur basina olcum ve ayri denetim.
+{
+  const ozet = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? 'n' + b.length + ' min ' + b[0] + ' med ' + b[b.length >> 1] : 'n0'; };
+  const tum = ESIK_TUR.map(() => ESIK_EKRAN.map(() => []));
+  Object.keys(esikOlc).forEach(ad => esikOlc[ad].forEach((te, j) => te.forEach((l, e) => { tum[j][e].push(...l); })));
+  Object.keys(esikOlc).forEach(ad => console.log('  bilgi esik ' + ad + ': ' + ESIK_TUR.map(([n, T], j) => n + ' ' + T + ' [' +
+    ESIK_EKRAN.map((E, e) => 'E' + E.toFixed(0) + ' ' + ozet(esikOlc[ad][j][e])).join(', ') + ']').join('; ')));
+  dene('esik telafisi: (a) uretim puani <= gercek puan + ' + TELAFI_TAVAN + '; (b) esigi gecen ilk dilim ekran x = W konumuna vardiginda gercek puan >= esik - ' + ESIK_TOL +
+       ' (risk/tozsuz ' + U.RISK_PUAN + ', bomba ' + U.BOMBA_PUAN + ', sarmasik ' + U.SARMASIK_PUAN + '; Bot A, B, Bg, uzun A/B)', () => {
+    const k = ist.kusur.filter(x => / esigi erken| telafi tavanini /.test(x));
+    assert.strictEqual(k.length, 0, k.length + ' kusur: ' + k.slice(0, 5).join(' | '));
+    ESIK_TUR.forEach(([n], j) => assert.ok(tum[j][0].length > 0, n + ' esigi hic olculmedi'));
+    ESIK_TUR.forEach(([n], j) => assert.ok(Math.min(...tum[j][0]) >= -ESIK_TOL, n + ' en kotu ' + Math.min(...tum[j][0])));
+  });
+}
 dene('her engel ilk gorundugunde varisa >= T_MIN (en az ' + ist.enAzPay.toFixed(4) + ' sn)', () => assert.ok(ist.enAzPay >= T_MIN - EPS));
 dene('tum kosular ' + MESAFE + ' birime ulasti (A, B)', () => {
   assert.ok(sonuc.A.every(x => x.m >= MESAFE) && sonuc.B.every(x => x.m >= MESAFE));

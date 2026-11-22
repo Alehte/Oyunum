@@ -13,9 +13,10 @@
   var AYAR = AB.AYAR, D = AYAR.dunya, M = AYAR.hareket, AD = AYAR.adalet;
   var W = D.W, H = D.H, XB = D.X_BOCEK, DT = D.DT;
   // Gorunen genislik (boyutla): olcek yukseklige gore (H sabit), GA = tuval genisligi (dunya birimi, >= W; daha dar
-  // ekranda genislige sigar, dikey bant kalabilir). Oyun dunyasi GW = min(GA, GW_MAX) (20:9); GW..GA yalniz atmosfer
-  // (arka plan + karanlik). Bocek solda (XB); ek genislik saga, ileriye acilir. Cekirdegin uretim ufku GW_MAX'in otesinde.
-  var GW_MAX = H * D.ORAN_MAX, GW = W, GA = W;
+  // ekranda genislige sigar, ust/alt bant kalir: BY birim). Oyun dunyasi GW = min(GA, GW_MAX) (20:9); GW..GA ve bantlar
+  // yalniz atmosfer (arka plan + karanlik; bantlarda arka plan dikey aynalanir). Bocek solda (XB); ek genislik saga, ileriye
+  // acilir. Cekirdegin uretim ufku GW_MAX'in otesinde.
+  var GW_MAX = H * D.ORAN_MAX, GW = W, GA = W, BY = 0;
   var KENAR_SOLMA = 6;                // GW sinirindaki kendi isikli nesne (bomba) bu kadar birimde belirir (yalniz GA > GW_MAX)
 
   // ---------------------------------------------------------------
@@ -429,7 +430,7 @@
     sprBomba = bombaSprite();
     sprBombaHale = bombaHaleSprite();
     bocekParlak = karistir(pal.isik, rk.kanat, 0.55);
-    kc = yeniTuval(GA * S, H * S); kctx = kc.getContext('2d');   // karanlik tum tuval genisligini (atmosfer dahil) kaplar
+    kc = yeniTuval(GA * S, (H + 2 * BY) * S); kctx = kc.getContext('2d');   // karanlik tum tuvali (yan atmosfer ve ust/alt bantlar dahil) kaplar
     karanlikGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
     karanlikGrad.addColorStop(0, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
@@ -457,10 +458,10 @@
     if (cssW && r.width === cssW && r.height === cssH && yeniDpr === dpr) return true;   // boyut degismedi: yeniden kurma
     dpr = yeniDpr;
     cssW = r.width; cssH = r.height;
-    olcek = cssH / H; GA = cssW / olcek;
-    if (GA < W) { olcek = cssW / W; GA = W; }                     // cok dar ekran: genislige sigdir (dikey bant)
+    olcek = cssH / H; GA = cssW / olcek; BY = 0;
+    if (GA < W) { olcek = cssW / W; GA = W; BY = (cssH / olcek - H) / 2; }   // cok dar ekran: genislige sigdir; BY: ust/alt bant (birim)
     GW = Math.min(GA, GW_MAX);
-    ox = 0; oy = (cssH - H * olcek) / 2;
+    ox = 0; oy = BY * olcek;                                      // genis ekranda tam 0 (bant yok)
     S = olcek * dpr; pxD = 1 / S;
     tuval.width = Math.round(cssW * dpr); tuval.height = Math.round(cssH * dpr);
     gorselKur();
@@ -909,6 +910,13 @@
     }
   }
 
+  // Ust/alt bant (dar ekran, BY > 0): arka plan y = 0 ve y = H cizgilerinde dikey aynalanir (dikissiz); yalniz atmosfer,
+  // oyun mantigi ve dunya cizimi degismez. BY > H (pratikte yok) ise aynanin otesi tuvalin duz zemin dolgusunda kalir.
+  function bantCiz(c) {
+    c.save(); c.transform(1, 0, 0, -1, 0, 0); arkaPlanCiz(c); c.restore();          // ust: y -> -y
+    c.save(); c.transform(1, 0, 0, -1, 0, 2 * H); arkaPlanCiz(c); c.restore();      // alt: y -> 2H - y
+  }
+
   function dunyaCiz(c, dt, p) {
     var d = durum, dl = d.dilimler, i, j, s, e, t, x, mesafe = d.mesafe, kenar = KENAR_PX / olcek, mx, my, md, rm2 = M.R_MIKNATIS * M.R_MIKNATIS;
     c.lineWidth = kenar; c.lineJoin = 'round'; c.lineCap = 'round';
@@ -981,7 +989,7 @@
   }
 
   function karanlikCiz(p) {
-    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / GA, by = bocekY();
+    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / GA, by = bocekY() + BY;   // kc ust bandi da kaplar: dunya y'si kc'de y + BY
     kctx.setTransform(1, 0, 0, 1, 0, 0);
     kctx.globalCompositeOperation = 'source-over';
     kctx.fillStyle = p > 0 ? rgba(pal.karanlik, KARANLIK_OPAKLIK + (1 - KARANLIK_OPAKLIK) * p) : karanlikRenkStr;
@@ -1006,15 +1014,16 @@
     ctx.fillRect(0, 0, tuval.width, tuval.height);
     ctx.save();
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
-    ctx.beginPath(); ctx.rect(0, 0, GA, H); ctx.clip();          // arka plan: tum genislik (atmosfer dahil)
+    ctx.beginPath(); ctx.rect(0, -BY, GA, H + 2 * BY); ctx.clip();   // arka plan: tum tuval (yan atmosfer ve ust/alt bantlar dahil)
     arkaPlanCiz(ctx);
+    if (BY > 0) bantCiz(ctx);
     var p = sonmeIlerleme();
-    if (GW < GA) { ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip(); }   // oyun dunyasi en cok GW_MAX
+    if (GW < GA || BY > 0) { ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip(); }   // oyun dunyasi en cok GW_MAX, y 0..H
     dunyaCiz(ctx, dt, p);
     ctx.restore();
     karanlikCiz(p);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(kc, Math.round(ox * dpr), Math.round(oy * dpr));
+    ctx.drawImage(kc, Math.round(ox * dpr), Math.round((oy - BY * olcek) * dpr));
     ctx.save();                                    // kendi isigiyla gorunenler karanligin ustunde
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
     ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip();

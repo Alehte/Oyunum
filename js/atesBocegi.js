@@ -59,10 +59,13 @@
       // ve en genis engelin otesinde: hicbir nesne gorunur alanin icinde dogmaz (cihazdan bagimsiz sabit).
       // ESIK_UFUK: puan esikleri (TOZSUZ/BOMBA/SARMASIK/RISK_PUAN, bolge) bu ufka gore olculur. Dilim UFUK'ta
       // uretildigi icin uretimde, bocegin aradaki L = UFUK - ESIK_UFUK birimde kazanacagi puan tahmini eklenir
-      // (uretimPuani): mesafe puani L / MESAFE_BIRIM + son ~L birimdeki toz puani hizi (durum.tozHiz, ustel ortalama) * L.
+      // (uretimPuani): mesafe puani L / MESAFE_BIRIM + ileri toz puani (ileriTozPuani): bocegin onundeki L birimde
+      // ZATEN URETILMIS alinmamis tozlarin, zincir surerse verecegi puan; en cok ESIK_TOZ_TAVAN.
       // Kullanilan deger kosu boyunca azalmaz (durum.esikPuan = en buyugu): bolge ve esikler geri donmez.
       // Esigi asan ilk dilim boylece eski ufuktaki (100) konumuna yakin dogar; cihazdan bagimsiz, deterministik.
-      UFUK: 230, ESIK_UFUK: 100,
+      // ESIK_TOZ_TAVAN (olcum, gorev 3 denetimi): tavansiz ileri toz terimi uretimde p50 ~55, p90 ~95, en cok 120 (15 toz x 8);
+      // 100'de medyan kayma eskiye gore +-6 icinde, 80'de +12'ye cikar. Tavan telafinin sabit ust siniridir (adalet testi (a)).
+      UFUK: 230, ESIK_UFUK: 100, ESIK_TOZ_TAVAN: 100,
       ACILIS_DILIM: 3, ACILIS_BOSLUK: 30, ACILIS_FARK: 10,
       MERKEZ_MIN: 18, MERKEZ_MAX: 82,
       SERIT_UST: 10, SERIT_ALT: 90, SERIT_PENCERE: 4,
@@ -198,6 +201,7 @@
     if (!(u.UFUK >= d.H * d.ORAN_MAX - d.X_BOCEK + enGenis)) h.push('uretim ufku en genis gorunur alanin icinde');
     if (!(d.ORAN_MAX * d.H >= d.W)) h.push('ORAN_MAX * H < W');
     if (!(u.ESIK_UFUK > 0 && u.ESIK_UFUK <= u.UFUK)) h.push('ESIK_UFUK (0, UFUK] disinda');
+    if (!(u.ESIK_TOZ_TAVAN >= 0)) h.push('ESIK_TOZ_TAVAN < 0');
     if (!(z.HIZ_TABAN * (u.SARMASIK_ONCE - u.SARMASIK_UYARI) + m.R_CARPMA + u.SARMASIK_GEN / 2 > m.R_MIKNATIS))
       h.push('sarmasik sutun tozu buyumeden once miknatisla cekilir');
     if (!(u.SARMASIK_SUTUN_MIN >= 1 && u.SARMASIK_SUTUN_MAX >= u.SARMASIK_SUTUN_MIN && u.SARMASIK_SUTUN_MAX + 2 <= u.TOZ_MAX))
@@ -660,14 +664,32 @@
   // OYUN
   // ---------------------------------------------------------------
   // Esik telafisi (bkz. U.UFUK): uretim ve agirlik bolgesi icin puan = o anki puan + dilimin ESIK_UFUK'a varmasina
-  // kadarki (L birim) mesafe puani + toz puani tahmini (tozHiz: birim basina toz puani, ustel ortalama, pencere L).
-  // Yalniz toplama/cikarma/carpma ve en buyuk: her cihazda ayni sonuc. tozHiz yoksa (eski durum nesnesi) 0 sayilir.
-  // Tahmin toz hizi sonunce dusebilir; durum.esikPuan tahminin kosu boyunca en buyugudur (azalmaz): bolge/esik
-  // sinirinda ileri-geri gidip gelmez (ornegin nefes dilimi olmadan eski bolgeye donus).
+  // kadarki (L birim) mesafe puani + ileri toz puani, en cok ESIK_TOZ_TAVAN.
+  // Ileri toz puani: bocegin onundeki (bx, bx + L] araligindaki alinmamis, yutulmamis, risk olmayan tozlar (bu dilimler
+  // UFUK'a kadar zaten uretilmis): yeni dilim ESIK_UFUK'a varana dek bocek tam bunlarin yanindan gecer. Puan zincir
+  // surerse verilecek olan: P.TOZ * carpan(zincir + k), k = 0..n-1. Gecmis hiz yerine ileriye bakar: tozsuz dilim ve
+  // zincir kopmasi (hasarda zincir 0) tahmine hemen yansir; onceki ustel toz hizi zincir kopunca tahmini en yuksekte
+  // kilitliyordu (denetim: ekran 50'de gercek puan - esik en kotu -39). Risk tozu ve kivilcim sayilmaz (alinmayabilir).
+  // Yalniz tamsayi toplama/carpma, karsilastirma ve en buyuk: her cihazda ayni sonuc, kare hizindan bagimsiz (sabit DT).
+  // durum.esikPuan tahminin kosu boyunca en buyugudur (azalmaz): bolge/esik sinirinda ileri-geri gidip gelmez
+  // (ornegin nefes dilimi olmadan eski bolgeye donus). Ust sinir: esikPuan <= puan + ESIK_EK + ESIK_TOZ_TAVAN (puan azalmaz).
   var ESIK_L = U.UFUK - U.ESIK_UFUK, ESIK_EK = ESIK_L / P.MESAFE_BIRIM;
-  function uretimPuani(puan, tozHiz) { return puan + ESIK_EK + (tozHiz > 0 ? tozHiz * ESIK_L : 0); }
+  function uretimPuani(puan, tozPuani) { return puan + ESIK_EK + (tozPuani > 0 ? Math.min(tozPuani, U.ESIK_TOZ_TAVAN) : 0); }
+  function ileriTozPuani(d) {
+    var bx = d.mesafe + D.X_BOCEK, son = bx + ESIK_L, n = 0, top = 0, i, j, s, t, z = d.zincir > 0 ? d.zincir : 0;
+    for (i = 0; i < d.dilimler.length; i++) {
+      s = d.dilimler[i];
+      if (s.toz.length && s.toz[0].x > son) break;            // tozlar dilimin onunde, x'e gore sirali; sonraki dilimler daha ileride
+      for (j = 0; j < s.toz.length; j++) {
+        t = s.toz[j];
+        if (t.alindi || t.yutuldu || t.risk || !(t.x > bx) || t.x > son) continue;
+        top += P.TOZ * carpan(z + n); n++;
+      }
+    }
+    return top;
+  }
   function esikGuncelle(d) {
-    var p = uretimPuani(d.puan, d.tozHiz);
+    var p = uretimPuani(d.puan, ileriTozPuani(d));
     if (!(d.esikPuan >= p)) d.esikPuan = p;
     return d.esikPuan;
   }
@@ -677,7 +699,7 @@
   function oyunOlustur(tohum) {
     var d = {
       t: 0, mesafe: 0, puan: 0, y: D.Y_BASLA, vy: 0, ay: 0, isik: I.BASLANGIC, dokunulmaz: 0,
-      zincir: 0, zincirSure: 0, toz: 0, bolge: bolgeNo(uretimPuani(0, 0)), tozHiz: 0, esikPuan: uretimPuani(0, 0), gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
+      zincir: 0, zincirSure: 0, toz: 0, bolge: bolgeNo(uretimPuani(0, 0)), esikPuan: uretimPuani(0, 0), gorunenBolge: 0, bitti: 0, dilimler: [], tohum: tohum >>> 0,
       sersem: 0, zeminKoruma: 0, sebep: '',          // 12.1: kalan sersemlik / zemin korumasi (sn); bitis sebebi 'isik' | 'zemin'
       uretici: ureticiVerisi(tohum)
     };
@@ -812,7 +834,7 @@
     // (dunya koordinati, deterministik); sonra R_TOPLA icindeyse alinir. Kivilcim cekilmez.
     // Sersemken (12.1) miknatis kapali: yalniz dogrudan temas (R_TOPLA) toplar. Risk tozu (12.2) hic cekilmez;
     // puan ve isik normal tozla ayni.
-    var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt, tozPuan = 0;
+    var rm = d.sersem > 0 ? M.R_TOPLA : M.R_MIKNATIS, rm2 = rm * rm, adimM = M.MIKNATIS_HIZ * dt;
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
       // Toz ve kivilcim dilimin onunde (x < s.x), x'e gore sirali: uzaktakileri atla. Cekilen toz yalniz bocege
@@ -833,7 +855,7 @@
         }
         t.alindi = 1;
         var kz = P.TOZ * carpan(d.zincir);
-        d.puan += kz; tozPuan += kz; d.isik = Math.min(1, d.isik + I.TOZ);
+        d.puan += kz; d.isik = Math.min(1, d.isik + I.TOZ);
         d.zincir++; d.zincirSure = P.ZINCIR_SURE; d.toz++;
         olay.push({ tur: 'toz', puan: kz, x: t.x, y: t.y });
       }
@@ -845,8 +867,6 @@
         olay.push({ tur: 'kivilcim', puan: kk, x: t.x, y: t.y });
       }
     }
-    // toz puani hizi (esik telafisi): bu adimin toz puani / alinan yol, pencere ESIK_L birim (kivilcim sayilmaz)
-    d.tozHiz = (d.tozHiz > 0 ? d.tozHiz : 0) + (tozPuan - (d.tozHiz > 0 ? d.tozHiz : 0) * zr.hiz * dt) / ESIK_L;
     // bolge: uretici agirliklari icin uretim puaniyla (esik telafisi dahil) hemen degisir (olay yok).
     // gorunenBolge: arka plan ve SIS; nefes dilimi bocege varinca degisir, 'bolge' olayi o an.
     d.bolge = bolgeNo(esikGuncelle(d));
@@ -885,7 +905,7 @@
     kacisSuresi: kacisSuresi, kacisMesafesi: kacisMesafesi, cikisSuresi: cikisSuresi,
     uyanmaY: Y_UYAN, frenMesafesi: function (yon) { return frenMesafesi(M, D.DT, yon); },
     uyanmaDususu: function (tepki) { return uyanmaDususu(M, D.DT, tepki); },
-    bolgeNo: bolgeNo, carpan: carpan, uretimPuani: uretimPuani,
+    bolgeNo: bolgeNo, carpan: carpan, uretimPuani: uretimPuani, ileriTozPuani: ileriTozPuani,
     ureticiOlustur: ureticiOlustur, dilimZarfi: dilimZarfi,
     oyunOlustur: oyunOlustur, adim: adim,
     esikOdulu: esikOdulu, kosuJetonu: kosuJetonu

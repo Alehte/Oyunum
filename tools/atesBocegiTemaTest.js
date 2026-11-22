@@ -950,12 +950,13 @@ const marketKontrastlari = (olcum) => {
   olcum.forEach(o => assert(Math.max.apply(null, o.zemin) < 60, o.ad + ' mini zemini beyazimsi ' + o.zemin));
 }));
 
-// Diger oyun minileri degismez: ayni sayfa HEAD style.css + marketEkran.js ile cizilir. (1) gercek yerlesimde 2048/Kacis/Tempo/Sirala kutu boyutlari ayni;
+// Diger oyun minileri degismez: ayni sayfa Asama 1 oncesi referans (sabit commit 9d29413, tools/marketKartYakala.js REFERANS) style.css +
+// marketEkran.js ile cizilir. HEAD degil: Asama 1 (e6cd1fd) commit edildikten sonra HEAD karsilastirmasi kendini kendisiyle karsilastirirdi. (1) gercek yerlesimde 2048/Kacis/Tempo/Sirala kutu boyutlari ayni;
 // (2) Karanlikta Suzul mini gizli (.mo-ates{display:none}, her iki surumde) iken dort minin piksel kirpintilari birebir ayni (kanal basina ort. mutlak fark < ESIK_DIGER).
 // Gizlenmeden karsilastirma anlamsiz: Suzul 58 -> 68 px olunca space-around diger minileri alt piksel kaydirir (olcum: 2048 6,2 / Kacis 3,8 / Sirala 2,3 ort. fark; Tempo 0,2).
 // Gizli olcum: tum minilerde 0,00.
 const ESIK_DIGER = 0.05;
-[false, true].forEach((oto, mi) => dene('gercek market karti: diger oyun minileri HEAD ile ayni (boyut + piksel kirpintisi), ' + (oto ? 'otomatik karanlik' : 'normal'), () => {
+[false, true].forEach((oto, mi) => dene('gercek market karti: diger oyun minileri Asama 1 oncesi (9d29413) ile ayni (boyut + piksel kirpintisi), ' + (oto ? 'otomatik karanlik' : 'normal'), () => {
   const chrome = chromeBul();
   if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
   const yeni = marketOlcumu(chrome, oto, 9440 + mi), eski = marketOlcumu(chrome, oto, 9460 + mi, 390, true);
@@ -965,7 +966,7 @@ const ESIK_DIGER = 0.05;
   yeni.forEach((o, i) => ['k2048', 'kacis', 'tempo', 'sirala'].forEach(a => {
     const n = o.digerleri[a], e = eski[i].digerleri[a], ng = yeniG[i].digerleri[a], eg = eskiG[i].digerleri[a];
     assert(n && e && ng && eg, o.ad + ' ' + a + ' yok');
-    assert(n.w === e.w && n.h === e.h, o.ad + ' ' + a + ' boyut ' + n.w + 'x' + n.h + ' / HEAD ' + e.w + 'x' + e.h);
+    assert(n.w === e.w && n.h === e.h, o.ad + ' ' + a + ' boyut ' + n.w + 'x' + n.h + ' / referans ' + e.w + 'x' + e.h);
     assert(ng.w === eg.w && ng.h === eg.h, o.ad + ' ' + a + ' (gizli) boyut');
     let t = 0; for (let j = 0; j < ng.a.length; j++) t += Math.abs(ng.a[j] - eg.a[j]);
     sonuc.push({ ad: o.ad, a, f: t / ng.a.length });
@@ -973,6 +974,35 @@ const ESIK_DIGER = 0.05;
   if (process.env.ONIZ_OLCUM) { const m = {}; sonuc.forEach(r => { m[r.a] = Math.max(m[r.a] || 0, r.f); }); console.log('       max piksel farki (Suzul gizli) ' + JSON.stringify(m)); }
   const kotu = sonuc.filter(r => !(r.f < ESIK_DIGER));
   assert.strictEqual(kotu.length, 0, kotu.map(r => r.ad + ' ' + r.a + ' ' + r.f.toFixed(2)).join('; '));
+}));
+
+// Asama 1: mini sag kenarindaki ince dikey cizgi (kenara yapisik tam boy dikenli dal, x 52-56 / 58 birim) gitti. Mini sag kenarinin
+// SAG_SUTUN sutununda (W-4..W-2; W-1 kenar yumusatmasi), yuvarlak kose satirlari haric (SAG_KOSE = 10 px = border-radius; kosede
+// kartin acik zemini gorunur) "parlak" piksel = en buyuk kanal, mini zemininin en buyuk kanalindan > SAG_FARK fazla; sutundaki en uzun
+// kesintisiz parlak dizi olculur. Olcum (390 px, normal ve otomatik karanlik, 10 kart): referans 9d29413'te (58 px mini) 40 px, kose haric 38 (dal kenar
+// cizgisi y 9-48, fark ~95-110); duzeltilmis 68 px minide kose satirlari dahil 0-5 px (yalniz ust kose: kart zemini, Buz/Lav gibi acik
+// temalarda fark ~46), kose haric 0. Esik: en uzun dizi < SAG_DIZI (4 px); negatif kontrol: referans surumde ayni olcum >= H/2.
+const SAG_SUTUN = [4, 3, 2], SAG_FARK = 30, SAG_DIZI = 4, SAG_KOSE = 10;
+const sagDizi = o => {
+  const zm = Math.max.apply(null, o.zemin);
+  let en = 0;
+  SAG_SUTUN.forEach(d => {
+    const x = o.w - d; let n = 0;
+    for (let y = SAG_KOSE; y < o.h - SAG_KOSE; y++) { const c = o.ic[y * o.w + x]; n = Math.max(c[0], c[1], c[2]) - zm > SAG_FARK ? n + 1 : 0; en = Math.max(en, n); }
+  });
+  return en;
+};
+[false, true].forEach((oto, mi) => dene('gercek market karti: mini sag kenarinda uzun parlak dikey cizgi yok (en uzun dizi < ' + SAG_DIZI + ' px); referans 9d29413 surumunde olcum cizgiyi yakalar (>= H/2), ' + (oto ? 'otomatik karanlik' : 'normal'), () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const yeni = marketOlcumu(chrome, oto, 9440 + mi), eski = marketOlcumu(chrome, oto, 9460 + mi, 390, true);
+  assert.strictEqual(yeni.length, 10); assert.strictEqual(eski.length, 10);
+  const y = yeni.map(o => ({ ad: o.ad, n: sagDizi(o) })), e = eski.map(o => ({ ad: o.ad, n: sagDizi(o), h: o.h }));
+  if (process.env.ONIZ_OLCUM) console.log('       sag kenar en uzun parlak dizi: yeni ' + y.map(r => r.ad + ' ' + r.n).join(', ') + ' | referans ' + e.map(r => r.ad + ' ' + r.n).join(', '));
+  const kotu = y.filter(r => !(r.n < SAG_DIZI));
+  assert.strictEqual(kotu.length, 0, 'sag kenarda dikey cizgi: ' + kotu.map(r => r.ad + ' ' + r.n + ' px').join('; '));
+  const kacan = e.filter(r => !(r.n >= r.h / 2));
+  assert.strictEqual(kacan.length, 0, 'negatif kontrol: referans surumdeki cizgi yakalanmadi: ' + kacan.map(r => r.ad + ' ' + r.n + ' px').join('; '));
 }));
 
 // 360 px genisliginde mini tasmaz/kirpilmaz: kart icinde (.mk-onizleme icinde), tasma yok, 68 px sigar (5 mini toplami 314 = 330 - 2*8).
@@ -983,7 +1013,7 @@ dene('gercek market karti: 360 px genisliginde Karanlikta Suzul mini 68 px, kart
   assert.strictEqual(olcum.length, 10);
   olcum.forEach(o => {
     assert(o.w === 68 && o.h === 68, o.ad + ' boyut ' + o.w + 'x' + o.h);
-    // (.mk-onizleme scrollWidth'i Lav kartinda HEAD'de de tasiyor: efsanevi parilti katmani; bu yuzden kutu konumlari denetlenir)
+    // (.mk-onizleme scrollWidth'i Lav kartinda referans surumde (9d29413) de tasiyor: efsanevi parilti katmani; bu yuzden kutu konumlari denetlenir)
     assert(o.x >= o.oz.x && o.x + o.w <= o.oz.x + o.oz.w && o.y >= o.oz.y && o.y + o.h <= o.oz.y + o.oz.h, o.ad + ' mini kartin disina tasti');
     const r = o.rect, sag = Math.max(r.k2048.x + r.k2048.w, r.kacis.x + r.kacis.w, r.tempo.x + r.tempo.w, r.sirala.x + r.sirala.w);
     assert(sag <= o.x + 0.6, o.ad + ' ates mini digerleriyle ust uste ' + sag + ' > ' + o.x);

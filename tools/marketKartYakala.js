@@ -1,22 +1,25 @@
 // marketKartYakala.js — GERCEK index.html + style.css + js/*.js ile market envanterini headless Chrome'da acar,
 // 9 temanin Karanlikta Suzul onizleme kutularinin ekran goruntusunu ve konumlarini JSON olarak yazdirir.
 // Kullanim (atesBocegiTemaTest.js cagirir):  node tools/marketKartYakala.js <chrome> <otomatikKaranlik 0|1> <port>
-// Ek (istege bagli) arguman: <genislik> (varsayilan 390) ve <head 0|1>: 1 ise style.css ve js/marketEkran.js git HEAD surumuyle yuklenir.
-// <gizle 0|1>: 1 ise .mo-ates gizlenir ve tum animasyon/gecisler durdurulur (HEAD karsilastirmasinda yerlesim ayni kalsin; Lav parilti animasyonu zamanlamasi pikseli oynatmasin).
+// Ek (istege bagli) arguman: <genislik> (varsayilan 390) ve <ref 0|1>: 1 ise style.css ve js/marketEkran.js sabit REFERANS commit'inin
+// surumuyle yuklenir (Asama 1 oncesi, 9d29413: market minisi duzeltmesi e6cd1fd'den once). HEAD degil: e6cd1fd commit edildikten sonra
+// HEAD ile karsilastirma calisma agacini kendisiyle karsilastirirdi.
+// <gizle 0|1>: 1 ise .mo-ates gizlenir ve tum animasyon/gecisler durdurulur (referans karsilastirmasinda yerlesim ayni kalsin; Lav parilti animasyonu zamanlamasi pikseli oynatmasin).
 // Otomatik karanlik = Android Chrome "web icerigini karart" (CDP Emulation.setAutoDarkModeOverride).
 'use strict';
 const cp = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
-const [, , chrome, oto, port, genislikArg, headArg, gizleArg] = process.argv;
+const [, , chrome, oto, port, genislikArg, refArg, gizleArg] = process.argv;
 const GENISLIK = +genislikArg || 390;
 const KOK = path.join(__dirname, '..');
+const REFERANS = '9d29413';   // Asama 1 oncesi (gorev-karanliktaSuzul3); referans surum bu commit'ten okunur
 const dizin = fs.mkdtempSync(path.join(os.tmpdir(), 'mk-kart-'));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let html = fs.readFileSync(path.join(KOK, 'index.html'), 'utf8');
 const url = require('url');
-if (headArg === '1') {   // HEAD karsilastirmasi: yalniz bu iki dosya HEAD'den gelir, gerisi calisma agaci
+if (refArg === '1') {   // referans karsilastirmasi: yalniz bu iki dosya REFERANS commit'inden gelir, gerisi calisma agaci
   ['style.css', 'js/marketEkran.js'].forEach(f => {
-    const g = cp.execFileSync('git', ['show', 'HEAD:' + f], { cwd: KOK, encoding: 'utf8', maxBuffer: 1 << 26 }), h = path.join(dizin, 'head-' + path.basename(f));
-    // HEAD css gecici dizinden yuklenir: goreli url(fonts/..), url(img/..) kokten mutlak file URL'ye cevrilir (yoksa font/gorsel yuklenmez, 2048 yazi tipi farkli cikar)
+    const g = cp.execFileSync('git', ['show', REFERANS + ':' + f], { cwd: KOK, encoding: 'utf8', maxBuffer: 1 << 26 }), h = path.join(dizin, 'ref-' + path.basename(f));
+    // referans css gecici dizinden yuklenir: goreli url(fonts/..), url(img/..) kokten mutlak file URL'ye cevrilir (yoksa font/gorsel yuklenmez, 2048 yazi tipi farkli cikar)
     fs.writeFileSync(h, f === 'style.css' ? g.replace(/url\((?!["']?(?:data:|https?:|file:|#))(["']?)([^)"']+)\1\)/g, (m, q, u) => 'url(' + url.pathToFileURL(path.join(KOK, u)).href + ')') : g);
     html = html.replace('"' + f + '"', '"' + url.pathToFileURL(h).href + '"');
   });
@@ -46,7 +49,7 @@ function bitir(kod, hata) {
   await gonder('Emulation.setAutoDarkModeOverride', { enabled: oto === '1' });
   await gonder('Page.navigate', { url: require('url').pathToFileURL(path.join(dizin, 'sayfa.html')).href });
   await sleep(2500);
-  // yuklenme zamanlamasi degisken (ozellikle HEAD/gizli surum): kartlar gelene kadar bekle (yoksa nadiren 0 kart donuyordu), sonra yerlesim otursun
+  // yuklenme zamanlamasi degisken (ozellikle referans/gizli surum): kartlar gelene kadar bekle (yoksa nadiren 0 kart donuyordu), sonra yerlesim otursun
   for (let i = 0; i < 40; i++) {
     const k = await gonder('Runtime.evaluate', { returnByValue: true, expression: 'document.querySelectorAll("#mkIzgara .mk-kart .mo-ates").length' });
     if (k.result && k.result.result && k.result.result.value >= 10) break;
