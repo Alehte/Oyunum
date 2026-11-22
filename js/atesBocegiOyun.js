@@ -24,7 +24,7 @@
   // ---------------------------------------------------------------
   var MAKS_ADIM = 12;                 // kare basina en cok adim (tasarim 3.1); asan birikim atilir
   var MAKS_FARK = 0.1;                // bir karenin birikime en cok katkisi (sn)
-  var KARANLIK_OPAKLIK = 0.94;        // tasarim 5
+  var DEKOR_SIZINTI = 0.11;           // karanlik tam opak; yalniz arka plan dekoru isigin disinda bu oranda (%8-15) sizar. Dunya nesneleri sizmaz
   var ENGEL_DOLGU = '#0B0F14', ENGEL_KENAR = '#E9EDF2', KENAR_PX = 1.25;   // yerlesik engel renkleri; tema pal.engel ile verir (tasarim 12.3)
   // Tehlike taban renkleri (tasarim 11.5, 11.7): tema yalniz tonlar (TEHLIKE_KARISIM / BITKI_KARISIM, 12.3); silüet ve koyu kontur dili sabit.
   // Kontrast: tools/atesBocegiTemaTest.js
@@ -96,7 +96,7 @@
   var dpr = 1, cssW = 0, cssH = 0, olcek = 1, ox = 0, oy = 0, S = 1, pxD = 1;   // pxD: 1 cihaz pikseli (dunya birimi)
   var DAL_TAVAN = 24, DAL_PAY = 0.3, dalAnahtar = [], dalTuval = [], dalSira = [], dalSayac = 0;   // dal sprite onbellegi (sinirli LRU)
   // kare basina ayirma olmasin diye hazir nesneler
-  var kc = null, kctx = null, karanlikGrad = null, haloGrad = null, karanlikRenkStr = '';
+  var kc = null, kctx = null, karanlikGrad = null, haloGrad = null, ac = null, actx = null;   // ac: arka plan tuvali (kc ile ayni boy; kare basina bir kez cizilir)
   var katmanlar = [null, null, null, null];   // bolge -> [tuval, tuval, tuval]
   var sprBocek = null, sprToz = null, sprKivilcim = null, sprBomba = null, sprBombaHale = null;
   var paletAnahtar = '', bocekParlak = '#FFFFFF';
@@ -431,6 +431,7 @@
     sprBombaHale = bombaHaleSprite();
     bocekParlak = karistir(pal.isik, rk.kanat, 0.55);
     kc = yeniTuval(GA * S, (H + 2 * BY) * S); kctx = kc.getContext('2d');   // karanlik tum tuvali (yan atmosfer ve ust/alt bantlar dahil) kaplar
+    ac = yeniTuval(kc.width, kc.height); actx = ac.getContext('2d');
     karanlikGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
     karanlikGrad.addColorStop(0, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
@@ -443,7 +444,6 @@
       haloGrad.addColorStop(HALO_TEPE / AD.KARARTMA, rgba(pal.halo, pal.haloHalka));
       haloGrad.addColorStop(1, rgba(pal.halo, 0));
     }
-    karanlikRenkStr = rgba(pal.karanlik, KARANLIK_OPAKLIK);
     for (k = 0; k < katmanlar.length; k++) bolgeKur(k);     // hepsi onceden: bolge gecisinde takilma olmasin
     paletAnahtar = JSON.stringify(pal);
     ekran.style.setProperty('--ab-vurgu', pal.vurgu);
@@ -992,14 +992,27 @@
     var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = kc.width / GA, by = bocekY() + BY;   // kc ust bandi da kaplar: dunya y'si kc'de y + BY
     kctx.setTransform(1, 0, 0, 1, 0, 0);
     kctx.globalCompositeOperation = 'source-over';
-    kctx.fillStyle = p > 0 ? rgba(pal.karanlik, KARANLIK_OPAKLIK + (1 - KARANLIK_OPAKLIK) * p) : karanlikRenkStr;
+    kctx.globalAlpha = 1;
+    kctx.fillStyle = pal.karanlik;                              // her kare sifirdan: tam opak karanlik (onceki kareden birikme yok)
     kctx.fillRect(0, 0, kc.width, kc.height);
     if (R > 0.01) {
       kctx.globalCompositeOperation = 'destination-out';
       kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, by * ks);
       kctx.fillStyle = karanlikGrad;
       kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
-      kctx.globalCompositeOperation = 'source-over';
+    }
+    // Dekor sizintisi: source-atop yalniz kalan karanlik alfasi kadar basar (isik dairesinin gecis bandinda yumusak karisir).
+    // Sonerken (p -> 1) sizinti de solar; olumden sonra tam karanlik.
+    if (p < 1) {
+      kctx.setTransform(1, 0, 0, 1, 0, 0);
+      kctx.globalCompositeOperation = 'source-atop';
+      kctx.globalAlpha = DEKOR_SIZINTI * (1 - p);
+      kctx.drawImage(ac, 0, 0);
+      kctx.globalAlpha = 1;
+    }
+    kctx.globalCompositeOperation = 'source-over';
+    if (R > 0.01) {
+      kctx.setTransform(R * ks, 0, 0, R * ks, XB * ks, by * ks);
       if (haloGrad) {                                            // ayni donusumle tek dolgu; sonerken isikla birlikte solar
         kctx.globalAlpha = f; kctx.fillStyle = haloGrad;
         kctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
@@ -1012,11 +1025,15 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = pal.karanlik;
     ctx.fillRect(0, 0, tuval.width, tuval.height);
+    // Arka plan ac'ye bir kez cizilir (yan atmosfer ve ust/alt bantlar dahil); ana tuvale tam, kc'ye %DEKOR_SIZINTI basilir.
+    actx.setTransform(1, 0, 0, 1, 0, 0);
+    actx.fillStyle = pal.karanlik; actx.fillRect(0, 0, ac.width, ac.height);
+    actx.setTransform(S, 0, 0, S, 0, BY * S);
+    arkaPlanCiz(actx);
+    if (BY > 0) bantCiz(actx);
+    ctx.drawImage(ac, Math.round(ox * dpr), Math.round((oy - BY * olcek) * dpr));
     ctx.save();
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
-    ctx.beginPath(); ctx.rect(0, -BY, GA, H + 2 * BY); ctx.clip();   // arka plan: tum tuval (yan atmosfer ve ust/alt bantlar dahil)
-    arkaPlanCiz(ctx);
-    if (BY > 0) bantCiz(ctx);
     var p = sonmeIlerleme();
     if (GW < GA || BY > 0) { ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip(); }   // oyun dunyasi en cok GW_MAX, y 0..H
     dunyaCiz(ctx, dt, p);

@@ -44,11 +44,12 @@ Yapıldı (sw.js SURUM 17 → 19, görünen sürüm 1.2.0):
   - Yeni test dosyası tools/atesBocegiGenislikTest.js (38 test): 360x800, 412x915, 390x844, masaüstü çerçevesi, yatay 915x412, kurulu uygulama 411x960.
 - Denetim: 1 tur (opus); kritik bulgu yok. Önemli bulgular (telafinin fazla ileri gitmesi, SURUM 19'a çıkmamıştı, HEAD'e bağlı referans testi kendini kendisiyle karşılaştırıyordu, dar ekran yolu sınanmıyordu) 407f431'de düzeltildi.
 - Tüm paketler yeşil: adalet 27, çekirdek 151, oyun 67, tema 55, genişlik 38, sw 22, dokumAnim 25, hediye 14, kacisCoz 17, kacisGiris 13, kayitGoc 31, odul 13, sandik 15, suSiralaCoz 26, yilanGoz (zorunlu hata 0).
-Açık karar (kullanıcıda): karanlikCiz karanlık tuvalini her karede temizlemeden rgba(karanlık, .94) ile dolduruyor. Birkaç karede katman tamamen opak oluyor; KARANLIK_OPAKLIK etkisiz kalıyor ve ışık dışında arka plan görünmüyor. Bu hata önceden vardı. Düzeltmesi tek satır, ama oyunun görünümünü ve tema kontrast ölçümlerini değiştirir. Yatay ekranda sağdaki atmosfer alanı da bu yüzden düz koyu görünüyor.
+- Karanlık katmanı (kullanıcı onayıyla): kc her karede sıfırdan kuruluyor (önceden birikip tamamen opak oluyordu). Işık dışında yalnız arka plan dekoru DEKOR_SIZINTI 0,11 ile görünüyor (ölçülen oran 0,127-0,128, 8 bit yuvarlama). Dal, toz ve kıvılcım yalnız ışıkla görünüyor. Bomba ve sarmaşık uyarısı istisna, kendi ışığıyla görünüyor (adalet tasarımı). Dar ekran bantları ve 20:9 ötesindeki atmosfer alanı da aynı. SURUM 20. Tema kontrastı en düşük 3,74; adalet 27/27.
 Kabul edilen: karanlık tuvali artık tam tuval boyutunda (yatay telefonda ~4 MB, yatay tablette ~13 MB). Aşama 1'de köşe eşiği .02'den .065'e gevşetildi; beyaz kare yine yakalanıyor.
 Cihazda bakılacak:
 - Telefonda mini zemini (Sedef, Lav, Buz), otomatik karanlık mod açık ve kapalı.
 - Tam ekran oyun: yan bant kalmadı mı, HUD ve "Dokun ve başla" ortalı mı.
-- Yatay ekran (kurulu uygulama): böcek ve ışık çok küçük; sağ taraf düz koyu.
+- Yatay ekran (kurulu uygulama): böcek ve ışık çok küçük.
+- Işık dışındaki dekor (%11) gerçek ekranda seçiliyor mu; çok soluksa DEKOR_SIZINTI en çok 0,15.
 - Çentikli ekran: safe-area dolgusuyla .ab-alan genişliği.
 - Eşik hissi: risk tozu, bomba ve sarmaşık eskisiyle aynı puanlarda mı geliyor. Hiç toz toplamayan oyuncuda eşik en kötü ~85 puan erken gelebilir.

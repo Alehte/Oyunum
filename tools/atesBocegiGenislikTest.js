@@ -76,18 +76,64 @@ window.__kutu = function (x0, y0, x1, y1) {   // piksel kutusunda en turuncu (R 
   return en;
 };
 // Karanlik katmani (kc) cizilmeden hemen once tuvalin verilen sutunlari (arka plan + dunya) ve kc genisligi. Karanlik
-// tuvali her karede ust uste %94 dolgu aldigindan isik disinda pratikte opaktir (onceden var olan davranis); bu yuzden
-// arka planin kenara kadar cizildigi karanliktan ONCE olculur, son goruntude ise sutun (0,0,0) olmamali.
+// tuvali isik disinda tam opaktir (yalniz dekor sizintisi gorunur); bu yuzden arka planin kenara kadar cizildigi karanliktan
+// ONCE olculur, son goruntude ise sutun (0,0,0) olmamali. Tuval boyutundaki ilk drawImage arka plan tuvali (ac), ikincisi karanlik (kc).
 window.__oncesi = function (xs, ys) {
-  var t = document.getElementById('abTuval'), c = t.getContext('2d'), o = c.drawImage, out = null;
+  var t = document.getElementById('abTuval'), c = t.getContext('2d'), o = c.drawImage, out = null, say = 0;
   return new Promise(function (bitti) {
     c.drawImage = function (img) {
-      if (!out && img.width === t.width && img.height === t.height) {
+      if (!out && img.width === t.width && img.height === t.height && ++say === 2) {
         out = { kcW: img.width, kcH: img.height, sutun: xs.map(function (x) { return window.__sutun(x); }), satir: (ys || []).map(function (y) { return window.__satir(y); }) };
       }
       return o.apply(c, arguments);
     };
     requestAnimationFrame(function () { requestAnimationFrame(function () { c.drawImage = o; bitti(out); }); });
+  });
+};
+// Dekor sizintisi olcumu (gercek cizim, kare basina). Tuval boyutundaki ilk drawImage = arka plan tuvali (ac), ikincisi =
+// karanlik (kc). Her kare icin: AC = ac pikselleri (karanliksiz arka plan), DN = kc'den hemen once ana tuval (arka plan + dunya
+// nesneleri), SON = kc'den hemen sonra ana tuval. K = pal.karanlik (--ab-karanlik). Yalniz kc alfasi 255 olan (isik disi) pikseller.
+//   oran  = sum((SON - K) * (AC - K)) / sum((AC - K)^2), (AC - K) toplam >= 24 olan dekor pikselleri (en kucuk kareler toplami);
+//           yani "dekorun karanlik disinda gorunurlugu" = (piksel - saf karanlik) / (arka plan - saf karanlik).
+//   sapma = en kotu |SON - (K + oran * (AC - K))|: SON tam olarak karanlik + oran * dekor ise sapma ~0; onceki kareden birikme ya da
+//           dunya nesnesi (dal, toz, kivilcim) sizarsa buyur.
+//   nesne = dunya nesnesinin cizildigi (|DN - AC| toplam > 40) isik disi piksel sayisi; bu piksellerde de sapma ayni olcutle olculur.
+window.__dekor = function (kare) {
+  var t = document.getElementById('abTuval'), c = t.getContext('2d'), o = c.drawImage, say = 0, sonuc = [];
+  var h = getComputedStyle(document.getElementById('screen-ates')).getPropertyValue('--ab-karanlik').trim();
+  var K = [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)];
+  return new Promise(function (bitti) {
+    var kn = 0;
+    c.drawImage = function (img) {
+      var tam = img.width === t.width && img.height === t.height;
+      if (tam) say++;
+      if (tam && say % 2 === 0) {
+        var AC = c.__ac, DN = c.getImageData(0, 0, t.width, t.height).data, kc = img.getContext('2d').getImageData(0, 0, t.width, t.height).data;
+        var r = o.apply(c, arguments), SON = c.getImageData(0, 0, t.width, t.height).data, i, j, st = 0, ss = 0, kd = 0, nes = 0, sp = 0, spN = 0, sap = 0;
+        for (i = 0; i < SON.length; i += 4) {
+          if (kc[i + 3] !== 255) continue;
+          kd++;
+          var d0 = AC[i] - K[0], d1 = AC[i + 1] - K[1], d2 = AC[i + 2] - K[2];
+          if (Math.abs(d0) + Math.abs(d1) + Math.abs(d2) >= 24) {
+            st += (SON[i] - K[0]) * d0 + (SON[i + 1] - K[1]) * d1 + (SON[i + 2] - K[2]) * d2; ss += d0 * d0 + d1 * d1 + d2 * d2;
+          }
+        }
+        var oran = ss ? st / ss : 0;
+        for (i = 0; i < SON.length; i += 4) {
+          if (kc[i + 3] !== 255) continue;
+          var e = Math.max(Math.abs(SON[i] - (K[0] + oran * (AC[i] - K[0]))), Math.abs(SON[i + 1] - (K[1] + oran * (AC[i + 1] - K[1]))), Math.abs(SON[i + 2] - (K[2] + oran * (AC[i + 2] - K[2]))));
+          var ob = Math.abs(DN[i] - AC[i]) + Math.abs(DN[i + 1] - AC[i + 1]) + Math.abs(DN[i + 2] - AC[i + 2]) > 40;
+          if (ob) { nes++; if (e > spN) spN = e; }
+          if (e > sap) sap = e;
+        }
+        sonuc.push({ oran: oran, sapma: sap, nesne: nes, nesneSapma: spN, karanlikPiksel: kd, toplam: SON.length / 4, dekorPiksel: ss > 0 });
+        return r;
+      }
+      if (tam && say % 2 === 1) c.__ac = img.getContext('2d').getImageData(0, 0, t.width, t.height).data;
+      return o.apply(c, arguments);
+    };
+    var n = 0;
+    (function dongu() { window.__koru(); if (++n > kare + 1) { c.drawImage = o; delete c.__ac; bitti(sonuc); } else requestAnimationFrame(dongu); })();
   });
 };
 window.__bas = function (b) {
@@ -154,13 +200,15 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
   })()`);
   if (kirp.atmosferX !== null) kirp.atmosferSutun = (await deger('__oncesi([' + kirp.atmosferX + '])')).sutun[0];
   const g3 = await gonder('Page.captureScreenshot', { format: 'png' });
+  await deger('__koru(), 1');
+  const dekor = await deger('__dekor(6)');   // en sonda: kare basina piksel okuma yavas, bomba olcumunun zamanlamasini bozmasin
   if (kayit) {
     fs.mkdirSync(kayit, { recursive: true });
     fs.writeFileSync(path.join(kayit, 'genislik-' + ad + '-bekle.png'), Buffer.from(g1.result.data, 'base64'));
     fs.writeFileSync(path.join(kayit, 'genislik-' + ad + '-kosu.png'), Buffer.from(g2.result.data, 'base64'));
     fs.writeFileSync(path.join(kayit, 'genislik-' + ad + '-bomba.png'), Buffer.from(g3.result.data, 'base64'));
   }
-  return { once: ilk, sonra, sol, sag, ust, alt, oncesi: once, kirp, durumT: kosu[0], bitti: kosu[1] };
+  return { once: ilk, sonra, sol, sag, ust, alt, oncesi: once, dekor, kirp, durumT: kosu[0], bitti: kosu[1] };
 }
 
 (async () => {
@@ -228,6 +276,20 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
         assert.ok(s.duz < s.boy * 0.5 && s.renk >= 8, (j ? 'alt' : 'ust') + ' satir karanliktan once duz (arka plan yok): ' + JSON.stringify(s));
       });
     });
+    dene(ad + ': dekor sizintisi: isik disinda oran 0,08-0,15, kareler arasi birikme yok, dunya nesneleri gorunmez', () => {
+      const D = r.dekor;
+      console.log('       ' + ad + ' dekor oran ' + D.map(f => f.oran.toFixed(3)).join('/') + ' sapma ' + D.map(f => f.sapma.toFixed(1)).join('/') + ' nesne ' + D.map(f => f.nesne).join('/'));
+      assert.ok(D.length >= 4, 'olculen kare ' + D.length);
+      D.forEach((f, i) => {
+        assert.ok(f.dekorPiksel && f.karanlikPiksel > f.toplam * 0.1, 'kare ' + i + ' isik disi dekor yok: ' + JSON.stringify(f));
+        assert.ok(f.oran >= 0.08 && f.oran <= 0.15, 'kare ' + i + ' dekor gorunurlugu ' + f.oran.toFixed(4));
+        assert.ok(f.sapma <= 4, 'kare ' + i + ' piksel karanlik + oran * dekor degil (birikme/nesne sizintisi), sapma ' + f.sapma.toFixed(1));
+        assert.ok(f.nesneSapma <= 4, 'kare ' + i + ' dunya nesnesi isik disinda gorunuyor, sapma ' + f.nesneSapma.toFixed(1));
+      });
+    });
+    dene(ad + ': son goruntude sag/sol sutun duz renk degil (dekor sizintisi, atmosfer dahil)', () => {
+      [['sol', r.sol], ['sag', r.sag]].forEach(([y, s]) => assert.ok(s.duz < s.boy * 0.5 && s.renk >= 4, y + ' sutun duz: ' + JSON.stringify(s)));
+    });
     dene(ad + ': "Dokun ve basla" alanda yatay ortali, HUD ekranda ortali', () => {
       const b = r.once, ipx = b.ipucu.x + b.ipucu.w / 2, ax = b.alan.x + b.alan.w / 2;
       assert.ok(b.ipucuGorunur === '1', 'ipucu gorunur degil ' + b.ipucuGorunur);
@@ -250,6 +312,11 @@ async function boyutOlc(gonder, deger, sayfalar, [ad, gen, boy, dpr, mobil, kuru
   });
   dene('genis/yatay oran sinandi: en az bir boyutta GA > GW_MAX (atmosfer dolgusu ve kirpma)', () => {
     assert.ok(sonuclar.some(([, r]) => r.kirp.GA > GW_MAX + 6 && r.kirp.dis !== null), sonuclar.map(([b, r]) => b[0] + ' GA ' + r.kirp.GA.toFixed(1)).join(', '));
+  });
+  dene('dunya nesnesi (dal/toz/kivilcim) isik disinda sinandi: en az bir boyutta nesne pikseli olculdu', () => {
+    const n = sonuclar.reduce((a, [, r]) => a + r.dekor.reduce((b, f) => b + f.nesne, 0), 0);
+    assert.ok(n > 0, 'hic isik disi nesne pikseli yok');
+    console.log('       isik disi nesne pikseli toplam ' + n);
   });
   console.log(gecti + ' deneme gecti' + (hata ? ', ' + hata + ' HATA' : ''));
 })().catch(e => { console.error(e && e.stack || e); process.exitCode = 1; });
