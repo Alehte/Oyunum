@@ -1,6 +1,6 @@
 {
   "name": "All in Together",
-  "short_name": "All in Together",
+  "short_name": "AllTogether",
   "description": "Dört bulmaca oyunu tek uygulamada: Hedef 2048, Kaçış?, Tempo Küp ve Sırala Dur.",
   "id": "/Oyunum/",
   "start_url": "./index.html",
