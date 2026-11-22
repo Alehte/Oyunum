@@ -29,29 +29,26 @@ Cihazda bakılacak:
 - Market önizlemesi otomatik karanlıkta (Android "web içeriğini karart").
 - Sandık pasif düğme metni (320 px'te iki satır).
 
-## 2026-11-22 oturumu (docs/gorev-karanliktaSuzul3.md) — YARIM, kullanıcı isteğiyle durduruldu
-Commit edilen kod yok. Aşama 1 değişiklikleri çalışma ağacında, commit edilmedi (testler yeşil değil). Aşama 2 başlamadı.
-
-Bitti:
-- Sorun 1 nedeni: `.mo-sahne.mo-ates` opak `background:#05080D`. Diğer miniler yarı saydam (Tempo `.mo-bloklar` `rgba(8,12,22,.55)`), kart zemini `#0C1322` + tema ton katmanı görünüyor.
-- Mini sağ kenarındaki ince dikey çizgi: `atesGovdeCiz` içindeki dikenli dal (x 52-56, y 10-48), kenara yapışık neredeyse tam boy. Silinmedi (tema engel rengini gösteriyor), yeniden çizildi.
-- Sorun 2 nedeni: `atesBocegiOyun.js` `boyutla()` içinde `olcek = Math.min(cssW / W, cssH / H)` ve `ox` ile letterbox. Canvas zaten tam genişlik; dünya 50x100 birim, çizim `rect(0,0,W,H)` ile kırpılıyor.
-
-Çalışma ağacında yarım (Aşama 1, commit edilmedi):
-- style.css: `.mo-sahne.mo-ates` -> `flex:0 1 68px`, `background:rgba(8,12,22,.55)`, `border-radius:10px` (Tempo ile aynı).
-- js/marketEkran.js: dal üstten sarkan kısa parça (x 48-52, y -2..25,5, sivri uç, 2 diken), kenardan 6 birim içeride.
-- sw.js SURUM 17 -> 18; tools/swTest.js 18'e göre güncel.
-- tools/marketKartYakala.js: genişlik, HEAD karşılaştırması, `.mo-ates` gizleme argümanları; kart/diğer mini konumları ve hesaplanmış stiller.
-- tools/atesBocegiTemaTest.js: regex testleri güncel; yeni testler: mini/kart dE76 aralığı, ışık/toz/dal WCAG ≥ 3, diğer miniler HEAD ile aynı, 360 px taşma yok.
-
-Test durumu (2026-11-22, çalışma ağacıyla):
-- Yeşil: atesBocegiAdaletTest (26), atesBocegiOyunTest (67), atesBocegiTest (142), dokumAnimTest, hediyeTest, kacisCozTest, kacisGirisTest, kayitGocTest, odulTest, sandikTest, suSiralaCozTest, swTest (22/22), yilanGozTest.
-- Kırmızı: atesBocegiTemaTest, 48 geçti / 5 kaldı:
-  1. "onizleme sahnesi gercek tarayicida koyu (ort <= 0.05, kose <= 0.02)": eski opak zemin için yazılmış eşik; yarı saydam zeminde köşe 0,034-0,054. Testin amacı (beyaz değil) yeni zemine göre yeniden tanımlanmalı.
-  2-3. "mini zemini kart zemininden dE76 ... Tempo miniden en fazla 1.5 sapar" (normal + otomatik karanlık): Kumsal, Mürekkep, Kiraz, Lav'da ateş ile Tempo farkı 2,3-3,9. Kontrastlar geçiyor (ışık ≥ 9, toz ≥ 13, dal ≥ 10). Tempo sapma ölçütü ya da ölçüm noktası düzeltilmeli.
-  4-5. "diger oyun minileri HEAD ile ayni" (normal + otomatik karanlık): `.mo-ates` gizliyken bile 2048 minisinde ort. fark 3,4-5,2, diğerlerinde 0,1-0,5. Ölçüm yöntemi sorunlu olabilir (HEAD dosyası yükleme yolu veya düzen); kod değişikliği 2048'e dokunmuyor. İncelenmeli.
-
-Sıradaki adım:
-1. atesBocegiTemaTest'teki 5 kırmızı testi düzelt (önce 4-5'in nedenini bul), market ekran görüntülerine Read ile gözle bak (Buz, Varsayılan, Lav, Sedef), tüm paketleri çalıştır, Aşama 1'i commit et.
-2. Aşama 2 önerisi (kullanıcı onayı bekleniyor): çekirdek ve adalet kodu değişmez; yalnız atesBocegiOyun.js çizimi. Dünya yüksekliği 100 sabit, görünen genişlik ekran oranına göre 50'den en çok 100 birime çıkar, böcek solda kalır (ileri görüş artar). Sınır 20:9 değil 100, çünkü üretim ufku böceğin 100 birim ilerisi (`ONDE*W`, toplam ekran x 108). Daha geniş ekranda fazlalık yalnız arka plan + karanlık olarak çizilir. Etkilenen yerler: boyutla, bolgeKur, kc boyutu, arkaPlanCiz döşeme, clip rect'ler, `W` ile yapılan ekran dışı kontrolleri, sarmaşık uyarısının sağ kenara kıstırılması (`W - 3.2`).
-3. Bitiş: denetci (opus) 1 tur, rapor.
+## 2026-11-22 oturumu (docs/gorev-karanliktaSuzul3.md)
+Yapıldı (sw.js SURUM 17 → 19, görünen sürüm 1.2.0):
+- AŞAMA 1 (e6cd1fd): market minisinin zemini opak #05080D'den Tempo ile aynı yarı saydam rgba(8,12,22,.55)'e geçti. Kart zemini ve tema tonu artık minide görünüyor. Boyut 68 px, köşe 10 px. Sağ kenardaki ince çizgi, kenara yapışık tam boy dikenli daldı; kenardan 6 birim içeride, üstten sarkan kısa dal olarak yeniden çizildi. Zemin CSS'te kaldı, bu yüzden otomatik karanlıkta beyaz kare oluşmuyor.
+  - Eşikler: mini ile kart arası dE76 1,5-22 (ölçülen 3,07-19,04); Tempo minisinden sapma ≤ 2,5 (ölçülen en yüksek Lav 2,15); ışık, toz ve dal kenarı WCAG ≥ 3 (ölçülen 9,2-17); önizleme koyuluğu ort/köşe ≤ 0,065.
+  - Diğer 4 mini Aşama 1 öncesiyle (9d29413) piksel düzeyinde aynı (Süzül minisi gizliyken fark 0). Sağ kenar çizgisi testi: yeni sürümde 0 px, eskisinde 38 px.
+- AŞAMA 2 (50552c8, düzeltme 407f431): oyun alanı tam ekran. Kullanıcı kararı 3. seçenek: görünür alan ve üretim ufku birlikte genişler.
+  - Ölçek artık yüksekliğe göre (H=100). Görünür genişlik GW en az 50, en çok 20:9 (222,2). Bu sınırı aşan kısım yalnız arka plan ve karanlık olarak çizilir. En/boy oranı 0,5'in altındaki ekranlarda üst ve alt bantlar sahne dokusuyla dolar.
+  - Üretim ufku cihazdan bağımsız: U.UFUK = 230 birim (eski adı ONDE*W = 100). Hiçbir nesne görünür alanın içinde doğmaz; en küçük doğuş ekran x'i 242,6.
+  - Gerçek GW değerleri: 360x800'de 53,7; 412x915'te 52,6; 390x844'te 54,7; masaüstü çerçevesinde 56,4. Telefondaki asıl kazanç yan bantların kalkması.
+  - Eşik telafisi (ileriTozPuani): eşikler, böcek ile yeni dilim arasındaki 130 birimdeki alınmamış tozların zincir çarpanıyla değerine göre öne çekilir. Toz terimi en çok 100. esikPuan azalmaz. Telafisiz kayma +108..+122 puandı. Yeni sürümde 50 birimlik ekranda medyan eskiden en çok +14 sapıyor; en kötü durum eşiğin 3 puan altı (Bot A, sarmaşık).
+  - 20:9 ekranda eşik dilimi, oyuncunun puanı eşiğin ~30-42 altındayken görünür alana girer. Bu, aynı dünyayı daha uzaktan görmenin sonucu.
+  - Adalet testine iki yeni kural eklendi: üretim puanı ≤ puan + 132,5; dört eşik için, eşiği geçen ilk dilim 50 birimlik ekrana girerken puan ≥ eşik − 5. Eski eşiklerin hiçbiri gevşemedi. 1000 tohum, 27/27.
+  - Yeni test dosyası tools/atesBocegiGenislikTest.js (38 test): 360x800, 412x915, 390x844, masaüstü çerçevesi, yatay 915x412, kurulu uygulama 411x960.
+- Denetim: 1 tur (opus); kritik bulgu yok. Önemli bulgular (telafinin fazla ileri gitmesi, SURUM 19'a çıkmamıştı, HEAD'e bağlı referans testi kendini kendisiyle karşılaştırıyordu, dar ekran yolu sınanmıyordu) 407f431'de düzeltildi.
+- Tüm paketler yeşil: adalet 27, çekirdek 151, oyun 67, tema 55, genişlik 38, sw 22, dokumAnim 25, hediye 14, kacisCoz 17, kacisGiris 13, kayitGoc 31, odul 13, sandik 15, suSiralaCoz 26, yilanGoz (zorunlu hata 0).
+Açık karar (kullanıcıda): karanlikCiz karanlık tuvalini her karede temizlemeden rgba(karanlık, .94) ile dolduruyor. Birkaç karede katman tamamen opak oluyor; KARANLIK_OPAKLIK etkisiz kalıyor ve ışık dışında arka plan görünmüyor. Bu hata önceden vardı. Düzeltmesi tek satır, ama oyunun görünümünü ve tema kontrast ölçümlerini değiştirir. Yatay ekranda sağdaki atmosfer alanı da bu yüzden düz koyu görünüyor.
+Kabul edilen: karanlık tuvali artık tam tuval boyutunda (yatay telefonda ~4 MB, yatay tablette ~13 MB). Aşama 1'de köşe eşiği .02'den .065'e gevşetildi; beyaz kare yine yakalanıyor.
+Cihazda bakılacak:
+- Telefonda mini zemini (Sedef, Lav, Buz), otomatik karanlık mod açık ve kapalı.
+- Tam ekran oyun: yan bant kalmadı mı, HUD ve "Dokun ve başla" ortalı mı.
+- Yatay ekran (kurulu uygulama): böcek ve ışık çok küçük; sağ taraf düz koyu.
+- Çentikli ekran: safe-area dolgusuyla .ab-alan genişliği.
+- Eşik hissi: risk tozu, bomba ve sarmaşık eskisiyle aynı puanlarda mı geliyor. Hiç toz toplamayan oyuncuda eşik en kötü ~85 puan erken gelebilir.
