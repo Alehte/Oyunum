@@ -663,18 +663,19 @@ dene('onizleme: her tema icin sahte DOM\'da hatasiz kurulur (atesSahnesi dahil)'
 
 dene('stil: .mo-ates CSS style.css\'te, JS stil enjekte etmiyor; hareketi azaltta animasyon kapali', () => {
   const css = oku('style.css'), ekran = oku('js/marketEkran.js');
-  assert(/@media \(max-width:339px\)\{ \.mo-sahne\.mo-ates\{display:none/.test(css) && /\.mo-sahne\.mo-ates\{flex:0 1 58px; min-width:0/.test(css));
+  assert(/@media \(max-width:339px\)\{ \.mo-sahne\.mo-ates\{display:none/.test(css) && /\.mo-sahne\.mo-ates\{flex:0 1 68px; min-width:0/.test(css));
   assert(/\.mo-sahne\.mo-ates\{/.test(css) && /\.mo-ates-iz\.lav\{animation/.test(css));
   assert(/reduced-motion \.mo-ates-iz\.lav\{animation:none/.test(css));
   assert(!/createElement\('style'\)|<style/.test(ekran));
   assert(/Beş oyunda birden geçerli/.test(ekran) && !/Dört oyunda/.test(ekran));
 });
 
-dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS sabit koyu, SVG zemin dolgusu yok', () => {
+dene('onizleme zemini beyaz degil: 9 temanin karanlik rengi koyu, zemin CSS yari saydam koyu, SVG zemin dolgusu yok', () => {
   const lum = h => (parseInt(h.substr(1, 2), 16) * 0.299 + parseInt(h.substr(3, 2), 16) * 0.587 + parseInt(h.substr(5, 2), 16) * 0.114);
   TEMALAR.forEach(t => assert(lum(M.isikCoz(t.isik).karanlik) < 60, t.id + ' karanlik zemin acik'));
   const css = oku('style.css');
-  assert(/\.mo-sahne\.mo-ates\{[^}]*background:#05080D; border-radius:6px/.test(css) && /\.mo-ates svg\{[^}]*background:transparent/.test(css), 'sahne sabit koyu CSS zemini + yuvarlak kose');
+  assert(/\.mo-sahne\.mo-ates\{[^}]*background:rgba\(\d+,\s*\d+,\s*\d+,\s*0?\.\d+\); border-radius:10px/.test(css) && /\.mo-ates svg\{[^}]*background:transparent/.test(css), 'sahne yari saydam koyu CSS zemini + Tempo ile ayni 10px kose');
+  assert(!/\.mo-sahne\.mo-ates\{[^}]*background:#/.test(css), 'opak sabit zemin olmamali');
   assert(!/class="mo-ates-zemin"/.test(oku('js/marketEkran.js')), 'zemin SVG dolgusu olmamali (otomatik karanlik modu ters cevirir)');
 });
 
@@ -694,11 +695,13 @@ dene('ana ekran Karanlikta Suzul etiketi: acik renk, kontrast >= 4.5, zemin seff
 // ---- Gercek tarayici olcumu: onizleme sahnesi koyu mu? (headless Chrome, tek cagri, 9 tema izgara) ----
 // Gercek kapsayici (.mk-onizleme zemini + tema ton katmani) ve style.css kurallariyla 120x100 hucrelere cizilir;
 // 58x58 sahne karesinin ortalama ve dort kose (6x6) goreli parlakligi (WCAG dogrusal, 0-1) olculur.
-// Koseler zemin rect yuvarlak kosesinin icinde (kart tonundan bagimsiz). HEAD sahnesi (ONIZ_HEAD=1 ile olculur): ort 0,067-0,089, kose 0,032-0,048;
-// duzeltme sonrasi: ort 0,036-0,046, kose 0,006-0,010. Esik ikisinin arasinda: ort 0,05; kose 0,02.
+// Koseler zemin rect yuvarlak kosesinin icinde. Zemin artik yari saydam rgba(8,12,22,.55): kart zemini + tema ton katmani uste biner, bu yuzden
+// parlaklik kart tonuna baglidir (opak #05080D esigi ort 0,05 / kose 0,02 artik gecersiz). Olcum (9 tema, 120x100 hucre, ton-var .mk-onizleme):
+// ort 0,034-0,054, kose 0,034-0,054 (en acik Sedef 0,054, en koyu Lav 0,034). Opak beyaz kare (otomatik karanlik hatasi) ~1,0 verirdi;
+// esik 0,065 = en yuksek olcumun %20 ustu, beyaz/acik kareden >10 kat altinda. ort ve kose ayri sinirlanir (disk + dal + ton toplami).
 // beyazimsi gorunum = yesil disk + beyaz dal + ton katmaninin toplami, bu yuzden hem ortalama hem kose sinirlanir.
 let atlandi = 0;
-const ONIZ_ESIK = { ort: 0.05, kose: 0.02 };
+const ONIZ_ESIK = { ort: 0.065, kose: 0.065 };
 function chromeBul() {
   const adaylar = [process.env.CHROME_YOL, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -835,31 +838,51 @@ dene('onizleme sahnesi gercek tarayicida koyu: 9 tema ortalama <= ' + ONIZ_ESIK.
 // Beyaz kare sebebi: Android Chrome "web icerigini karart" (otomatik karanlik mod) SVG <rect fill="#05080D"> dolgusunu
 // ters cevirip neredeyse beyaz yapiyordu (kart HTML arka plani koyu kalir, SVG dolgusu terslenir). Normal modda sorun yok;
 // bu yuzden hem normal hem otomatik karanlik modda olculur. Kutunun kose (4 px ic) ve kenar orta (1,5 px ic) pikselleri koyu olmali.
-function marketKartlariOlc(chrome, oto, port) {
-  const r = require('child_process').spawnSync(process.execPath, [path.join(KOK, 'tools', 'marketKartYakala.js'), chrome, oto ? '1' : '0', String(port)],
+function marketKartlariOlc(chrome, oto, port, genislik, head, gizle) {
+  const r = require('child_process').spawnSync(process.execPath, [path.join(KOK, 'tools', 'marketKartYakala.js'), chrome, oto ? '1' : '0', String(port), String(genislik || 390), head ? '1' : '0', gizle ? '1' : '0'],
     { encoding: 'utf8', maxBuffer: 1 << 28, timeout: 90000 });
   assert(r.status === 0, 'marketKartYakala basarisiz: ' + String(r.stderr || r.error).slice(0, 300));
   const o = JSON.parse(r.stdout), im = pngCoz(Buffer.from(o.png, 'base64'));
+  const px = (x, y) => { const i = (Math.round(y) * im.w + Math.round(x)) * im.bpp; return [im.px[i], im.px[i + 1], im.px[i + 2]]; };
+  const ort = (x0, y0, w, h) => {   // kutu ortalamasi (kanal basina)
+    const t = [0, 0, 0]; let n = 0;
+    for (let y = Math.round(y0); y < Math.round(y0) + h; y++) for (let x = Math.round(x0); x < Math.round(x0) + w; x++) { const c = px(x, y); t[0] += c[0]; t[1] += c[1]; t[2] += c[2]; n++; }
+    return t.map(v => v / n);
+  };
+  const kirp = (d) => {   // diger oyun minisinin piksel kirpintisi
+    if (!d) return null;
+    const x0 = Math.round(d.x), y0 = Math.round(d.y), w = Math.round(d.w), h = Math.round(d.h), a = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const c = px(x0 + x, y0 + y); a.push(c[0], c[1], c[2]); }
+    return { w, h, a };
+  };
   return o.kutular.map(k => {
-    const x0 = Math.round(k.x), y0 = Math.round(k.y), W = Math.round(k.w), H = Math.round(k.h);
+    const x0 = Math.round(k.x), y0 = Math.round(k.y), W = Math.round(k.w), H = Math.round(k.h), s = W / 58;
     const noktalar = [[4, 4], [W - 5, 4], [4, H - 5], [W - 5, H - 5], [Math.round(W / 2), 1], [Math.round(W / 2), H - 2], [1, Math.round(H / 2)]];
     let en = 0;
-    noktalar.forEach(n => { const i = ((y0 + n[1]) * im.w + x0 + n[0]) * im.bpp; en = Math.max(en, im.px[i], im.px[i + 1], im.px[i + 2]); });
-    const px = (x, y) => { const i = ((y0 + y) * im.w + x0 + x) * im.bpp; return [im.px[i], im.px[i + 1], im.px[i + 2]]; };
-    const ic = [];   // 58x58 sahne ici (kutu 1:1 olcekte): normal/otomatik karanlik karsilastirmasi icin
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) ic.push(px(x, y));
-    // dal ortasi (54,24; dikenlerden uzak), govde: arka govde (35,29) ve kin (31,30.5)
-    return { ad: k.ad, en, w: W, h: H, dal: px(54, 24), gov: px(35, 29), kin: px(32, 31), ic };
+    noktalar.forEach(n => { const c = px(x0 + n[0], y0 + n[1]); en = Math.max(en, c[0], c[1], c[2]); });
+    const pu = (ux, uy) => px(x0 + ux * s, y0 + uy * s);   // 58 birimlik sahne koordinati -> piksel
+    const ic = [];   // mini ici (kutu 1:1 olcekte): normal/otomatik karanlik karsilastirmasi icin
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) ic.push(px(x0 + x, y0 + y));
+    // mini zemini: sol ust ve sol alt kose bolgesi (yuvarlak kosenin icinde, disk/bocek/dal/toz disinda) ortalamasi
+    const zemin = ort(x0 + 1, y0 + 30, 2, 8);
+    // kart zemini: ayni satirda, mininin hemen saginda kartin ic dolgusu (.mk-onizleme padding 8 px), miniler disinda
+    const kart = ort(x0 + W + 2, y0 + H / 2 - 4, 5, 8);
+    // Tempo mini zemini (referans, ayni mekanizma): .mo-bloklar sol ic dolgusu (4 px padding, hucrelerin soluna)
+    const tp = k.digerleri.tempo, tempoZemin = tp ? ort(tp.x + 1, tp.y + 30, 2, 8) : null;
+    // dal ortasi (50,10): dal govdesi, dikenlerden uzak; govde: arka govde (35,29) ve kin (31,30.5)
+    return { ad: k.ad, en, w: W, h: H, dal: pu(50, 10), gov: pu(35, 29), kin: pu(31, 30.5), ic, zemin, kart, tempoZemin, isikPx: pu(26.6, 29.5), tozPx: pu(39.5, 21.5), ates: k.ates, oz: k.oz,
+      digerleri: { k2048: kirp(k.digerleri.k2048), kacis: kirp(k.digerleri.kacis), tempo: kirp(k.digerleri.tempo), sirala: kirp(k.digerleri.sirala) }, rect: k.digerleri, x: k.x, y: k.y };
   });
 }
 const MARKET_OLCUM = {};
-const marketOlcumu = (chrome, oto, port) => MARKET_OLCUM[oto] || (MARKET_OLCUM[oto] = marketKartlariOlc(chrome, oto, port));
+const marketOlcumu = (chrome, oto, port, genislik, head, gizle) => { const a = [oto, genislik || 390, head ? 1 : 0, gizle ? 1 : 0].join('/'); return MARKET_OLCUM[a] || (MARKET_OLCUM[a] = marketKartlariOlc(chrome, oto, port, genislik, head, gizle)); };
 [false, true].forEach((oto, mi) => dene('gercek market karti: Karanlikta Suzul onizleme kutusu kose/kenar pikselleri koyu (her kanal < 60), 10 kart, ' + (oto ? 'otomatik karanlik mod' : 'normal mod'), () => {
   const chrome = chromeBul();
   if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
   const olcum = marketOlcumu(chrome, oto, 9440 + mi);
   assert.strictEqual(olcum.length, 10, 'kart sayisi ' + olcum.length);
-  olcum.forEach(o => assert(o.w === 58 && o.h === 58, o.ad + ' kutu boyutu ' + o.w + 'x' + o.h));
+  olcum.forEach(o => assert(o.w === 68 && o.h === 68, o.ad + ' kutu boyutu ' + o.w + 'x' + o.h + ' (Tempo ile ayni 68)'));
+  olcum.forEach(o => assert(o.ates.br === '10px' && o.ates.kenar === '0px', o.ad + ' kose/kenarlik ' + JSON.stringify(o.ates)));
   const kotu = olcum.filter(o => !(o.en < 60));
   if (process.env.ONIZ_OLCUM) console.log(olcum.map(o => '       ' + o.ad + ' en parlak kanal ' + o.en).join('\n'));
   assert.strictEqual(kotu.length, 0, kotu.map(o => o.ad + ' kanal ' + o.en).join('; '));
@@ -884,6 +907,87 @@ dene('gercek market karti: normal ve otomatik karanlik modun ic bolgesi benzer (
   if (process.env.ONIZ_OLCUM) console.log(fark.map(f => '       ' + f.ad + ' ort fark ' + f.f.toFixed(2)).join('\n'));
   const kotu = fark.filter(f => !(f.f < 8));
   assert.strictEqual(kotu.length, 0, kotu.map(f => f.ad + ' ' + f.f.toFixed(2)).join('; '));
+});
+
+// Mini zemini <-> kart zemini rengi ve ayrisma/kontrast (gercek market yolu, 10 kart, normal + otomatik karanlik).
+// Renk farki = CIE dE76 (sRGB -> Lab D65). Mini zemini: mini ici sol ust/sol alt kose ortalamasi; kart zemini: ayni satirda mininin sagindaki .mk-onizleme ic dolgusu.
+// Kontrast = WCAG (L1+.05)/(L2+.05); isik = bocek feneri pikseli, toz = toz noktasi pikseli, dal = p.engel.kenar (alfa .85 ile mini zemini uzerine karisik; canvas'ta oyle cizilir).
+const rgbLab = c => {
+  const l = c.map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  const X = (0.4124 * l[0] + 0.3576 * l[1] + 0.1805 * l[2]) / 0.95047, Y = 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2], Z = (0.0193 * l[0] + 0.1192 * l[1] + 0.9505 * l[2]) / 1.08883;
+  const f = t => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+};
+const deltaE76 = (a, b) => { const p = rgbLab(a), q = rgbLab(b); return Math.sqrt((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2); };
+const luma = c => { const l = c.map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]; };
+const wcag = (a, b) => { const x = luma(a), y = luma(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const hexRgb = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+// Mini zemini CSS: rgba(8,12,22,.55) = Tempo .mo-bloklar ile ayni (kart zemini + tema ton katmani uste biner). Olcum (390 px, normal = otomatik karanlik):
+//  - dE76 mini<->kart (duzeltilmis olcum): Varsayilan 3,1 ... Lav 19,0, Sedef 16,2; eski opak #05080D kutu: Varsayilan 9, Sedef 30+.
+//  - dE76 ates<->Tempo mini zemini: < 1 (ayni renk). Tempo'nun kendi mini<->kart farki referanstir: "yabanci durmasin" = Tempo kadar uzak, fazlasi degil.
+//  - kontrast (WCAG): isik 9,4-15,3; toz 13,5-17,4; dal kenari 10,4-12,0 (esik 3). Dal dolgusu (p.engel.dolgu) ~1,0-1,2: dolgu zeminle ayni koyulukta, dal kenar cizgisiyle okunur.
+// Olcum noktasi: ates ve Tempo zemini AYNI y bandinda (kutu ici y+30..38, sol kenar 1-3 px) ornekler; ton gradyani dikey ve 5 temada 50% duraginda kirilir,
+// bu yuzden eski kose ortalamasi (y+5 ve y+H-8) Kumsal'da Tempo'dan 4,5 dE saparak yanlis olcuyordu. Duzeltilmis olcum: |dE - Tempo dE| Varsayilan 0,05 ... Lav 2,15 (en buyuk),
+// Kiraz 1,47, Vitray 0,69; kalan sapma gradyanin 160-178 derece egimi: ates mini Tempo'nun ~100 px sagindadir, kartin ayni satirindaki ton x ile hafif kayar (Lav 160 derece en egimli).
+// Esikler: alt 1,5 (zeminden ayrissin; en yakin Varsayilan 3,1), ust 22 (en uzak Lav 19,0 + pay), Tempo sapmasi en fazla 2,5 (olcum max 2,15; yabanci durmaz: Tempo ile ayni zemin mekanizmasi, fark goz esiginin (~2-3 dE) altinda); kontrast >= 3 (olcum min: isik 9,2, toz 13,2, dal 9,9).
+const KARTFARK = { alt: 1.5, ust: 22, tempoSapma: 2.5 }, KONTRAST_ALT = 3;
+const marketKontrastlari = (olcum) => {
+  const { win } = yukle(false);
+  return olcum.map(o => {
+    const t = win.AppMarket.temalar().find(x => x.ad === o.ad), P = M.isikCoz(t.isik), z = o.zemin;
+    const kenar = hexRgb(P.engel.kenar).map((v, i) => v * 0.85 + z[i] * 0.15);
+    return { ad: o.ad, de: deltaE76(z, o.kart), deTempo: deltaE76(o.tempoZemin, o.kart), fark: deltaE76(z, o.tempoZemin), isik: wcag(o.isikPx, z), toz: wcag(o.tozPx, z), dal: wcag(kenar, z), dolgu: wcag(hexRgb(P.engel.dolgu), z) };
+  });
+};
+[false, true].forEach((oto, mi) => dene('gercek market karti: mini zemini kart zemininden dE76 ' + KARTFARK.alt + '-' + KARTFARK.ust + ' uzakta (Tempo miniden en fazla ' + KARTFARK.tempoSapma + ' sapar); isik/toz/dal kontrasti >= ' + KONTRAST_ALT + ' (10 kart, ' + (oto ? 'otomatik karanlik' : 'normal') + ')', () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const olcum = marketOlcumu(chrome, oto, 9440 + mi), K = marketKontrastlari(olcum);
+  if (process.env.ONIZ_OLCUM) console.log(K.map((k, i) => '       ' + k.ad + ' zemin ' + olcum[i].zemin.map(v => v.toFixed(0)) + ' kart ' + olcum[i].kart.map(v => v.toFixed(0)) + ' dE ' + k.de.toFixed(2) + ' tempoDE ' + k.deTempo.toFixed(2) + ' tempoZemin ' + olcum[i].tempoZemin.map(v => v.toFixed(0)) + ' fark ' + k.fark.toFixed(2) + ' isik ' + k.isik.toFixed(1) + ' toz ' + k.toz.toFixed(1) + ' dal ' + k.dal.toFixed(1) + ' dolgu ' + k.dolgu.toFixed(1)).join('\n'));
+  assert.strictEqual(K.length, 10);
+  const kotu = K.filter(k => !(k.de >= KARTFARK.alt && k.de <= KARTFARK.ust && Math.abs(k.de - k.deTempo) <= KARTFARK.tempoSapma && k.isik >= KONTRAST_ALT && k.toz >= KONTRAST_ALT && k.dal >= KONTRAST_ALT));
+  assert.strictEqual(kotu.length, 0, kotu.map(k => k.ad + ' dE ' + k.de.toFixed(2) + ' (Tempo ' + k.deTempo.toFixed(2) + ') isik ' + k.isik.toFixed(1) + ' toz ' + k.toz.toFixed(1) + ' dal ' + k.dal.toFixed(1)).join('; '));
+  olcum.forEach(o => assert(Math.max.apply(null, o.zemin) < 60, o.ad + ' mini zemini beyazimsi ' + o.zemin));
+}));
+
+// Diger oyun minileri degismez: ayni sayfa HEAD style.css + marketEkran.js ile cizilir. (1) gercek yerlesimde 2048/Kacis/Tempo/Sirala kutu boyutlari ayni;
+// (2) Karanlikta Suzul mini gizli (.mo-ates{display:none}, her iki surumde) iken dort minin piksel kirpintilari birebir ayni (kanal basina ort. mutlak fark < ESIK_DIGER).
+// Gizlenmeden karsilastirma anlamsiz: Suzul 58 -> 68 px olunca space-around diger minileri alt piksel kaydirir (olcum: 2048 6,2 / Kacis 3,8 / Sirala 2,3 ort. fark; Tempo 0,2).
+// Gizli olcum: tum minilerde 0,00.
+const ESIK_DIGER = 0.05;
+[false, true].forEach((oto, mi) => dene('gercek market karti: diger oyun minileri HEAD ile ayni (boyut + piksel kirpintisi), ' + (oto ? 'otomatik karanlik' : 'normal'), () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const yeni = marketOlcumu(chrome, oto, 9440 + mi), eski = marketOlcumu(chrome, oto, 9460 + mi, 390, true);
+  const yeniG = marketOlcumu(chrome, oto, 9500 + mi, 390, false, true), eskiG = marketOlcumu(chrome, oto, 9520 + mi, 390, true, true);
+  assert.strictEqual(eski.length, yeni.length);
+  const sonuc = [];
+  yeni.forEach((o, i) => ['k2048', 'kacis', 'tempo', 'sirala'].forEach(a => {
+    const n = o.digerleri[a], e = eski[i].digerleri[a], ng = yeniG[i].digerleri[a], eg = eskiG[i].digerleri[a];
+    assert(n && e && ng && eg, o.ad + ' ' + a + ' yok');
+    assert(n.w === e.w && n.h === e.h, o.ad + ' ' + a + ' boyut ' + n.w + 'x' + n.h + ' / HEAD ' + e.w + 'x' + e.h);
+    assert(ng.w === eg.w && ng.h === eg.h, o.ad + ' ' + a + ' (gizli) boyut');
+    let t = 0; for (let j = 0; j < ng.a.length; j++) t += Math.abs(ng.a[j] - eg.a[j]);
+    sonuc.push({ ad: o.ad, a, f: t / ng.a.length });
+  }));
+  if (process.env.ONIZ_OLCUM) { const m = {}; sonuc.forEach(r => { m[r.a] = Math.max(m[r.a] || 0, r.f); }); console.log('       max piksel farki (Suzul gizli) ' + JSON.stringify(m)); }
+  const kotu = sonuc.filter(r => !(r.f < ESIK_DIGER));
+  assert.strictEqual(kotu.length, 0, kotu.map(r => r.ad + ' ' + r.a + ' ' + r.f.toFixed(2)).join('; '));
+}));
+
+// 360 px genisliginde mini tasmaz/kirpilmaz: kart icinde (.mk-onizleme icinde), tasma yok, 68 px sigar (5 mini toplami 314 = 330 - 2*8).
+dene('gercek market karti: 360 px genisliginde Karanlikta Suzul mini 68 px, kart icinde, tasma yok', () => {
+  const chrome = chromeBul();
+  if (!chrome) { console.log('       ATLANDI (Chrome yok)'); atlandi++; return; }
+  const olcum = marketOlcumu(chrome, false, 9480, 360);
+  assert.strictEqual(olcum.length, 10);
+  olcum.forEach(o => {
+    assert(o.w === 68 && o.h === 68, o.ad + ' boyut ' + o.w + 'x' + o.h);
+    // (.mk-onizleme scrollWidth'i Lav kartinda HEAD'de de tasiyor: efsanevi parilti katmani; bu yuzden kutu konumlari denetlenir)
+    assert(o.x >= o.oz.x && o.x + o.w <= o.oz.x + o.oz.w && o.y >= o.oz.y && o.y + o.h <= o.oz.y + o.oz.h, o.ad + ' mini kartin disina tasti');
+    const r = o.rect, sag = Math.max(r.k2048.x + r.k2048.w, r.kacis.x + r.kacis.w, r.tempo.x + r.tempo.w, r.sirala.x + r.sirala.w);
+    assert(sag <= o.x + 0.6, o.ad + ' ates mini digerleriyle ust uste ' + sag + ' > ' + o.x);
+  });
 });
 
 // ---- Tema gorselligi (12.3): ayni sahne 10 palette (9 tema + varsayilan) x 4 bolge, GERCEK oyun cizimi (tools/atesBocegiTemaYakala.js) ----

@@ -1838,8 +1838,9 @@
   [data-sise-tema][data-siluet].mo-siseler .ss-tup{--dudak-tasma:1.5px; --sivi-alt:2px;}
   .mo-siseler .ss-kapak{transition:none;}
   /* Ates Bocegi onizlemesi: sigmazsa yalniz bu sahne kuculur */
-  .mo-sahne.mo-ates{flex:0 1 58px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%; background:#05080D; border-radius:6px; overflow:hidden;}
-  /* zemin SVG dolgusu degil CSS arka plani: Chrome otomatik karanlik modu SVG dolgularini ters cevirip beyaz kare uretiyordu */
+  .mo-sahne.mo-ates{flex:0 1 68px; min-width:0; height:auto; aspect-ratio:1/1; max-height:100%; background:rgba(8,12,22,.55); border-radius:10px; overflow:hidden;}
+  /* zemin SVG dolgusu degil CSS arka plani: Chrome otomatik karanlik modu SVG dolgularini ters cevirip beyaz kare uretiyordu.
+     Zemin yari saydam koyu ton (Tempo .mo-bloklar gibi): kart zemini + tema ton katmani uste biner, boylece kart/tema renginden turer. Boyut/kose Tempo ile ayni (68px, 10px). */
   @media (max-width:339px){ .mo-sahne.mo-ates{display:none;} }
   .mo-ates svg{width:100%; height:100%; display:block; background:transparent;}
   /* govde + dikenli dal <canvas> katmani (js/marketEkran.js atesGovdeCiz): otomatik karanlik mod SVG'nin koyu dolgularini ters cevirir, canvas'a dokunmaz; renkler temadan */

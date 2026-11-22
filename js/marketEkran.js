@@ -219,7 +219,7 @@ window.MarketEkran = (function () {
   }
   // 58x58 birim sahnenin koyu katmani; p = M.isikCoz(...) sonucu. getContext yoksa (testlerdeki sahte DOM) sessizce atlar.
   function atesGovdeCiz(cv, p) {
-    var g = p.govde, k = Math.max(2, Math.ceil(window.devicePixelRatio || 1)), x, i, dikenler = [[20, 17.5, 16], [35, 32.5, 31]];
+    var g = p.govde, k = Math.max(2, Math.ceil(window.devicePixelRatio || 1)), x, i, dikenler = [[6, 8.5, 11], [14, 16.5, 19]];
     if (!cv.getContext) return;
     cv.width = 58 * k; cv.height = 58 * k;
     x = cv.getContext('2d');
@@ -235,8 +235,9 @@ window.MarketEkran = (function () {
     oval(31, 29.5, 3, 2.4, g.kin);
     x.beginPath(); x.arc(35, 29, 2, 0, Math.PI * 2); x.fillStyle = g.koyu; x.fill();
     x.globalAlpha = 0.35; x.strokeStyle = '#fff'; x.lineWidth = 0.4; x.stroke(); x.globalAlpha = 1;
-    x.beginPath(); x.moveTo(52, 10); x.lineTo(56, 10); x.lineTo(56, 48); x.lineTo(52, 48); x.closePath();
-    for (i = 0; i < 2; i++) { x.moveTo(52, dikenler[i][0]); x.lineTo(47.5, dikenler[i][1]); x.lineTo(52, dikenler[i][2]); x.closePath(); }
+    // ustten sarkan kisa dikenli dal: sag kenardan 6 birim iceride (kenara yapisik tam boy dal oyun siniri gibi okunuyordu); ucu sivri, 2 diken sola
+    x.beginPath(); x.moveTo(48, -2); x.lineTo(52, -2); x.lineTo(52, 21); x.lineTo(50, 25.5); x.lineTo(48, 21); x.closePath();
+    for (i = 0; i < 2; i++) { x.moveTo(48, dikenler[i][0]); x.lineTo(43.5, dikenler[i][1]); x.lineTo(48, dikenler[i][2]); x.closePath(); }
     x.fillStyle = p.engel.dolgu; x.fill();
     x.globalAlpha = 0.85; x.strokeStyle = p.engel.kenar; x.lineWidth = 1; x.lineJoin = 'round'; x.stroke(); x.globalAlpha = 1;
   }
