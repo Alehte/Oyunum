@@ -28,3 +28,30 @@ Cihazda bakılacak:
 - Tema hissi: buz/çini ayrımı; Lav/Toprak'ta bomba halesi; Sedef/Kiraz pastel bölge tonları; halo halkası yoğunluğu.
 - Market önizlemesi otomatik karanlıkta (Android "web içeriğini karart").
 - Sandık pasif düğme metni (320 px'te iki satır).
+
+## 2026-11-22 oturumu (docs/gorev-karanliktaSuzul3.md) — YARIM, kullanıcı isteğiyle durduruldu
+Commit edilen kod yok. Aşama 1 değişiklikleri çalışma ağacında, commit edilmedi (testler yeşil değil). Aşama 2 başlamadı.
+
+Bitti:
+- Sorun 1 nedeni: `.mo-sahne.mo-ates` opak `background:#05080D`. Diğer miniler yarı saydam (Tempo `.mo-bloklar` `rgba(8,12,22,.55)`), kart zemini `#0C1322` + tema ton katmanı görünüyor.
+- Mini sağ kenarındaki ince dikey çizgi: `atesGovdeCiz` içindeki dikenli dal (x 52-56, y 10-48), kenara yapışık neredeyse tam boy. Silinmedi (tema engel rengini gösteriyor), yeniden çizildi.
+- Sorun 2 nedeni: `atesBocegiOyun.js` `boyutla()` içinde `olcek = Math.min(cssW / W, cssH / H)` ve `ox` ile letterbox. Canvas zaten tam genişlik; dünya 50x100 birim, çizim `rect(0,0,W,H)` ile kırpılıyor.
+
+Çalışma ağacında yarım (Aşama 1, commit edilmedi):
+- style.css: `.mo-sahne.mo-ates` -> `flex:0 1 68px`, `background:rgba(8,12,22,.55)`, `border-radius:10px` (Tempo ile aynı).
+- js/marketEkran.js: dal üstten sarkan kısa parça (x 48-52, y -2..25,5, sivri uç, 2 diken), kenardan 6 birim içeride.
+- sw.js SURUM 17 -> 18; tools/swTest.js 18'e göre güncel.
+- tools/marketKartYakala.js: genişlik, HEAD karşılaştırması, `.mo-ates` gizleme argümanları; kart/diğer mini konumları ve hesaplanmış stiller.
+- tools/atesBocegiTemaTest.js: regex testleri güncel; yeni testler: mini/kart dE76 aralığı, ışık/toz/dal WCAG ≥ 3, diğer miniler HEAD ile aynı, 360 px taşma yok.
+
+Test durumu (2026-11-22, çalışma ağacıyla):
+- Yeşil: atesBocegiAdaletTest (26), atesBocegiOyunTest (67), atesBocegiTest (142), dokumAnimTest, hediyeTest, kacisCozTest, kacisGirisTest, kayitGocTest, odulTest, sandikTest, suSiralaCozTest, swTest (22/22), yilanGozTest.
+- Kırmızı: atesBocegiTemaTest, 48 geçti / 5 kaldı:
+  1. "onizleme sahnesi gercek tarayicida koyu (ort <= 0.05, kose <= 0.02)": eski opak zemin için yazılmış eşik; yarı saydam zeminde köşe 0,034-0,054. Testin amacı (beyaz değil) yeni zemine göre yeniden tanımlanmalı.
+  2-3. "mini zemini kart zemininden dE76 ... Tempo miniden en fazla 1.5 sapar" (normal + otomatik karanlık): Kumsal, Mürekkep, Kiraz, Lav'da ateş ile Tempo farkı 2,3-3,9. Kontrastlar geçiyor (ışık ≥ 9, toz ≥ 13, dal ≥ 10). Tempo sapma ölçütü ya da ölçüm noktası düzeltilmeli.
+  4-5. "diger oyun minileri HEAD ile ayni" (normal + otomatik karanlık): `.mo-ates` gizliyken bile 2048 minisinde ort. fark 3,4-5,2, diğerlerinde 0,1-0,5. Ölçüm yöntemi sorunlu olabilir (HEAD dosyası yükleme yolu veya düzen); kod değişikliği 2048'e dokunmuyor. İncelenmeli.
+
+Sıradaki adım:
+1. atesBocegiTemaTest'teki 5 kırmızı testi düzelt (önce 4-5'in nedenini bul), market ekran görüntülerine Read ile gözle bak (Buz, Varsayılan, Lav, Sedef), tüm paketleri çalıştır, Aşama 1'i commit et.
+2. Aşama 2 önerisi (kullanıcı onayı bekleniyor): çekirdek ve adalet kodu değişmez; yalnız atesBocegiOyun.js çizimi. Dünya yüksekliği 100 sabit, görünen genişlik ekran oranına göre 50'den en çok 100 birime çıkar, böcek solda kalır (ileri görüş artar). Sınır 20:9 değil 100, çünkü üretim ufku böceğin 100 birim ilerisi (`ONDE*W`, toplam ekran x 108). Daha geniş ekranda fazlalık yalnız arka plan + karanlık olarak çizilir. Etkilenen yerler: boyutla, bolgeKur, kc boyutu, arkaPlanCiz döşeme, clip rect'ler, `W` ile yapılan ekran dışı kontrolleri, sarmaşık uyarısının sağ kenara kıstırılması (`W - 3.2`).
+3. Bitiş: denetci (opus) 1 tur, rapor.
