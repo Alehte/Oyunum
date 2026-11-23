@@ -216,6 +216,7 @@
         <div class="ab-alan" id="abAlan">
           <canvas class="ab-tuval" id="abTuval" role="img" aria-label="Karanlıkta Süzül oyun alanı"></canvas>
           <div class="ab-ipucu show" id="abIpucu"><b>Dokun ve başla</b><span>Basılı tut: yüksel<br>Bırak: süzül</span></div>
+          <div class="ab-gerisayim" id="abGeriSayim" role="status" aria-live="assertive"></div>
           <div class="ab-ortu" id="abDuraklat" role="dialog" aria-modal="true" aria-label="Duraklatıldı">
             <div class="ab-ortu-baslik">Duraklatıldı</div>
             <button id="abDevam">Devam</button>
@@ -328,11 +329,9 @@
           <div class="kc-big-text" id="kcFailText"></div>
           <div class="kc-fail-btns">
             <button class="kc-btn-retry" id="kcRetryBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 18 17"/><path d="M20 5v6h-6"/></svg>Tekrar Dene</button>
-            <!-- reklam altyapisi gelince hidden kaldirilir (kacis.js kcAdBtn) -->
-            <button class="kc-btn-ad" id="kcAdBtn" hidden>▶  Reklam İzle ve Devam Et</button>
+            <!-- ikinci sans reklami bu ekrandan ONCE sorulur (kacis.js kcKayip / Reklam.ikinciSans) -->
             <button class="kc-btn-back" id="kcBackToMapBtn">Bölümlere Dön</button>
           </div>
-          <div class="kc-ad-note" id="kcAdNote"></div>
         </div>
       </div>
       <!-- ============================================================
@@ -423,6 +422,18 @@
     </button>
   </div>
 
+  <!-- Sikistin: kapatilabilir bilgi, oyunu kilitlemez (suSiralaOyun.js sikistiGoster) -->
+  <div class="ss-sikisti" id="ssSikisti" role="status" hidden>
+    <button class="ss-sikisti-kapat" id="ssSikistiKapat" type="button" aria-label="Kapat">&times;</button>
+    <div class="ss-sikisti-baslik">Sıkıştın</div>
+    <div class="ss-sikisti-metin">İlerleten hamle kalmadı. Geri al, şişe ekle ya da yeniden başla.</div>
+    <div class="ss-sikisti-dugmeler">
+      <button class="ss-sikisti-btn" id="ssSikistiGeri" type="button">Geri Al<small id="ssSikistiGeriAlt"></small></button>
+      <button class="ss-sikisti-btn" id="ssSikistiSise" type="button">Şişe Ekle<small id="ssSikistiSiseAlt"></small></button>
+      <button class="ss-sikisti-btn" id="ssSikistiBastan" type="button">Yeniden başlat</button>
+    </div>
+  </div>
+
   <div class="ss-sonuc" id="ssSonuc">
     <div class="ss-sonuc-kart">
       <div class="ss-sonuc-yildiz" id="ssSonucYildiz"></div>
@@ -487,6 +498,17 @@
     </button>
   </div>
 
+  <!-- Sikistin: kapatilabilir bilgi, oyunu kilitlemez (suSiralaOzelOyun.js sikistiGoster) -->
+  <div class="ss-sikisti" id="ssoSikisti" role="status" hidden>
+    <button class="ss-sikisti-kapat" id="ssoSikistiKapat" type="button" aria-label="Kapat">&times;</button>
+    <div class="ss-sikisti-baslik">Sıkıştın</div>
+    <div class="ss-sikisti-metin" id="ssoSikistiMetin"></div>
+    <div class="ss-sikisti-dugmeler">
+      <button class="ss-sikisti-btn" id="ssoSikistiGeri" type="button">Geri Al</button>
+      <button class="ss-sikisti-btn" id="ssoSikistiBastan" type="button">Yeniden başlat</button>
+    </div>
+  </div>
+
   <div class="sso-sonuc" id="ssoSonuc">
     <div class="sso-sonuc-kart">
       <div class="sso-sonuc-yildiz" id="ssoSonucYildiz"></div>
@@ -518,6 +540,8 @@
             <!-- odeme altyapisi gelince hidden kaldirilir (marketEkran.js noAdsCiz) -->
             <div class="mk-noads" id="mkNoAds" hidden></div>
             <div class="mk-hediye" id="mkHediye"></div>
+            <!-- reklam satirlari: yalnizca reklam destegi varken (marketEkran.js reklamCiz) -->
+            <div class="rk-market" id="mkReklam" hidden></div>
 
             <div class="mk-bolum-basligi"><span>Kutular</span></div>
             <div class="mk-sandiklar" id="mkSandiklar"></div>
@@ -549,8 +573,10 @@
 </div>
 <!-- Acilista yalnizca ortak altyapi (core) ve market yuklenir. Oyunlarin kendi
      dosyalari core.js icindeki OYUN_DOSYALARI tablosundan, oyuna ilk girildiginde
-     yuklenir. Sira onemli: core -> marketKatalog -> market -> marketEkran. -->
+     yuklenir. Sira onemli: core -> reklamAyar -> reklam -> marketKatalog -> market -> marketEkran. -->
 <script src="js/core.js"></script>
+<script src="js/reklamAyar.js"></script>
+<script src="js/reklam.js"></script>
 <script src="js/marketKatalog.js"></script>
 <script src="js/market.js"></script>
 <script src="js/marketEkran.js"></script>

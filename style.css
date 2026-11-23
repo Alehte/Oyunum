@@ -74,11 +74,11 @@
      kendi :active kurallarini kullanir; burada yalnizca guvenli olanlar var. --- */
   .back-btn, .restart-btn, .hint-btn, .danger-btn, .lang-btn, .sheet-close, .about-link,
   .overlay button, .ra-btns button, .tp-over button, .kc-btn-back,
-  .mk-btn, .mk-indirim, .mk-sandik-btn, .mk-hediye-btn, .mk-noads-btn, .mk-sonuc-btn, .mk-ustsekme button,
+  .mk-btn, .mk-sandik-btn, .mk-hediye-btn, .mk-noads-btn, .mk-sonuc-btn, .mk-ustsekme button,
   .ss-sonuc-btn, .sso-sonuc-btn, .sso-dg-btn, .game-icon{transition:transform .09s ease, opacity .09s ease;}
   .back-btn:active, .restart-btn:active, .hint-btn:not(:disabled):active, .danger-btn:active, .lang-btn:active,
   .sheet-close:active, .overlay button:active, .ra-btns button:active, .tp-over button:active, .kc-btn-back:active,
-  .mk-btn:not(:disabled):active, .mk-indirim:not(:disabled):active, .mk-sandik-btn:not(:disabled):active,
+  .mk-btn:not(:disabled):active, .mk-sandik-btn:not(:disabled):active,
   .mk-hediye-btn:not(:disabled):active, .mk-noads-btn:active, .mk-sonuc-btn:active, .mk-ustsekme button:active,
   .ss-sonuc-btn:active, .sso-sonuc-btn:active, .sso-dg-btn:active{transform:scale(.94);}
   .game-card.playable:active .game-icon{transform:scale(.93);}
@@ -949,24 +949,11 @@
     border:1.5px solid rgba(255,255,255,.26) !important; font-weight:600 !important;
     font-size:13px !important; padding:11px 18px !important; border-radius:12px !important;
     box-shadow:none;}
-  .kc-btn-ad{position:relative; overflow:hidden; border:none; cursor:pointer; font-family:inherit;
-    background:linear-gradient(135deg,#F5B043,#E07A2C) !important; color:#3A1F06 !important;
-    font-weight:600 !important; font-size:13px !important; padding:12px 18px !important;
-    border-radius:12px !important; box-shadow:0 6px 18px -6px rgba(240,150,50,.7);
-    animation:kcAdPulse 1.7s ease-in-out infinite;}
-  .kc-btn-ad::after{content:''; position:absolute; top:0; left:-60%; width:42%; height:100%;
-    background:linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
-    animation:kcShine 2.3s ease-in-out infinite;}
-  @keyframes kcShine{ 0%{left:-60%;} 55%,100%{left:125%;} }
-  @keyframes kcAdPulse{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.045);} }
-  .kc-ad-note{font-size:11px; color:#BCC7C0; margin-top:2px;}
   .phone.reduced-motion .kc-snake.hero-intro,
   .phone.reduced-motion .kc-snake.hero-pulse,
   .phone.reduced-motion .kc-govde.hero-intro,
   .phone.reduced-motion .kc-govde.hero-pulse,
   .phone.reduced-motion .kc-big-text,
-  .phone.reduced-motion .kc-btn-ad,
-  .phone.reduced-motion .kc-btn-ad::after,
   .phone.reduced-motion .kc-confetti i{animation:none !important;}
 
   /* =======================================================
@@ -1800,12 +1787,6 @@
   .mk-btn.kullan{background:linear-gradient(180deg,#7FE6DC,#3FBFC9); color:#04222A;}
   .mk-btn.secili{background:rgba(47,224,122,.16); color:#7FE8A8; cursor:default;}
 
-  .mk-indirim{width:100%; background:none; border:none; cursor:pointer; padding:4px 0;
-    display:flex; align-items:center; justify-content:center; gap:4px;
-    font-family:'Fredoka',sans-serif; font-size:11px; font-weight:500; color:#FFB347;}
-  .mk-indirim svg{width:13px; height:13px; flex-shrink:0;}
-  .mk-indirim.acik{color:#2FE07A; cursor:default;}
-  .mk-indirim.bekliyor{opacity:.45;}
   .mk-kilit{display:flex; align-items:center; justify-content:center; gap:6px;
     font-size:11px; color:var(--ink-soft); padding:8px 0;}
   .mk-kilit svg{width:14px; height:14px; flex-shrink:0;}
@@ -2185,3 +2166,119 @@
     .ab-sonpuan{font-size:32px;}
     .ab-ortu button{min-height:44px; padding:10px 24px;}
   }
+
+/* =======================================================
+     REKLAM (js/reklam.js + market reklam satirlari)
+     rk-ortu/rk-kart : secim ve ikinci sans penceresi (Reklam.secim / Reklam.ikinciSans)
+     rk-test         : sahte reklam katmani (yalnizca ?reklamTest)
+     rk-market/satir : marketteki "+200 altin" ve "%20 indirim" satirlari
+     ======================================================= */
+  .rk-ortu{position:absolute; inset:0; z-index:300; display:flex; align-items:center; justify-content:center;
+    padding:22px; background:rgba(6,11,22,.86); font-family:'Fredoka', sans-serif;
+    animation:ortuSolukGir .2s ease;}
+  .rk-kart{width:100%; max-width:320px; box-sizing:border-box; background:#1B2740; color:#EAF0FB;
+    border:2px solid rgba(127,230,220,.45); border-radius:18px; padding:18px 16px 14px; text-align:center;
+    box-shadow:0 0 42px -10px rgba(127,230,220,.55); animation:rkPop .26s cubic-bezier(.2,1.5,.5,1);}
+  @keyframes rkPop{from{transform:scale(.8); opacity:0;} to{transform:scale(1); opacity:1;}}
+  .rk-baslik{font-size:20px; font-weight:600; line-height:1.2; color:#EAF0FB;}
+  .rk-metin{font-size:13px; line-height:1.4; color:#93A3C4; margin-top:6px;}
+  .rk-dugmeler{display:flex; flex-direction:column; gap:10px; margin-top:16px;}
+  .rk-btn{width:100%; min-height:48px; border:none; border-radius:999px; padding:10px 16px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    font-family:'Fredoka', sans-serif; font-weight:600; font-size:15px;
+    transition:transform .09s ease, opacity .09s ease;}
+  .rk-btn:not(:disabled):active{transform:scale(.94);}
+  .rk-btn-ana{display:flex; align-items:center; justify-content:center; gap:7px;}
+  .rk-btn-ana svg{width:17px; height:17px; flex-shrink:0;}
+  .rk-btn-ana img{width:16px; height:16px;}
+  .rk-btn-alt{font-size:11.5px; font-weight:500; opacity:.8;}
+  .rk-btn.rk-reklam{background:linear-gradient(180deg,#7FE6DC,#3FBFC9); color:#04222A;}
+  .rk-btn.rk-normal{background:linear-gradient(180deg,#FFD98A,#F0B93C); color:#3A2A05;}
+  /* ikinci sans: iki dugme ayni boy, ayni yazi, ikisi de dolu (esit belirginlik) */
+  .rk-dugmeler.esit .rk-btn.rk-normal{background:linear-gradient(180deg,#5A6E98,#3E5078); color:#EAF0FB;}
+  .rk-btn:disabled{cursor:default;}
+  .rk-btn.pasif{opacity:.45;}
+  .rk-iptal{margin-top:8px; width:100%; min-height:38px; background:none; border:none; cursor:pointer;
+    font-family:'Fredoka', sans-serif; font-size:13px; font-weight:500; color:#93A3C4;}
+
+  /* sahte reklam (gelistirme) */
+  .rk-test{position:absolute; inset:0; z-index:310; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; padding:24px; text-align:center; font-family:'Fredoka', sans-serif;
+    background:repeating-linear-gradient(135deg, #10182B 0 22px, #141F38 22px 44px); color:#EAF0FB;}
+  .rk-test-etiket{font-size:28px; font-weight:600; color:#FFD166;}
+  .rk-test.gecis .rk-test-etiket{color:#B78BFF;}
+  .rk-test-alt{font-size:13px; color:#93A3C4;}
+  .rk-test-sayac{width:72px; height:72px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:34px; font-weight:600; color:#EAF0FB; border:4px solid rgba(127,230,220,.6); font-variant-numeric:tabular-nums;}
+  .rk-test-kapat{margin-top:8px; min-height:44px; padding:10px 22px; border-radius:999px; cursor:pointer;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#EAF0FB;
+    font-family:'Fredoka', sans-serif; font-size:14px; font-weight:600;}
+
+  /* market: gunluk hediyenin altindaki reklam satirlari */
+  .rk-market{display:flex; flex-direction:column; gap:8px; margin-top:8px;}
+  .rk-market[hidden]{display:none;}
+  .rk-satir{display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 10px 8px 14px; border-radius:12px; min-height:40px; box-sizing:border-box;
+    background:linear-gradient(90deg, rgba(20,34,54,.96), rgba(16,28,48,.96)); border:1px solid rgba(127,230,220,.24);}
+  .rk-satir-yazi{flex:1; min-width:0; font-size:12px; font-weight:600; letter-spacing:.02em; color:#D8F3F6; line-height:1.3;}
+  .rk-satir-not{flex-shrink:0; font-size:11.5px; color:#93A3C4;}
+  .rk-satir-btn{display:flex; align-items:center; gap:6px; flex-shrink:0; border:none; border-radius:999px;
+    padding:8px 13px; cursor:pointer; font-family:'Fredoka', sans-serif; font-size:11.5px; font-weight:600;
+    letter-spacing:.03em; background:linear-gradient(180deg,#7FE6DC,#3FBFC9); color:#04222A;
+    box-shadow:0 4px 12px -5px rgba(127,230,220,.7); transition:transform .09s ease, opacity .09s ease;}
+  .rk-satir-btn:not(:disabled):active{transform:scale(.94);}
+  .rk-satir-btn svg{width:14px; height:14px;}
+  .rk-satir-btn.pasif{background:rgba(255,255,255,.10); color:#93A3C4; box-shadow:none; cursor:default; letter-spacing:0;}
+  .rk-satir-btn.bekliyor{opacity:.5;}
+  .rk-satir.bitti{background:rgba(14,22,38,.92); border-color:rgba(255,255,255,.08);}
+  .rk-satir.bitti .rk-satir-yazi{color:#93A3C4;}
+  .rk-satir.hak{border-color:rgba(47,224,122,.45);}
+  .rk-satir.hak .rk-satir-yazi{color:#7FE8A8;}
+  /* indirimli kutu fiyati: ustu cizili eski fiyat */
+  .mk-sandik-btn s{opacity:.6; font-size:11px; margin-right:2px;}
+
+  .phone.reduced-motion .rk-ortu, .phone.reduced-motion .rk-kart{animation:none;}
+  @media (prefers-reduced-motion: reduce){ .rk-ortu, .rk-kart{animation:none;} }
+
+  /* === REKLAM: 2048 === */
+  /* ikinci sans: silinen karolar kuculup kaybolur (translate konumu ayri ozellik, bozulmaz) */
+  .tile.ikinci-sil{animation:h2048Sil .26s ease-in forwards; z-index:2;}
+  @keyframes h2048Sil{0%{transform:scale(1); opacity:1;} 100%{transform:scale(0); opacity:0;}}
+  .phone.reduced-motion .tile.ikinci-sil{animation:none; opacity:0;}
+  @media (prefers-reduced-motion: reduce){ .tile.ikinci-sil{animation-duration:.01s;} }
+
+  /* === REKLAM: KACIS === */
+  /* reklamla alinan sirali ipucu: isaret, oyuncu o hamleyi yapana kadar surer
+     (reduced-motion kurali daha ozgul oldugu icin orada sabit hale kalir) */
+  .kc-govde.hint-mark.hint-surekli .kc-govde-isaret{animation-iteration-count:infinite;}
+  .hint-btn .kc-ipucu-kalan{font-size:.92em; opacity:.9;}
+
+/* === REKLAM: KARANLIKTA SUZUL === */
+  /* ikinci sans geri sayimi: dunya donukken alanin ortasinda buyuk sayi (dokunmayi engellemez; duraklat ortusunun altinda) */
+  .ab-gerisayim{position:absolute; left:50%; top:38%; transform:translate(-50%, -50%); z-index:6; display:none;
+    pointer-events:none; font-family:'Fredoka', sans-serif; font-weight:600; font-size:64px; line-height:1;
+    color:#FFE9B8; text-shadow:0 2px 12px rgba(0,0,0,.9), 0 0 18px var(--ab-isik, #FFE27A);}
+  .ab-gerisayim.show{display:block;}
+
+/* === REKLAM: SIRALA DUR === */
+  /* Sikistin: kapatilabilir bilgi karti, joker cubugunun ustunde durur; tahta acik kalir, oyun kilitlenmez */
+  .ss-sikisti{position:absolute; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); z-index:30;
+    box-sizing:border-box; padding:14px 14px 12px; border-radius:18px; text-align:center; font-family:'Fredoka', sans-serif;
+    background:linear-gradient(180deg, #2C2850 0%, #1B1836 100%); border:2px solid rgba(251,231,174,.45);
+    box-shadow:0 14px 34px -12px rgba(0,0,0,.9); color:#EAF0FB; animation:ssSikistiGir .24s ease;}
+  .ss-sikisti[hidden]{display:none;}
+  @keyframes ssSikistiGir{from{transform:translateY(14px); opacity:0;} to{transform:none; opacity:1;}}
+  .ss-sikisti-kapat{position:absolute; top:4px; right:6px; width:36px; height:36px; border:none; background:none; cursor:pointer;
+    font-size:24px; line-height:1; color:#A9B6D8;}
+  .ss-sikisti-baslik{font-size:19px; font-weight:600; color:#FBE7AE;}
+  .ss-sikisti-metin{font-size:12.5px; line-height:1.35; color:#A9B6D8; margin:4px 26px 0;}
+  .ss-sikisti-dugmeler{display:flex; gap:8px; margin-top:12px;}
+  .ss-sikisti-btn{flex:1; min-height:46px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    padding:6px 4px; border-radius:13px; border:none; cursor:pointer; font-family:'Fredoka', sans-serif; font-weight:600;
+    font-size:13.5px; background:rgba(255,255,255,.10); color:#EAF0FB; transition:transform .09s ease;}
+  .ss-sikisti-btn small{font-size:11px; font-weight:500; opacity:.75;}
+  .ss-sikisti-btn small:empty{display:none;}
+  .ss-sikisti-btn:not(:disabled):active{transform:scale(.94);}
+  .ss-sikisti-btn:disabled{opacity:.38; cursor:default;}
+  .phone.reduced-motion .ss-sikisti{animation:none;}
+  @media (prefers-reduced-motion: reduce){ .ss-sikisti{animation:none;} }

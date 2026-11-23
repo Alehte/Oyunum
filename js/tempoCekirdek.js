@@ -359,6 +359,175 @@
   }
 
   // ---------------------------------------------------------------
+  // İKİNCİ ŞANS (reklam) — kayıp anında verilen ÖZEL 3'lü. Normal üreteçten
+  // (Uretec) tamamen ayrıdır; onun durumuna dokunmaz.
+  // Mevcut ızgarada her şekil ve her konum denenir. Seçilen 3 parça:
+  //   - her biri ŞU ANKİ tahtada en az bir yere sığar,
+  //   - sırayla yerleşir (1. konunca 2. sığar, sonra 3.),
+  //   - sıralama: tamamlanan hat çok > doldurulan hücre çok > farklı şekil
+  //     çok > kalan tahtanın puanı yüksek.
+  // Arama: 1. parçanın bütün konumları, her biri "bir parça daha konursa en
+  // çok kaç hat" bakışıyla sıralanır, en iyi ilkIsin tanesi açılır; 2. parçanın
+  // bütün konumları (aynı tahtaya varan yollar birleşir) ve her biri için 3.
+  // parça TAM sayılır. Açılım bütçeyi aşarsa 2. adım en iyi ara tahtalara
+  // daralır: boş tahtada bile hesap kısa sürer.
+  // Plan yoksa (yalnızca dar aday havuzunda olabilir; tam havuzda 1x1 her
+  // zaman sığar) yedek: tahtaya sığan EN KÜÇÜK parçalar.
+  // Dönen: { set:[3 şekil id], plan:[{s,r,c}] | null, hat, dolum, yedek }
+  // secenek (testler için): { ilkIsin, butce, adaylar:[şekil id] }
+  // ---------------------------------------------------------------
+  var IKINCI_SANS = { ilkIsin: 12, butce: 120000 }, ESIT_TAVAN = 256, ILK_TAVAN = 300;
+
+  // Hızlı konum taraması (yalnızca ikinci şans): GECERLI[(satir << 5) | desen]
+  // = desenin o satırda çakışmadan kayabileceği c değerleri (bit c). Şekil
+  // satır desenleri en çok 5 bit genişliktedir. ILK_BIT[m] = m'nin en düşük biti.
+  var GECERLI = new Uint8Array(256 * 32), ILK_BIT = new Uint8Array(256);
+  (function () {
+    var satir, desen, c, m;
+    for (satir = 0; satir < 256; satir++) for (desen = 1; desen < 32; desen++) {
+      for (m = 0, c = 0; c < N; c++) if ((desen << c) <= DOLU && !(satir & (desen << c))) m |= (1 << c);
+      GECERLI[(satir << 5) | desen] = m;
+    }
+    for (m = 1; m < 256; m++) { for (c = 0; !(m & (1 << c)); c++); ILK_BIT[m] = c; }
+  })();
+  // r satırından başlayınca şeklin sığdığı sütunlar (bit c = sigar(b, s, r, c))
+  function konumMaskesi(b, s, r) {
+    var m = DOLU;
+    for (var i = 0; i < s.h && m; i++) m &= GECERLI[(b[r + i] << 5) | s.satir[i]];
+    return m;
+  }
+
+  // Tek parçayla en çok kaç hat kapanır (bellek ayırmadan)
+  function tekAdimHat(b, adaylar) {
+    var en = 0, a, s, r, c, h, m;
+    for (a = 0; a < adaylar.length; a++) {
+      s = SEKILLER[adaylar[a]];
+      for (r = 0; r + s.h <= N; r++) for (m = konumMaskesi(b, s, r); m; m &= m - 1) {
+        c = ILK_BIT[m];
+        h = hatSay(b, s, r, c);
+        if (h > en) en = h;
+      }
+    }
+    return en;
+  }
+
+  // Listedeki her tahtaya her adayı her konumda koy; aynı tahtaya varan
+  // yollardan (hat, dolum) büyük olan kalır.
+  function ikinciSansAc(liste, adaylar) {
+    var sonraki = [], gorulen = {}, q, a, s, r, c, m, d, sonuc, hat, dolum, anahtar, e;
+    for (q = 0; q < liste.length; q++) {
+      d = liste[q];
+      for (a = 0; a < adaylar.length; a++) {
+        s = SEKILLER[adaylar[a]];
+        for (r = 0; r + s.h <= N; r++) for (m = konumMaskesi(d.b, s, r); m; m &= m - 1) {
+          c = ILK_BIT[m];
+          sonuc = uygula(d.b, s, r, c);
+          hat = d.hat + sonuc.hat; dolum = d.dolum + s.n;
+          anahtar = String.fromCharCode.apply(null, sonuc.b);
+          e = gorulen[anahtar];
+          if (e === undefined) {
+            gorulen[anahtar] = sonraki.length;
+            sonraki.push({ b: sonuc.b, hat: hat, dolum: dolum, ata: d, hamle: { s: s.id, r: r, c: c } });
+          } else {
+            e = sonraki[e];
+            if (hat > e.hat || (hat === e.hat && dolum > e.dolum)) {
+              e.hat = hat; e.dolum = dolum; e.ata = d; e.hamle = { s: s.id, r: r, c: c };
+            }
+          }
+        }
+      }
+    }
+    return sonraki;
+  }
+
+  // Bütçe aşılınca ara tahtalar: (hat, dolum) büyük olanlar; sınırdaki eşitlikte tahta puanı
+  function ikinciSansIsin(liste, genislik) {
+    if (liste.length <= genislik) return liste;
+    var anahtar = new Float64Array(liste.length), i;
+    for (i = 0; i < liste.length; i++) anahtar[i] = liste[i].hat * 100 + liste[i].dolum;
+    var sirali = anahtar.slice().sort();
+    var esik = sirali[sirali.length - genislik], ust = [], sinir = [];
+    for (i = 0; i < liste.length; i++) {
+      if (anahtar[i] > esik) ust.push(liste[i]);
+      else if (anahtar[i] === esik) sinir.push(liste[i]);
+    }
+    for (i = 0; i < sinir.length; i++) sinir[i].puan = tahtaPuani(sinir[i].b);
+    sinir.sort(function (x, y) { return y.puan - x.puan; });
+    return ust.concat(sinir.slice(0, genislik - ust.length));
+  }
+
+  function ikinciSansSec(b, secenek) {
+    secenek = secenek || {};
+    var ilkIsin = secenek.ilkIsin || IKINCI_SANS.ilkIsin, butce = secenek.butce || IKINCI_SANS.butce;
+    var havuz = secenek.adaylar || SEKILLER.map(function (s) { return s.id; });
+    var adaylar = [], yerSay = 0, i, k, q, a, s, r, c, m, d, adet;
+    for (i = 0; i < havuz.length; i++) {
+      s = SEKILLER[havuz[i]];
+      if (!s || adaylar.indexOf(s.id) >= 0) continue;
+      adet = 0;
+      for (r = 0; r + s.h <= N; r++) adet += BIT[konumMaskesi(b, s, r)];
+      if (adet) { adaylar.push(s.id); yerSay += adet; }
+    }
+
+    if (adaylar.length) {
+      // 1. parça: bütün konumlar, iki parçalık hat bakışıyla sıralanır
+      var bir = ikinciSansAc([{ b: b, hat: 0, dolum: 0, ata: null, hamle: null }], adaylar);
+      bir = ikinciSansIsin(bir, ILK_TAVAN);   // seyrek tahtada bakış hesabı sınırlı kalsın
+      for (i = 0; i < bir.length; i++) { bir[i].bakis = bir[i].hat + tekAdimHat(bir[i].b, adaylar); bir[i].puan = tahtaPuani(bir[i].b); }
+      bir.sort(function (x, y) { return (y.bakis - x.bakis) || (y.hat - x.hat) || (y.dolum - x.dolum) || (y.puan - x.puan); });
+      // 2. parça: seçilen ilk konumların bütün devamları (bütçeye göre daraltılır)
+      var iki = ikinciSansAc(bir.slice(0, ilkIsin), adaylar);
+      iki = ikinciSansIsin(iki, Math.max(8, Math.floor(butce / yerSay)));
+      // 3. parça: bellek ayırmadan sayılır. (hat, dolum, farklı) en iyileri
+      // biriktirilir; tahta puanı yalnızca ilk ESIT_TAVAN eşit aday için hesaplanır.
+      var enHat = -1, enDolum = -1, enFarkli = -1, esit = [], hat, dolum, farkli, p1, p2;
+      for (q = 0; q < iki.length; q++) {
+        d = iki[q];
+        p1 = d.ata.hamle.s; p2 = d.hamle.s;
+        for (a = 0; a < adaylar.length; a++) {
+          s = SEKILLER[adaylar[a]];
+          farkli = 1 + (p1 !== p2 ? 1 : 0) + ((s.id !== p1 && s.id !== p2) ? 1 : 0);
+          for (r = 0; r + s.h <= N; r++) for (m = konumMaskesi(d.b, s, r); m; m &= m - 1) {
+            c = ILK_BIT[m];
+            hat = d.hat + hatSay(d.b, s, r, c); dolum = d.dolum + s.n;
+            if (hat !== enHat) { if (hat < enHat) continue; }
+            else if (dolum !== enDolum) { if (dolum < enDolum) continue; }
+            else if (farkli !== enFarkli) { if (farkli < enFarkli) continue; }
+            else { if (esit.length < ESIT_TAVAN) esit.push({ d: d, s: s.id, r: r, c: c }); continue; }
+            enHat = hat; enDolum = dolum; enFarkli = farkli;
+            esit = [{ d: d, s: s.id, r: r, c: c }];
+          }
+        }
+      }
+      var en = null, enPuan = -Infinity, v;
+      for (i = 0; i < esit.length; i++) {
+        v = esit.length > 1 ? tahtaPuani(uygula(esit[i].d.b, SEKILLER[esit[i].s], esit[i].r, esit[i].c).b) : 0;
+        if (v > enPuan) { enPuan = v; en = esit[i]; }
+      }
+      if (en) {
+        en.hat = enHat; en.dolum = enDolum;
+        var plan = [{ s: en.s, r: en.r, c: en.c }];
+        for (d = en.d; d.hamle; d = d.ata) plan.unshift(d.hamle);
+        return { set: plan.map(function (y) { return y.s; }), plan: plan, hat: en.hat, dolum: en.dolum, yedek: false };
+      }
+    }
+
+    // yedek: tahtaya sığan en küçük parçalar (sırayla yerleşmeye çalışılır)
+    var sirali = SEKILLER.slice().sort(function (x, y) { return (x.n - y.n) || (x.id - y.id); });
+    var sim = b, set = [], yer, sec;
+    for (k = 0; k < 3; k++) {
+      sec = null;
+      for (i = 0; i < sirali.length && !sec; i++) if (herhangiSigar(sim, sirali[i]) && herhangiSigar(b, sirali[i])) sec = sirali[i];
+      if (!sec) for (i = 0; i < sirali.length && !sec; i++) if (herhangiSigar(b, sirali[i])) sec = sirali[i];
+      if (!sec) { set.push(TEK); continue; }
+      set.push(sec.id);
+      yer = enIyiKonum(sim, sec);
+      if (yer) sim = yer.sonuc.b;
+    }
+    return { set: set, plan: null, hat: 0, dolum: 0, yedek: true };
+  }
+
+  // ---------------------------------------------------------------
   // RASTGELE
   // ---------------------------------------------------------------
   function rngOlustur(tohum) {
@@ -718,6 +887,7 @@
     this.tamSayisi = 0;
     this.hatSayisi = 0;
     this.bitti = false;
+    this.ikinciSans = false; // bu koşuda reklamlı ikinci şans kullanıldı mı (koşu başına 1)
   }
 
   Oyun.prototype.basla = function () {
@@ -795,11 +965,26 @@
     return plan.map(function (h) { return { i: kalan[h.i], r: h.r, c: h.c }; });
   };
 
+  // İkinci şans (reklam izlendi): kalan parçalar atılır, tepsiye ikinciSansSec'in
+  // 3 parçası konur. Skor, seri, sabır (tempo çarpanı) ve üreteç AYNEN kalır.
+  // Koşu başına bir kez; ikinci çağrı null döner.
+  Oyun.prototype.ikinciSansUygula = function () {
+    if (this.ikinciSans) return null;
+    var sec = ikinciSansSec(this.b);
+    this.tepsi = sec.set.map(function (id) { return { s: id, kullanildi: false }; });
+    this.ikinciSans = true;
+    this.bitti = false;
+    return sec;
+  };
+
   // Kaydet / yükle (uygulama kapanıp açılınca kaldığı yerden devam)
+  // is: ikinci şans kullanıldı (OPSİYONEL alan; yalnızca 1 iken yazılır, eski kayıtta yok = kullanılmadı)
   Oyun.prototype.kayit = function () {
-    return { b: this.b.slice(), t: this.tepsi.map(function (p) { return [p.s, p.kullanildi ? 1 : 0]; }),
+    var k = { b: this.b.slice(), t: this.tepsi.map(function (p) { return [p.s, p.kullanildi ? 1 : 0]; }),
              skor: this.skor, seri: this.seri, sabir: this.sabir, hamle: this.hamle,
              tam: this.tamSayisi, hat: this.hatSayisi, u: this.uretec.durum() };
+    if (this.ikinciSans) k.is = 1;
+    return k;
   };
   Oyun.prototype.yukle = function (k) {
     if (!k || !(k.b instanceof Array) || k.b.length !== N || !(k.t instanceof Array) || !k.t.length) return false;
@@ -810,9 +995,12 @@
     this.skor = k.skor || 0; this.seri = k.seri || 0; this.sabir = k.sabir || 0;
     this.hamle = k.hamle || 0; this.tamSayisi = k.tam || 0; this.hatSayisi = k.hat || 0;
     this.uretec.yukle(k.u);
-    this.bitti = false;
+    this.ikinciSans = k.is === 1;
     var kalan = this.kalanlar(), yasiyor = false;
     for (i = 0; i < kalan.length; i++) if (herhangiSigar(this.b, SEKILLER[this.tepsi[kalan[i]].s])) yasiyor = true;
+    // kayıtlı durum kaybedilmiş olabilir (ikinci şans teklifi beklerken kapatıldı):
+    // durum yine yüklenir, bitti işaretlenir; dönüş değeri eskisi gibi "oynanabilir mi"
+    this.bitti = !yasiyor;
     return yasiyor;
   };
 
@@ -821,7 +1009,7 @@
     TEMPO_SABIR: TEMPO_SABIR, TEMPO_MAX: TEMPO_MAX, sabirHakki: sabirHakki,
     bosTahta: bosTahta, doluSay: doluSay, sigar: sigar, herhangiSigar: herhangiSigar,
     uygula: uygula, hatSay: hatSay, tahtaPuani: tahtaPuani, enIyiKonum: enIyiKonum,
-    oynanabilir: oynanabilir, finaleCoz: finaleCoz, planla: planla,
+    oynanabilir: oynanabilir, finaleCoz: finaleCoz, planla: planla, ikinciSansSec: ikinciSansSec,
     rngOlustur: rngOlustur, Uretec: Uretec, Oyun: Oyun
   };
 });

@@ -97,6 +97,11 @@
   var dolan = {};            /* o an dolmakta olan siseler */
   var akanSayisi = 0;        /* devam eden animasyon sayisi */
   var katmanYuksekligi = 30;
+  /* Reklam / Sikistin durumu */
+  var gorunum = 0;           /* bolum acilinca ve haritaya donunce artar: gec gelen reklam sonucu eski bolume islenmez */
+  var jokerBekliyor = false; /* joker satin alma / reklam penceresi acik */
+  var gecisBekliyor = false; /* tamamlandi ekranindan cikarken gecis reklami bekleniyor */
+  var sikistiKapali = false; /* oyuncu Sikistin bilgisini kapatti; ilerleme olana kadar yeniden acilmaz */
 
   /* ---------- Kisayollar ---------- */
 
@@ -205,6 +210,8 @@
 
   function haritaCiz() {
     oyundanCikis();   /* oyun ekranindan donuluyorsa yarim dokumleri kapat */
+    gorunum++;
+    sikistiGizle();
     var ic = $('ssPathInner');
     if (!ic) return;
     var p = ilerleme();
@@ -366,6 +373,7 @@
     secili = -1;
     perdeModu = false;
     doken = {}; dolan = {}; akanSayisi = 0;
+    gorunum++; sikistiKapali = false; sikistiGizle();
 
     var baslik = $('ssLevelTitle');
     if (baslik) baslik.textContent = 'Bölüm ' + bolumNo;
@@ -549,11 +557,102 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     }
   }
 
+  /* ---------- Sikistin ----------
+     Kayip yok: ilerleten hamle kalmayinca (hic hamle yok ya da yalniz
+     ilerlemesiz gidip gelme kaldi; SuSirala.ilerlemeVarMi) kapatilabilir
+     bir bilgi cikar. Tahtayi kilitlemez, hamleleri engellemez.
+     Secenekler: Geri Al, Sise Ekle, Yeniden baslat. */
+
+  function sikistiGizle() {
+    var p = $('ssSikisti');
+    if (p) p.hidden = true;
+  }
+
+  function sikistiAltYazi(id, tur) {
+    var a = $(id), J = global.SuSiralaJoker;
+    if (!a || !J || !J.TANIM[tur]) return;
+    var sayi = J.adet(tur);
+    a.textContent = sayi > 0 ? (sayi + ' hak') : (J.TANIM[tur].fiyat + ' altın');
+  }
+
+  function sikistiGoster() {
+    var p = $('ssSikisti');
+    if (!p) { mesajGoster('Sıkıştın — geri al, şişe ekle ya da baştan başla'); return; }
+    var J = global.SuSiralaJoker;
+    var sinir = (J && J.TANIM.siseEkle && J.TANIM.siseEkle.bolumSiniri) || 2;
+    var geri = $('ssSikistiGeri'), sise = $('ssSikistiSise');
+    if (geri) geri.disabled = oyun.gecmis.length === 0;
+    if (sise) sise.disabled = oyun.eklenenSise >= sinir;
+    sikistiAltYazi('ssSikistiGeriAlt', 'geriAl');
+    var siseAlt = $('ssSikistiSiseAlt');
+    if (siseAlt && oyun.eklenenSise >= sinir) siseAlt.textContent = 'Bölüm sınırı';
+    else sikistiAltYazi('ssSikistiSiseAlt', 'siseEkle');
+    p.hidden = false;
+  }
+
+  /* Her dokum bitince (baska dokum yoksa) bir kez: karar ilerleme olan hamleye gore */
+  function sikistiKontrol() {
+    if (!oyun || oyun.kazandiMi()) { sikistiGizle(); return; }
+    var ilerler = typeof oyun.ilerlemeVarMi === 'function' ? oyun.ilerlemeVarMi() : oyun.oynanabilirMi();
+    if (ilerler) { sikistiKapali = false; sikistiGizle(); return; }
+    if (sikistiKapali) return;
+    sikistiGoster();
+  }
+
+  /* Reklam odulu (hak bitince altin satin almaya EK secenek; yalniz reklam
+     destegi varken gorunur, tarayicida eski davranis aynen). Odul ssJoker
+     envanterine yazilir (altinla alinan hak gibi), biri hemen kullanilir.
+     Sise Ekle'de bolum siniri (bolumSiniri) reklamla da asilmaz: sinirda
+     dugme kapali, secenek hic acilmaz. */
+  var REKLAM_ODUL = { geriAl: 5, siseEkle: 1, perdeAc: 3 };
+  var REKLAM_BIRIM = 'ipucu_joker';
+
+  function reklamVarMi() {
+    var R = global.Reklam;
+    return !!(R && typeof R.destekleniyor === 'function' && R.destekleniyor() && typeof R.secim === 'function');
+  }
+
+  function jokerSecim(tur) {
+    var J = global.SuSiralaJoker, t = J.TANIM[tur], n = REKLAM_ODUL[tur] || 1;
+    var kasa = J.altin.oku(), yeter = kasa >= t.fiyat;
+    var oyunOnce = oyun, gorunumOnce = gorunum;
+    jokerBekliyor = true;
+    global.Reklam.secim({
+      baslik: t.ad,
+      metin: t.aciklama + ' Hakkın kalmadı.',
+      secenekler: [
+        { deger: 'altin', etiket: t.fiyat + ' altın', alt: yeter ? '1 hak' : ('Yetersiz altın — ' + (t.fiyat - kasa) + ' eksik'), pasif: !yeter },
+        { deger: 'reklam', etiket: 'Reklam izle', alt: '+' + n + ' hak', birim: REKLAM_BIRIM }
+      ],
+      iptal: 'Vazgeç'
+    }).then(function (d) {
+      jokerBekliyor = false;
+      if (d === 'reklam') {
+        J.ekle(tur, n);                /* odul YALNIZ odul:true ise buraya gelir */
+      } else if (d === 'altin') {
+        var s = J.satinAl(tur);
+        if (!s.ok) {
+          mesajGoster(s.sebep === 'yetersizAltin' ? ('Yetersiz altın — ' + s.eksik + ' eksik') : 'Satın alınamadı');
+          ses('hata'); barYenile();
+          return;
+        }
+      } else { barYenile(); return; }
+      /* Sonuc gelene kadar bolum degistiyse (geri tusu vb.) hak envanterde kalir, kullanilmaz */
+      if (!oyun || oyun !== oyunOnce || gorunum !== gorunumOnce || akanSayisi > 0 || oyun.kazandiMi()) {
+        if (oyun) barYenile();
+        return;
+      }
+      mesajGoster(d === 'reklam' ? (t.ad + ' +' + n) : (t.ad + ' alındı'));
+      jokerUygula(tur);
+    }, function () { jokerBekliyor = false; if (oyun) barYenile(); });
+  }
+
   function jokerTiklandi(tur) {
-    if (akanSayisi > 0) return;
+    if (akanSayisi > 0 || jokerBekliyor) return;
     var J = global.SuSiralaJoker;
 
     if (J.adet(tur) < 1) {
+      if (reklamVarMi()) { jokerSecim(tur); return; }
       var s = J.satinAl(tur);
       if (!s.ok) {
         mesajGoster(s.sebep === 'yetersizAltin' ? ('Yetersiz altın — ' + s.eksik + ' eksik') : 'Satın alınamadı');
@@ -563,11 +662,17 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       }
       mesajGoster(J.TANIM[tur].ad + ' alındı');
     }
+    jokerUygula(tur);
+  }
 
+  /* Hak hazir: jokeri tahtaya uygula (envanterden biri dusulur) */
+  function jokerUygula(tur) {
+    var J = global.SuSiralaJoker;
     if (tur === 'geriAl') {
       var g = J.geriAl(oyun);
       if (!g.ok) { mesajGoster('Geri alınacak hamle yok'); return; }
       secili = -1; perdeModu = false;
+      sikistiGizle();
       tahtaKur(); barYenile();
     } else if (tur === 'siseEkle') {
       var e = J.siseEkle(oyun);
@@ -576,6 +681,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
         return;
       }
       secili = -1; perdeModu = false;
+      sikistiGizle();
       tahtaKur(); barYenile();
       ses('dok');
     } else if (tur === 'perdeAc') {
@@ -605,6 +711,9 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       else { var t = tupElemani(i); if (t) { sivilariCiz(t, i); t.classList.add('ss-acildi'); } }
       isaretleriYenile();
       barYenile();
+      /* Perde acildi: yeni bilgi ilerleme getirebilir, Geri Al da acilir. "Sikistin"
+         karti guncel durumla yeniden degerlendirilir (ilerleme varsa kapanir). */
+      if (s.ok) sikistiKontrol();
       return;
     }
 
@@ -832,7 +941,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       kazanmaBekliyor = true;
       dokumZamanla(function () { kazanmaBekliyor = false; bolumBitti(); }, 220);
     }
-    else if (!oyun.oynanabilirMi()) mesajGoster('Hamle kalmadı — geri al veya baştan başla');
+    else sikistiKontrol();
   }
 
   /* ============================================================
@@ -894,7 +1003,12 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     }
     var sonrakiBtn = $('ssSonrakiBtn');
     if (sonrakiBtn) sonrakiBtn.style.display = no < TOPLAM_BOLUM ? 'block' : 'none';
+    sikistiGizle();
     kutu.classList.add('show');
+    /* Gecis reklami sayaci: tamamlandi ekrani acilirken bir kez (bolumKaydet bu oyun icin tek sefer doner) */
+    if (global.Reklam && typeof global.Reklam.bolumTamamlandi === 'function') {
+      try { global.Reklam.bolumTamamlandi({ oyun: 'ss', bolum: no }); } catch (e) {}
+    }
 
     /* Kart acilirken konfeti: once merkezden, sonra iki yandan */
     setTimeout(function () {
@@ -930,30 +1044,64 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       /* acik kartta gecisi suSiralaOzelOyun.js yapar */
     });
 
-    var bastan = $('ssBastanBtn');
-    if (bastan) bastan.addEventListener('click', function () {
+    function bastanBasla() {
       if (akanSayisi > 0 || !oyun) return;
       oyun.bastanBasla();
       secili = -1; perdeModu = false; doken = {}; dolan = {}; akanSayisi = 0;
+      sikistiKapali = false; sikistiGizle();
       tahtaKur(); barYenile();
       var s = $('ssSonuc'); if (s) s.classList.remove('show');
-    });
+    }
+    var bastan = $('ssBastanBtn');
+    if (bastan) bastan.addEventListener('click', bastanBasla);
+
+    /* Tamamlandi ekranindan cikis: once gecis reklami (kurallar Reklam icinde;
+       uygun degilse hemen doner), kapaninca devam. Reklam yoksa eskisi gibi esza.
+       Beklerken bolum/ekran degistiyse (geri tusu) devam edilmez. */
+    function gecisSonra(devam) {
+      if (gecisBekliyor || !oyun) return;
+      var R = global.Reklam;
+      if (!R || typeof R.gecisGoster !== 'function') { devam(); return; }
+      gecisBekliyor = true;
+      var once = gorunum;
+      var bitti = function () {
+        gecisBekliyor = false;
+        if (gorunum === once) devam();
+      };
+      var p;
+      try { p = R.gecisGoster({ oyun: 'ss', bolum: oyun.bolum.bolumNo }); } catch (e) { p = null; }
+      if (p && typeof p.then === 'function') p.then(bitti, bitti); else bitti();
+    }
 
     var sonraki = $('ssSonrakiBtn');
     if (sonraki) sonraki.addEventListener('click', function () {
       if (!oyun) return;
-      var no = oyun.bolum.bolumNo + 1;
-      var s = $('ssSonuc'); if (s) s.classList.remove('show');
-      if (no <= TOPLAM_BOLUM) bolumBaslat2(no);
+      gecisSonra(function () {
+        var no = oyun.bolum.bolumNo + 1;
+        var s = $('ssSonuc'); if (s) s.classList.remove('show');
+        if (no <= TOPLAM_BOLUM) bolumBaslat2(no);
+      });
     });
 
     var haritaya = $('ssHaritayaBtn');
     if (haritaya) haritaya.addEventListener('click', function () {
-      ogreticiGizle();
-      var s = $('ssSonuc'); if (s) s.classList.remove('show');
-      haritaCiz();
-      if (global.slideBack) global.slideBack('ssOyun', 'ssHarita');
+      gecisSonra(function () {
+        ogreticiGizle();
+        var s = $('ssSonuc'); if (s) s.classList.remove('show');
+        haritaCiz();
+        if (global.slideBack) global.slideBack('ssOyun', 'ssHarita');
+      });
     });
+
+    /* Sikistin bilgisi: secenekler mevcut joker / bastan akisina gider */
+    var skGeri = $('ssSikistiGeri');
+    if (skGeri) skGeri.addEventListener('click', function () { if (akanSayisi > 0) return; sikistiGizle(); jokerTiklandi('geriAl'); });
+    var skSise = $('ssSikistiSise');
+    if (skSise) skSise.addEventListener('click', function () { if (akanSayisi > 0) return; sikistiGizle(); jokerTiklandi('siseEkle'); });
+    var skBastan = $('ssSikistiBastan');
+    if (skBastan) skBastan.addEventListener('click', bastanBasla);
+    var skKapat = $('ssSikistiKapat');
+    if (skKapat) skKapat.addEventListener('click', function () { sikistiKapali = true; sikistiGizle(); });
   }
 
   /* Oyun ekranindan oyun ekranina gecis (kaydirma olmadan) */
@@ -961,6 +1109,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     ogreticiGizle();
     oyun = global.SuSirala.OyunOlustur(bolumNo);
     secili = -1; perdeModu = false; doken = {}; dolan = {}; akanSayisi = 0;
+    gorunum++; sikistiKapali = false; sikistiGizle();
     var baslik = $('ssLevelTitle');
     if (baslik) baslik.textContent = 'Bölüm ' + bolumNo;
     tahtaKur();
@@ -989,6 +1138,8 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
     global.AppReset.push(function () {
       if (global.AppProgress) { global.AppProgress.ssAcik = 1; global.AppProgress.ssYildiz = {}; global.AppProgress.ssJoker = null; }
       dokumIptal();   /* gec dokum geri cagrilari bos oyuna dokunmasin */
+      gorunum++;      /* gec gelen reklam sonucu bos oyuna islenmesin */
+      sikistiGizle();
       oyun = null;
     });
   }

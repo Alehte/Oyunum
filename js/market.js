@@ -2,13 +2,18 @@
 // Sahiplik, satin alma, tema secimi, gunun seckisi, kutular ve oyunlarin
 // kullandigi tema uygulayicilari burada. Ekran cizimi marketEkran.js icinde.
 //
-// Yuklenme sirasi: core.js -> marketKatalog.js -> market.js -> marketEkran.js
+// Yuklenme sirasi: core.js -> reklamAyar.js -> reklam.js -> marketKatalog.js -> market.js -> marketEkran.js
 //
 // KAYIT YERLESIMI (surum 2)
-//   AppProgress.market = { surum:2, s:[temaId], a:temaId, ri:[temaId], v:{g,i}, h:'' }
+//   AppProgress.market = { surum:2, s:[temaId], a:temaId, ri:[], v:{g,i}, h:'', ra:{g,n}, ig:'', ih:0 }
 //     s  : sahip olunan temalar        a : secili tema
-//     ri : reklamla indirimi acilmis   v : gunun seckisi (dilim anahtari + idler)
+//     ri : ESKI taslak %50 indirim listesi; artik okunmaz, hep bos tutulur (bicim uyumu)
+//     v  : gunun seckisi (dilim anahtari + idler)
 //     h  : gunluk hediyenin alindigi gun
+//     ra : reklamla +200 altin sayaci { g: gun 'YYYY-MM-DD', n: o gun izlenen }   (opsiyonel)
+//     ig : %20 indirim reklaminin son izlendigi gun                          (opsiyonel)
+//     ih : %20 indirim hakki var mi (0/1); ilk tema/kutu alisinda tukenir      (opsiyonel)
+//   Opsiyonel alanlar eksik/bozuksa kayitKur varsayilani yazar; surum degismez.
 //   AppStore 'ait_noads' -> ilerleme ile SIFIRLANMAZ (gercek parayla alinir)
 //
 // Surum 1'de urunler 'oyun.tur.aile' bicimindeydi (tema basina 4-5 parca).
@@ -22,7 +27,10 @@ window.AppMarket = (function () {
 
   var NOADS_ANAHTAR = 'ait_noads';
   var KAYIT_SURUM = 2;
-  var INDIRIM_ORANI = 0.5;        // reklam izleyince fiyat yarilanir
+  var INDIRIM_CARPANI = 0.8;      // %20 indirim hakki: fiyat x 0.8
+  var REKLAM_BIRIM = 'altin_x2';  // market odullu reklamlari (+200 altin ve %20 indirim)
+  var REKLAM_ALTIN = 200;         // reklam basina altin
+  var REKLAM_ALTIN_GUNLUK = 3;    // gunde en fazla
   var VITRIN_SAAT = 4;            // secki kac saatte bir yenilenir
   var HEDIYE_JETON = [150, 400];  // gunluk hediye jeton araligi
   var VARSAYILAN_ID = 'varsayilan';
@@ -79,7 +87,7 @@ window.AppMarket = (function () {
   //   - aile kaldirildiysa parca basina jeton iadesi yapilir
   // Secili tema: eski secimlerde en cok gecen (hala var olan) aile.
   function goc(eski) {
-    var yeni = { surum: KAYIT_SURUM, s: [], a: VARSAYILAN_ID, ri: [], v: { g: '', i: [] }, h: '' };
+    var yeni = { surum: KAYIT_SURUM, s: [], a: VARSAYILAN_ID, ri: [], v: { g: '', i: [] }, h: '', ra: { g: '', n: 0 }, ig: '', ih: 0 };
     var iade = 0, i, aile, ak, oy = {}, en = 0;
     if (!eski || typeof eski !== 'object') return { kayit: yeni, iade: 0 };
 
@@ -93,12 +101,7 @@ window.AppMarket = (function () {
         else if (K.ESKI_AILE_IADE[aile]) iade += K.ESKI_AILE_IADE[aile];
       }
     }
-    if (eski.ri instanceof Array) {
-      for (i = 0; i < eski.ri.length; i++) {
-        aile = aileOf(eski.ri[i]);
-        if (aile && TEMA[aile] && yeni.s.indexOf(aile) < 0 && yeni.ri.indexOf(aile) < 0) yeni.ri.push(aile);
-      }
-    }
+    // eski.ri (taslak %50 indirim) tasinmaz: o indirim kaldirildi.
     if (eski.a && typeof eski.a === 'object') {
       for (ak in eski.a) {
         aile = aileOf(eski.a[ak]);
@@ -123,12 +126,16 @@ window.AppMarket = (function () {
     }
 
     if (!(m.s instanceof Array)) m.s = [];
-    if (!(m.ri instanceof Array)) m.ri = [];
+    m.ri = [];   // eski taslak %50 indirim: okunmaz, bos tutulur
     if (!m.v || typeof m.v !== 'object' || !(m.v.i instanceof Array)) m.v = { g: '', i: [] };
     if (typeof m.h !== 'string') m.h = '';
+    // reklam sayaclari (opsiyonel alanlar; eski kayitta yok)
+    if (!m.ra || typeof m.ra !== 'object' || typeof m.ra.g !== 'string' ||
+        typeof m.ra.n !== 'number' || !isFinite(m.ra.n) || m.ra.n < 0) m.ra = { g: '', n: 0 };
+    if (typeof m.ig !== 'string') m.ig = '';
+    m.ih = (m.ih === 1 || m.ih === true) ? 1 : 0;
     // Katalogdan kalkmis id'leri sessizce temizle.
     m.s = m.s.filter(function (id) { return !!TEMA[id] && id !== VARSAYILAN_ID; });
-    m.ri = m.ri.filter(function (id) { return !!TEMA[id]; });
     if (typeof m.a !== 'string' || !TEMA[m.a] || (m.a !== VARSAYILAN_ID && m.s.indexOf(m.a) < 0)) m.a = VARSAYILAN_ID;
 
     window.AppProgress.market = m;
@@ -140,30 +147,25 @@ window.AppMarket = (function () {
   function yaz() { window.AppSaveProgress({ market: kayit }); }
 
   // ---------------------------------------------------------------
-  // REKLAM KATMANI (taslak)
-  // Gercek reklam SDK'si geldiginde SADECE window.AppReklam degisecek,
-  // market kodu ayni kalacak.
+  // REKLAM — js/reklam.js (window.Reklam). Market yalnizca onun API'sini kullanir;
+  // Reklam yuklu degilse (testler, eski sayfa) reklam satirlari gizli kalir.
   // ---------------------------------------------------------------
-  // Arayuz: hazirMi() -> su an izlenebilir reklam var mi. false ise reklamli
-  // butonlar HIC gosterilmez, gunluk hediye reklamsiz verilir.
-  if (!window.AppReklam) {
-    window.AppReklam = {
-      gercek: false,
-      // taslak: yalnizca yerel gelistirme ayari acikken "var" sayilir
-      hazirMi: function () { return !!window.AppGelistirme; },
-      odulluIzle: function (bitti) {
-        // gercek reklam altyapisi yok. Yalnizca gelistirme ayari acikken
-        // (core.js AppGelistirme) kisa bir beklemeden sonra odul verilir;
-        // yayinda reklam "tamamlanmadi" sayilir, bedava odul cikmaz.
-        if (!window.AppGelistirme) { setTimeout(function () { bitti(false); }, 0); return; }
-        setTimeout(function () { bitti(true); }, 1200);
-      }
-    };
-  }
-
+  // Reklam dugmesi gosterilebilir mi (yerel uygulama ya da ?reklamTest)? Tarayicida false.
   function reklamVarMi() {
-    var r = window.AppReklam;
-    return !!(r && typeof r.hazirMi === 'function' && r.hazirMi());
+    var r = window.Reklam;
+    return !!(r && typeof r.destekleniyor === 'function' && r.destekleniyor());
+  }
+  // 'gizli' | 'pasif' | 'hazir' (Reklam.dugmeDurumu, market birimi)
+  function reklamDurumu() {
+    var r = window.Reklam;
+    return (r && typeof r.dugmeDurumu === 'function') ? r.dugmeDurumu(REKLAM_BIRIM) : 'gizli';
+  }
+  function reklamOynat() {
+    var r = window.Reklam;
+    if (!r || typeof r.odulluGoster !== 'function') return Promise.resolve({ odul: false });
+    return Promise.resolve(r.odulluGoster(REKLAM_BIRIM)).then(
+      function (s) { return { odul: !!(s && s.odul === true) }; },
+      function () { return { odul: false }; });
   }
 
   function reklamsizMi() {
@@ -184,7 +186,10 @@ window.AppMarket = (function () {
     return !!t.varsayilan || kayit.s.indexOf(id) >= 0;
   }
 
-  function indirimliMi(id) { return kayit.ri.indexOf(id) >= 0 && !sahipMi(id); }
+  // %20 indirim hakki: tek hak, gun dolumu yok. Seckideki tema VE kutu icin
+  // gecer; hangisi once alinirsa hak tukenir.
+  function indirimHakkiVar() { return kayit.ih === 1; }
+  function indirimli(f) { return Math.round(f * INDIRIM_CARPANI); }
 
   function temelFiyat(id) {
     var t = TEMA[id];
@@ -192,33 +197,26 @@ window.AppMarket = (function () {
     return (typeof t.fiyat === 'number') ? t.fiyat : K.NADIRLIK[t.nadirlik].fiyat;
   }
 
+  // Bu tema su an indirimli fiyatla mi satiliyor?
+  function indirimliMi(id) { return indirimHakkiVar() && !!TEMA[id] && !sahipMi(id) && temelFiyat(id) > 0; }
+
+  // Ekranda gosterilen ve satin almada odenen fiyat (indirim hakki varsa indirimli).
+  // Ustu cizili eski fiyat: temelFiyat().
   function fiyat(id) {
     var f = temelFiyat(id);
-    return indirimliMi(id) ? Math.round(f * INDIRIM_ORANI) : f;
-  }
-
-  // Reklam izleyerek bu temaya kalici indirim ac. Satin alinana kadar durur.
-  function indirimAc(id, bitti) {
-    bitti = bitti || function () {};
-    if (!TEMA[id] || sahipMi(id) || indirimliMi(id) || !reklamVarMi()) { bitti(false); return; }
-    window.AppReklam.odulluIzle(function (basarili) {
-      if (!basarili) { bitti(false); return; }
-      kayit.ri.push(id);
-      yaz();
-      bitti(true);
-    });
+    return indirimliMi(id) ? indirimli(f) : f;
   }
 
   function sahipYap(id) {
     if (kayit.s.indexOf(id) < 0) kayit.s.push(id);
-    var ix = kayit.ri.indexOf(id);
-    if (ix >= 0) kayit.ri.splice(ix, 1);   // indirim kullanildi / gereksizlesti
   }
 
   function satinAl(id) {
     if (!TEMA[id] || sahipMi(id)) return false;
+    var hak = indirimliMi(id);
     if (!window.AppGold.harca(fiyat(id))) return false;
     sahipYap(id);
+    if (hak) kayit.ih = 0;        // indirim hakki kullanildi
     yaz();
     return true;
   }
@@ -878,22 +876,31 @@ window.AppMarket = (function () {
     return satilikTemalar().some(function (t) { return !sahipMi(t.id); });
   }
 
+  // Kutunun liste fiyati (ustu cizili) / odenecek fiyat (indirim hakki varsa indirimli)
+  function sandikTemelFiyat(sid) { var s = sandikBul(sid); return s ? s.fiyat : 0; }
+  function sandikFiyat(sid) {
+    var f = sandikTemelFiyat(sid);
+    return indirimHakkiVar() ? indirimli(f) : f;
+  }
+
   // { tur:'tema', tema }  |  { tur:'kapali', durum }  |  null (jeton yetmedi)
   function sandikAc(sid) {
     var s = sandikBul(sid);
     if (!s) return null;
     var durum = sandikDurum(sid);
     if (durum !== 'aktif') return { tur: 'kapali', durum: durum };
-    if (!window.AppGold.harca(s.fiyat)) return null;
+    var hak = indirimHakkiVar();
+    if (!window.AppGold.harca(sandikFiyat(sid))) return null;
     var tema = sandikCek(sid);
     sahipYap(tema.id);
+    if (hak) kayit.ih = 0;        // indirim hakki kullanildi
     yaz();
     return { tur: 'tema', tema: tema };
   }
 
   // ---------------------------------------------------------------
-  // GUNLUK HEDIYE — gunde bir kez. Reklam altyapisi varsa reklamla,
-  // yoksa (ilk surum) dogrudan verilir.
+  // GUNLUK HEDIYE — gunde bir kez, HER ZAMAN reklamsiz (ucretsiz).
+  // Reklamla ek altin ayri satirdadir (altinReklamIzle).
   // ---------------------------------------------------------------
   function hediyeHazirMi() { return kayit.h !== bugun(); }
 
@@ -909,11 +916,7 @@ window.AppMarket = (function () {
   function hediyeAl(bitti) {
     bitti = bitti || function () {};
     if (!hediyeHazirMi()) { bitti(null); return; }
-    if (!reklamVarMi()) { bitti(hediyeVer()); return; }
-    window.AppReklam.odulluIzle(function (basarili) {
-      if (!basarili || !hediyeHazirMi()) { bitti(null); return; }
-      bitti(hediyeVer());
-    });
+    bitti(hediyeVer());
   }
 
   function hediyeKalanMs() {
@@ -921,6 +924,51 @@ window.AppMarket = (function () {
     var d = new Date();
     var yarin = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
     return yarin.getTime() - d.getTime();
+  }
+
+  // ---------------------------------------------------------------
+  // REKLAMLA ALTIN — gunde en fazla 3 kez +200 (yerel tarihe gore sifirlanir).
+  // Odul yalnizca reklam {odul:true} donunce; sayac + altin TEK yazimda.
+  // ---------------------------------------------------------------
+  function altinReklamIzlenen() { return kayit.ra.g === bugun() ? kayit.ra.n : 0; }
+  function altinReklamKalan() { return Math.max(0, REKLAM_ALTIN_GUNLUK - altinReklamIzlenen()); }
+
+  var reklamBekliyor = false;   // ayni anda ikinci market reklami baslatilmasin
+
+  // Promise<{ odul:boolean, altin:number }>
+  function altinReklamIzle() {
+    if (reklamBekliyor || altinReklamKalan() <= 0 || reklamDurumu() !== 'hazir') return Promise.resolve({ odul: false, altin: 0 });
+    reklamBekliyor = true;
+    return reklamOynat().then(function (r) {
+      reklamBekliyor = false;
+      if (!r.odul || altinReklamKalan() <= 0) return { odul: false, altin: 0 };
+      kayit.ra = { g: bugun(), n: altinReklamIzlenen() + 1 };
+      window.AppProgress.gold = (window.AppProgress.gold || 0) + REKLAM_ALTIN;
+      window.AppSaveProgress({ market: kayit, gold: window.AppProgress.gold });
+      if (window.AppGold && window.AppGold.render) window.AppGold.render();
+      return { odul: true, altin: REKLAM_ALTIN };
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // REKLAMLA %20 INDIRIM — gunde 1 kez izlenir; hak kullanilana kadar durur
+  // (gun dolumu yok), ayni anda tek hak: hak varken yeniden izlenemez.
+  // ---------------------------------------------------------------
+  function indirimReklamBugunIzlendi() { return kayit.ig === bugun(); }
+  function indirimReklamUygunMu() { return !indirimHakkiVar() && !indirimReklamBugunIzlendi(); }
+
+  // Promise<{ odul:boolean }>
+  function indirimReklamIzle() {
+    if (reklamBekliyor || !indirimReklamUygunMu() || reklamDurumu() !== 'hazir') return Promise.resolve({ odul: false });
+    reklamBekliyor = true;
+    return reklamOynat().then(function (r) {
+      reklamBekliyor = false;
+      if (!r.odul || !indirimReklamUygunMu()) return { odul: false };
+      kayit.ih = 1;
+      kayit.ig = bugun();
+      yaz();
+      return { odul: true };
+    });
   }
 
   // ---------------------------------------------------------------
@@ -951,7 +999,8 @@ window.AppMarket = (function () {
     fiyat: fiyat,
     temelFiyat: temelFiyat,
     indirimliMi: indirimliMi,
-    indirimAc: indirimAc,
+    indirimHakkiVar: indirimHakkiVar,
+    INDIRIM_YUZDE: Math.round((1 - INDIRIM_CARPANI) * 100),
     toplama: function () {
       var t = satilikTemalar();
       return { sahip: t.filter(function (x) { return sahipMi(x.id); }).length, toplam: t.length };
@@ -963,6 +1012,8 @@ window.AppMarket = (function () {
     sandiklar: function () { return K.SANDIKLAR; },
     sandikBul: sandikBul,
     sandikAc: sandikAc,
+    sandikFiyat: sandikFiyat,
+    sandikTemelFiyat: sandikTemelFiyat,
     sandikDagilimi: sandikDagilimi,
     sandikDurum: sandikDurum,
     sandikCek: sandikCek,
@@ -971,6 +1022,15 @@ window.AppMarket = (function () {
     hediyeAl: hediyeAl,
     hediyeKalanMs: hediyeKalanMs,
     reklamVarMi: reklamVarMi,
+    reklamDurumu: reklamDurumu,
+    altinReklamIzle: altinReklamIzle,
+    altinReklamIzlenen: altinReklamIzlenen,
+    altinReklamKalan: altinReklamKalan,
+    REKLAM_ALTIN: REKLAM_ALTIN,
+    REKLAM_ALTIN_GUNLUK: REKLAM_ALTIN_GUNLUK,
+    indirimReklamIzle: indirimReklamIzle,
+    indirimReklamUygunMu: indirimReklamUygunMu,
+    indirimReklamBugunIzlendi: indirimReklamBugunIzlendi,
     reklamsizMi: reklamsizMi,
     reklamsizYap: reklamsizYap,
 

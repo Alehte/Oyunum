@@ -241,6 +241,59 @@
     return liste;
   }
 
+  /* ---------- 3b) SIKIŞMA TESPİTİ (yalniz oyun arayuzu kullanir) ----------
+     Hamle var ama ilerleme yok durumu: ornegin tek bos yer sarinin ustunde,
+     alti da sari olan siseden oraya bir sari dokulur, kaynakta yine tek bos
+     yer sarinin ustunde kalir; iki hamle sonsuza dek gidip gelir.
+     Olcu: KOSU sayisi (her sisedeki ardisik ayni renk dilimleri). Kosu
+     azalmasi = iki dilim birlesti = gercek ilerleme. Kazanma ve perde
+     acilmasi (yeni bilgi) de ilerleme sayilir.
+     ilerlemeVarMi: mevcut durumdan ulasilabilen durumlar taranir (BFS);
+     herhangi birinde ilerleme varsa true. Ulasilabilen her durum taranip
+     ilerleme bulunamazsa false ("Sikistin"). Tarama sinira takilirsa true
+     (emin degilsek oyuncuyu rahatsiz etme). Cozulebilir her durum true
+     verir: kazanma durumu ulasilabilirdir. Hamle kurallarina, cozucuye ve
+     uretece DOKUNMAZ; ilerlemesiz hamleler de gecerli kalir. */
+
+  function kosuSayisi(d) {
+    var n = 0;
+    for (var i = 0; i < d.tupler.length; i++) {
+      var t = d.tupler[i];
+      for (var k = 0; k < t.length; k++) if (k === 0 || t[k] !== t[k - 1]) n++;
+    }
+    return n;
+  }
+
+  function gizliToplam(d) {
+    var n = 0;
+    if (d.gizli) for (var i = 0; i < d.gizli.length; i++) n += d.gizli[i];
+    return n;
+  }
+
+  function ilerlemeVarMi(d, sinir) {
+    if (kazanildiMi(d)) return true;
+    var tavan = sinir || 3000;
+    var k0 = kosuSayisi(d), g0 = gizliToplam(d);
+    var gorulen = {};
+    gorulen[anahtar(d)] = true;
+    var kuyruk = [klonla(d)], bas = 0, sayac = 0;
+    while (bas < kuyruk.length) {
+      var s = kuyruk[bas++];
+      var hamleler = gecerliHamleler(s);
+      for (var i = 0; i < hamleler.length; i++) {
+        var y = klonla(s);
+        hamleUygula(y, hamleler[i][0], hamleler[i][1]);
+        if (gizliToplam(y) < g0 || kosuSayisi(y) < k0 || kazanildiMi(y)) return true;
+        var k = anahtar(y);
+        if (gorulen[k]) continue;
+        gorulen[k] = true;
+        if (++sayac > tavan) return true;
+        kuyruk.push(y);
+      }
+    }
+    return false;
+  }
+
   /* ---------- 4) ÇÖZÜCÜ ----------
      Cozucu gizli katmanlari YOK SAYAR (her seyi bilir). Gizli katman
      cozulebilirligi degistirmez, sadece oyuncunun bilgisini kisitlar. */
@@ -494,6 +547,8 @@
       acilanPerde: 0,
 
       oynanabilirMi: function () { return gecerliHamleler(this.durum).length > 0; },
+      /* Sikistin bilgisi icin: ulasilabilen durumlarda ilerleme var mi (3b) */
+      ilerlemeVarMi: function () { return ilerlemeVarMi(this.durum); },
 
       /* --- Joker: bos sise ekle. Tahtanin dengesini en cok degistiren
          mudahale oldugu icin bolum basina sinirli. --- */
@@ -569,6 +624,8 @@
     hamleGecerliMi: hamleGecerliMi,
     hamleUygula: hamleUygula,
     gecerliHamleler: gecerliHamleler,
+    ilerlemeVarMi: ilerlemeVarMi,
+    kosuSayisi: kosuSayisi,
     kazanildiMi: kazanildiMi,
     renkTamamlandiMi: renkTamamlandiMi,
     klonla: klonla,

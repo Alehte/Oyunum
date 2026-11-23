@@ -133,6 +133,85 @@
       }
     };
   })();
+  // ==== H2048 IKINCI SANS SAF BASLANGIC ====
+  // Ikinci sans (reklam izle ve devam et): silinecek karolari secen SAF kod. DOM'a
+  // dokunmaz; tools/h2048IkinciSansTest.js bu iki isaret arasini kesip node'da dener.
+  // Karo: {r, c, value, lock, wild, wall} (oyunun kendi karo nesneleri).
+  //   - Aday: duvar degil, joker degil, degeri > 0. Duvar ve jokere hic dokunulmaz.
+  //   - En kucuk degerden baslanir (2, sonra 4, sonra 8 ...), en fazla `adet` (6) karo.
+  //   - Bir degerin hepsi sigmiyorsa DAGINIK secilir: her adimda o ana kadar secilenlere
+  //     en kucuk Manhattan uzakligi EN BUYUK olan aday alinir; esitlikte rastgele.
+  //   - Silme sonrasi hamle yoksa bir karo daha silinir (once tek basina hamle acan en
+  //     kucuk aday; yoksa en kucuk dagik aday) ve yeniden denenir.
+  window.H2048IkinciSans = (function(){
+    function eslesir(a, b){                      // oyundaki canPair ile ayni kural
+      if(a.wall || b.wall) return false;
+      if(a.lock > 0 || b.lock > 0) return false;
+      if(a.wild && b.wild) return false;
+      if(a.wild || b.wild) return true;
+      return a.value === b.value;
+    }
+    // Gercek hamle denetimi: hareket edebilen (duvar/kilitli olmayan) bir karonun
+    // yaninda bos hucre ya da birlesebilecegi bir karo var mi.
+    function hamleVarMi(karolar, boyut){
+      const iz = {}; karolar.forEach(t => { iz[t.r + '_' + t.c] = t; });
+      const yon = [[0,1],[1,0],[0,-1],[-1,0]];
+      for(const a of karolar){
+        if(a.wall || a.lock > 0) continue;
+        for(const [dr, dc] of yon){
+          const r = a.r + dr, c = a.c + dc;
+          if(r < 0 || c < 0 || r >= boyut || c >= boyut) continue;
+          const b = iz[r + '_' + c];
+          if(!b || eslesir(a, b)) return true;
+        }
+      }
+      return false;
+    }
+    function sec(karolar, boyut, o){
+      o = o || {};
+      const adet = (typeof o.adet === 'number') ? o.adet : 6;
+      const rnd = o.rastgele || Math.random;
+      const adaylar = karolar.filter(t => !t.wall && !t.wild && t.value > 0);
+      const secilen = [];
+      const uzak = (a, b) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
+      const rastgeleBirini = liste => liste[Math.min(liste.length - 1, Math.floor(rnd() * liste.length))];
+      function enDagik(grup){                    // secilenlere en uzak aday(lar)dan biri
+        let iyi = [], iyiU = -1;
+        grup.forEach(t => {
+          let u = Infinity;
+          secilen.forEach(s => { const d = uzak(s, t); if(d < u) u = d; });
+          if(!secilen.length) u = 0;
+          if(u > iyiU){ iyiU = u; iyi = [t]; } else if(u === iyiU) iyi.push(t);
+        });
+        return rastgeleBirini(iyi);
+      }
+      const degerler = Array.from(new Set(adaylar.map(t => t.value))).sort((a, b) => a - b);
+      for(const v of degerler){
+        const yer = adet - secilen.length;
+        if(yer <= 0) break;
+        const grup = adaylar.filter(t => t.value === v);
+        if(grup.length <= yer){ grup.forEach(t => secilen.push(t)); continue; }
+        for(let k = 0; k < yer; k++){ const t = enDagik(grup); secilen.push(t); grup.splice(grup.indexOf(t), 1); }
+      }
+      const kalanlar = () => karolar.filter(t => secilen.indexOf(t) < 0);
+      while(!hamleVarMi(kalanlar(), boyut)){
+        const geri = adaylar.filter(t => secilen.indexOf(t) < 0);
+        if(!geri.length) break;
+        const sirali = Array.from(new Set(geri.map(t => t.value))).sort((a, b) => a - b);
+        let ek = null;
+        for(const v of sirali){                  // tek basina hamle acan en kucuk aday
+          const acan = geri.filter(t => t.value === v &&
+            hamleVarMi(karolar.filter(x => x !== t && secilen.indexOf(x) < 0), boyut));
+          if(acan.length){ ek = enDagik(acan); break; }
+        }
+        if(!ek) ek = enDagik(geri.filter(t => t.value === sirali[0]));
+        secilen.push(ek);
+      }
+      return { sil: secilen, hamleVar: hamleVarMi(kalanlar(), boyut) };
+    }
+    return { sec: sec, hamleVarMi: hamleVarMi };
+  })();
+  // ==== H2048 IKINCI SANS SAF SON ====
   // ============ HEDEF 2048 GAME LOGIC ============
   (function(){
     let SIZE = 5;
@@ -148,6 +227,9 @@
     const restartBtn = document.getElementById('restartBtn');
     let tiles = [], nextId = 1, score = 0, recordBroken = false, animating = false, cellStep = 0, gamesStarted = 0;
     let milestonesHit = new Set();   // sadece o oyundaki ILK 32/64/128... icin ses
+    // IKINCI SANS: kosu basina 1 kez. kosuNo her yeni oyunda / geri yuklemede artar;
+    // reklam sonucu geldiginde hala ayni kosuda miyiz diye bakilir.
+    let ikinciSansKullanildi = false, kosuNo = 0;
     function bestKey(){ return 'b' + SIZE; }
     function loadBest(){
       const rec = (window.AppProgress && window.AppProgress.bests) || {};
@@ -288,9 +370,12 @@
     // sorusunu bulaniklastirir. Tek slot: baska tahtaya gecmek eskisini siler (onay sorarak).
     let liveSession = null;                  // bu oturumda bellekteki aktif oyun
     function snapshot(){
-      return { size: SIZE, score: score,
+      const snap = { size: SIZE, score: score,
                tiles: tiles.map(t => [t.r, t.c, t.value, t.lock || 0, t.wild ? 1 : 0, t.wall ? 1 : 0]),
                milestones: Array.from(milestonesHit) };
+      // opsiyonel alan: yalnizca ikinci sans kullanildiysa yazilir (eski kayitlarda yok = kullanilmadi)
+      if(ikinciSansKullanildi) snap.ikinciSans = 1;
+      return snap;
     }
     function savedActive(){
       const st = window.AppProgress && window.AppProgress.g2048active;
@@ -315,6 +400,7 @@
       score = st.score;
       best = loadBest();
       milestonesHit = new Set(st.milestones || []);
+      ikinciSansKullanildi = !!st.ikinciSans; kosuNo++;
       gamesStarted = Math.max(gamesStarted, 2);   // rekor isigi calissin
       recordBroken = score > 0 && score >= best;
       scoreBoxEl.classList.toggle('record', recordBroken);
@@ -329,7 +415,7 @@
     // yaziliyordu; "kaldigin yerden devam" hic cikmiyordu.
     function newGame(){
       gamesStarted++; tiles = []; milestonesHit = new Set(); domTiles.forEach(el => el.remove()); domTiles.clear();
-      score = 0; recordBroken = false;
+      score = 0; recordBroken = false; ikinciSansKullanildi = false; kosuNo++;
       scoreBoxEl.classList.remove('record'); scoreBoxEl.classList.add('normal');
       rozetGizle();
       overlayEl.classList.remove('show'); placeWalls(); spawnTile(); spawnTile(); render();
@@ -511,8 +597,47 @@
           tiles.forEach(t => t.lock = 0); render();
           if(canMove()){ if(window.AppFX) window.AppFX.tone(660, 200, 0.14, 'triangle', 0.12); return; }
         }
-        playLoseSound(); showLoseOverlay(); clearActive();
+        kayip();
       }
+    }
+    // Hamle kalmadi. Reklam destekleniyorsa ve bu kosuda kullanilmadiysa once ikinci
+    // sans sorulur; yoksa (tarayici) eski kayip akisi AYNEN calisir.
+    function kayip(){
+      const R = window.Reklam;
+      const secim = (!ikinciSansKullanildi && R && R.destekleniyor() && window.H2048IkinciSans)
+        ? window.H2048IkinciSans.sec(tiles, SIZE) : null;
+      if(!secim || !secim.sil.length || !secim.hamleVar){ playLoseSound(); showLoseOverlay(); clearActive(); return; }
+      ikinciSansKullanildi = true;
+      // Pencere/reklam acikken sayfa kapanirsa kosu kaybedilmis sayilir (eski akistaki gibi
+      // kayit hemen silinir). Reklam izlenirse kayit ikinciSans:1 ile yeniden yazilir.
+      clearActive();
+      const kosu = kosuNo, silIds = new Set(secim.sil.map(t => t.id));
+      R.ikinciSans({ baslik: 'Hamle kalmadı',
+                     metin: 'Reklam izlersen en küçük ' + silIds.size + ' karo silinir, oyun sürer. Skorun: ' + score,
+                     evet: 'Reklam izle ve devam et' })
+        .then(ok => {
+          if(kosu !== kosuNo) return;            // bu arada yeni oyun basladi: sonucu yok say
+          if(ok) ikinciSansUygula(silIds, kosu);
+          else { playLoseSound(); showLoseOverlay(); }
+        });
+    }
+    // Secilen karolar kuculup kaybolur (azaltilmis hareket: hemen silinir), puan dusmez.
+    function ikinciSansUygula(silIds, kosu){
+      const azalt = !!document.querySelector('.phone.reduced-motion');
+      animating = true;
+      silIds.forEach(id => {
+        const el = domTiles.get(id);
+        if(el){ el.classList.remove('pop', 'merged', 'buyuk'); el.classList.add('ikinci-sil'); }
+      });
+      if(window.AppFX) window.AppFX.tone(660, 200, 0.14, 'triangle', 0.12);
+      setTimeout(() => {
+        animating = false;
+        if(kosu !== kosuNo) return;
+        tiles = tiles.filter(t => !silIds.has(t.id));
+        render();
+        saveState(); evaluateAfterMove();
+        if(queuedDir){ const d = queuedDir; queuedDir = null; move(d); }
+      }, azalt ? 0 : 260);
     }
     const gameScreenEl = document.getElementById('screen-game-2048');
     function gameVisible(){

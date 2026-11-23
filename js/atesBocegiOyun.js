@@ -3,7 +3,9 @@
 // burasi durumu cizer, girdiyi iletir ve koşu bitince sonucu kayda yazar.
 //
 // Disariya acilan arayuz: window.AtesBocegiOyun = { start, dur, temaDegisti, sifirla }
-// Kayit: AppProgress.atesBocegi = { rekor, kosu, gun, gunJeton }
+// Kayit: AppProgress.atesBocegi = { rekor, kosu, gun, gunJeton, bo? }
+//   bo (OPSIYONEL): ikinci sans teklifi / reklami suresince bekleyen odeme { p: puan, t: toz }.
+//   Uygulama o an kapanirsa oyun bir sonraki yuklenisinde odenir (bkz. eskiOdemeyiTamamla).
 (function () {
   'use strict';
 
@@ -74,6 +76,7 @@
   var puanEl = q('abPuan'), rekorEl = q('abRekor'), carpanEl = q('abCarpan'), isikEl = q('abIsik');
   var ipucuEl = q('abIpucu'), durEl = q('abDuraklat'), sonEl = q('abSonuc');
   var sonBaslik = q('abSonBaslik'), sonAlt = q('abSonAlt');
+  var geriSayimEl = q('abGeriSayim');   // ikinci sans geri sayimi (eski onbellekli index.html'de yoksa sayi gosterilmez)
 
   // ---------------------------------------------------------------
   // DURUM
@@ -91,6 +94,9 @@
   var hizOnbellek = 24, hizSayac = 0;
   var azHareketOn = false;
   var kanatFaz = 0, adimSayaci = 0;
+  // Ikinci sans (reklam): kosu basina bir kez. odemeBekliyor: odeme/kayit teklif sonucuna ertelendi.
+  // geriSayim: canlaninca kalan donuk sure (sn). zincirOnce: son adimdan onceki zincir (olumcul hasar zinciri sifirlar).
+  var sansKullanildi = false, odemeBekliyor = false, geriSayim = 0, geriSayimSon = 0, zincirOnce = 0;
 
   // olcu (css px + cihaz px)
   var dpr = 1, cssW = 0, cssH = 0, olcek = 1, ox = 0, oy = 0, S = 1, pxD = 1;   // pxD: 1 cihaz pikseli (dunya birimi)
@@ -1091,21 +1097,55 @@
   function kosuBitti() {
     if (bitisIsleniyor) return;
     bitisIsleniyor = true;
-    var ab = kayitOku(), bg = bugun(), puan = Math.floor(durum.puan), toz = durum.toz;
+    var ab = kayitOku(), puan = Math.floor(durum.puan), toz = durum.toz;
     if (!ab) {                       // desteklenmeyen (daha yeni) kayit surumu: yazma, odeme yok
       sonSonuc = { puan: puan, toz: toz, eskiRekor: 0, yeniRekor: false, esik: { jeton: 0, adet: 0 }, kj: { jeton: 0, ham: 0, aktif: true }, toplam: 0, gunJeton: 0, yazilmadi: true };
       return;
     }
+    sonSonuc = odemeUygula(ab, puan, toz);
+  }
+  // Rekor, esik odulu, kosu jetonu ve kosu sayaci; bekleyen odeme (bo) AYNI yazimda silinir
+  // (ne kaybolur ne iki kez odenir). Donus: sonuc karti verisi.
+  function odemeUygula(ab, puan, toz) {
+    var bg = bugun();
     var gunJeton = ab.gun === bg ? ab.gunJeton : 0, eskiRekor = ab.rekor, oncekiKosu = ab.kosu;
     var esik = AB.esikOdulu(eskiRekor, puan, AYAR), kj = AB.kosuJetonu(puan, toz, gunJeton, AYAR);
     var toplam = esik.jeton + kj.jeton;
     ab.rekor = Math.max(eskiRekor, puan);
     ab.kosu += 1; ab.gun = bg; ab.gunJeton = gunJeton + kj.ham;
+    delete ab.bo;
     // Kayit ve jeton tek yazimda: ab bellekte guncel, AppGold.add tum ilerlemeyi bir kez yazar.
     if (toplam > 0 && window.AppGold) window.AppGold.add(toplam);
     else if (window.AppSaveProgress) window.AppSaveProgress({ atesBocegi: ab });
     rekor = ab.rekor;
-    sonSonuc = { puan: puan, toz: toz, eskiRekor: eskiRekor, yeniRekor: puan > eskiRekor && oncekiKosu > 0, esik: esik, kj: kj, toplam: toplam, gunJeton: gunJeton };
+    return { puan: puan, toz: toz, eskiRekor: eskiRekor, yeniRekor: puan > eskiRekor && oncekiKosu > 0, esik: esik, kj: kj, toplam: toplam, gunJeton: gunJeton };
+  }
+  // Ikinci sans teklifi acilmadan (bitti aninda) bekleyen odeme kalici kayda yazilir.
+  function bekleyenOdemeYaz() {
+    var ab = kayitOku();
+    if (!ab || !durum) return;
+    ab.bo = { p: Math.floor(durum.puan), t: durum.toz };
+    if (window.AppSaveProgress) window.AppSaveProgress({ atesBocegi: ab });
+  }
+  // Reklam izlendi, kosu suruyor: bekleyen odeme kayittan kalkar (odeme gercek bitiste).
+  function bekleyenOdemeSil() {
+    var ab = kayitOku();
+    if (!ab || ab.bo === undefined) return;
+    delete ab.bo;
+    if (window.AppSaveProgress) window.AppSaveProgress({ atesBocegi: ab });
+  }
+  // Oyun yuklenince bir kez: onceki oturumda teklif / reklam sirasinda kapanmis kosu odenir.
+  // Bozuk bo odenmeden silinir. Daha yeni kayit surumune (kayitOku null) dokunulmaz.
+  function eskiOdemeyiTamamla() {
+    var ab = kayitOku(), bo;
+    if (!ab || ab.bo === undefined) return;
+    bo = ab.bo;
+    if (bo && typeof bo === 'object' && !Array.isArray(bo) && sayi(bo.p) === bo.p && sayi(bo.t) === bo.t) {
+      odemeUygula(ab, Math.floor(bo.p), Math.floor(bo.t));
+      return;
+    }
+    delete ab.bo;
+    if (window.AppSaveProgress) window.AppSaveProgress({ atesBocegi: ab });
   }
 
   function jetonSatiri(ad, miktar, sinif) {
@@ -1163,7 +1203,8 @@
         titret([30, 40, 60]);
         olumTur = o.sebep === 'zemin' ? 'zemin' : 'isik';
         basili = false; isaretciler = 0; tusBasili = false;   // girdi kilidi (aktifMi zaten bitti'de girdiyi yutar)
-        kosuBitti();                 // odul + kayit tek kez (bitisIsleniyor); sonuc karti sonme bitince dongude gelir
+        if (sansVar()) { odemeBekliyor = true; bekleyenOdemeYaz(); }   // ikinci sans teklifi sonme bitince: odeme teklif sonucuna kadar bekler (kapanirsa kayitta kalir)
+        else kosuBitti();            // odul + kayit tek kez (bitisIsleniyor); sonuc karti sonme bitince dongude gelir
         sonme = 0;
         ton(520, 55, sonmeSuresi() + 0.1, 'sine', 0.09);     // sonme sesi
       }
@@ -1182,9 +1223,11 @@
     dt = Math.min(dt, MAKS_FARK);
     zaman = saniye;
     if ((kare++ & 31) === 0) azHareketOn = azHareket();
-    if (!bekle && !duraklatildi && !durum.bitti) {
+    if (!bekle && !duraklatildi && !durum.bitti && geriSayim > 0) geriSayimIlerlet(dt);   // ikinci sans: dunya donuk
+    else if (!bekle && !duraklatildi && !durum.bitti) {
       birikim += dt;
       while (birikim >= DT && !durum.bitti) {
+        zincirOnce = durum.zincirSure > DT ? durum.zincir : 0;   // bu adimda suresi dolmayacak zincir
         olaylar = AB.adim(durum, basili);
         if (olaylar.length) olayIsle(olaylar);
         izKaydet();
@@ -1201,6 +1244,7 @@
       if (sonme >= sure) {
         sonme = -1;
         ciz(0);                                      // tam karanlik kare
+        if (odemeBekliyor) { rafDurdur(); teklifAc(); return; }   // dongu teklif ve reklam boyunca durur
         sonucGoster(); rafDurdur();
         return;
       }
@@ -1216,10 +1260,71 @@
   }
 
   // ---------------------------------------------------------------
+  // IKINCI SANS (reklam, docs/gorev-reklam.md 1.4)
+  // Reklam desteklenmiyorsa (normal tarayici) hic devreye girmez: odeme bitti olayinda, sonuc karti sonme bitince (eski
+  // akis aynen). Destek varsa ve bu kosuda kullanilmadiysa (her olum turu: isik ve zemin) odeme ertelenir; sonme bitince
+  // (tam karanlik kare) dongu durur, teklif acilir. Hayir / geri / reklam yarida: odeme + sonuc karti. Reklam sonuna
+  // kadar izlendi ve hala ayni kosu: AB.ikinciSans, GERI_SAYIM sn donuk dunya, sonra devam. Ekrandan cikis (dur) bekleyen
+  // odemeyi hemen yapar; gec gelen teklif sonucu kosuNo ile ayiklanir.
+  // ---------------------------------------------------------------
+  function sansVar() {
+    var R = window.Reklam;
+    if (sansKullanildi || !R || typeof R.ikinciSans !== 'function' || typeof R.destekleniyor !== 'function') return false;
+    try { return R.destekleniyor() === true; } catch (e) { return false; }
+  }
+  function odemeyiTamamla() { if (odemeBekliyor) { odemeBekliyor = false; kosuBitti(); } }
+  function teklifAc() {
+    var no = kosuNo, p;
+    sansKullanildi = true;                     // kosu basina bir kez (reddedilse ya da reklam yarida kalsa da)
+    try {
+      p = window.Reklam.ikinciSans({ baslik: 'Işık söndü', metin: 'Reklam izlersen ışığın yarıya dolar, kaldığın yerden devam edersin.',
+        evet: 'Reklam izle ve devam et', hayir: 'Hayır, bitir' });
+    } catch (e) { p = null; }
+    Promise.resolve(p).then(function (r) { teklifSonuc(no, r === true); }, function () { teklifSonuc(no, false); });
+  }
+  function teklifSonuc(no, tamam) {
+    if (no !== kosuNo || !calisiyor || !durum || !durum.bitti || !odemeBekliyor) return;   // kosu degisti / ekran kapandi
+    if (!tamam || ekran.classList.contains('offstage')) { odemeyiTamamla(); sonucGoster(); return; }
+    canlan();
+  }
+  function canlan() {
+    AB.ikinciSans(durum, { zincir: zincirOnce });
+    odemeBekliyor = false;                     // kosu simdi surer; odeme gercek bitiste (bitisIsleniyor hic kurulmadi)
+    bekleyenOdemeSil();
+    olumTur = ''; sonme = -1;
+    basili = false; isaretciler = 0; tusBasili = false;
+    izN = 0; izBas = 0; parc.fill(0); parcBirikim = 0;   // dusus/sonme izi yeni konuma cizgi cekmesin
+    hizOnbellek = AB.zorluk(durum.mesafe).hiz;
+    birikim = 0; sonZaman = 0;
+    geriSayim = AB.IKINCI_SANS.GERI_SAYIM; geriSayimSon = 0; geriSayimYaz();
+    ton(392, 784, 0.25, 'triangle', 0.08);
+    if (!rafId) rafId = requestAnimationFrame(dongu);
+  }
+  function geriSayimIlerlet(dt) {
+    geriSayim -= dt;
+    if (geriSayim <= 1e-9) { geriSayim = 0; birikim = 0; geriSayimGizle(); ton(660, 990, 0.12, 'sine', 0.07); return; }
+    geriSayimYaz();
+  }
+  function geriSayimYaz() {
+    var n = Math.ceil(geriSayim - 1e-9);
+    if (n === geriSayimSon) return;
+    geriSayimSon = n;
+    if (n > 0 && sonZaman) ton(520, 520, 0.08, 'sine', 0.06);   // her saniye kisa tik (ilk karede canlanma sesi caliyor)
+    if (!geriSayimEl) return;
+    geriSayimEl.textContent = String(n);
+    geriSayimEl.classList.add('show');
+  }
+  function geriSayimGizle() {
+    geriSayim = 0; geriSayimSon = 0;
+    if (geriSayimEl) { geriSayimEl.classList.remove('show'); geriSayimEl.textContent = ''; }
+  }
+
+  // ---------------------------------------------------------------
   // KOSU YASAM DONGUSU
   // ---------------------------------------------------------------
   function yeniKosu() {
     rafDurdur();
+    odemeyiTamamla();                 // acik teklifin kosusu (normalde dur() zaten odedi)
     kosuNo++;
     durum = AB.oyunOlustur(tohumUret());
     var kk = kayitOku(); rekor = Math.max(rekor, kk ? kk.rekor : 0);
@@ -1230,6 +1335,7 @@
     hizOnbellek = AB.zorluk(0).hiz; hizSayac = 0; parcBirikim = 0;
     parc.fill(0); kanatFaz = 0; azHareketOn = azHareket();
     sonme = -1; olumTur = '';
+    sansKullanildi = false; geriSayimGizle();
     sonEl.classList.remove('show'); durEl.classList.remove('show');
     ipucuEl.classList.remove('show'); void ipucuEl.offsetWidth; ipucuEl.classList.add('show');     // belirme animasyonu her kosuda yeniden
     hudSifirla();
@@ -1257,6 +1363,8 @@
 
   function dur() {
     rafDurdur();
+    odemeyiTamamla();                 // sonme ya da teklif sirasinda cikis: bitmis kosu odenir (teklif sonucu artik yok sayilir)
+    geriSayimGizle();
     calisiyor = false; duraklatildi = false; basili = false; isaretciler = 0; tusBasili = false;
     kosuNo++; sonme = -1;                       // sonme akisi biter; sonuc karti gelmez
     durEl.classList.remove('show'); sonEl.classList.remove('show');
@@ -1309,6 +1417,8 @@
   if (window.ResizeObserver) new ResizeObserver(olcuDegisti).observe(alan);
   else window.addEventListener('resize', olcuDegisti);
 
+  eskiOdemeyiTamamla();
+
   // ---------------------------------------------------------------
   // DISARI
   // ---------------------------------------------------------------
@@ -1329,6 +1439,7 @@
     },
     // AppReset: acik kosuyu at, HUD'u sifirla
     sifirla: function () {
+      odemeBekliyor = false;     // sifirlanan kayda eski kosu yazilmaz
       dur();
       durum = null; rekor = 0; sonSonuc = null;
       hudSifirla();

@@ -341,6 +341,29 @@
   var Y_UYAN = D.Y_ALT - M.SERSEM_UYANMA_ORAN * (D.Y_ALT - D.Y_UST);
   var FREN_UST = frenMesafesi(M, D.DT, -1), FREN_ALT = frenMesafesi(M, D.DT, 1);
 
+  // Ikinci sans (reklam, docs/gorev-reklam.md 1.4). AYAR gruplarina katilmaz (AYAR 3.8 gruplari sabit); ayni sekilde donuk.
+  // Yukseklik bandi zemin tarafinda uyanma yuksekligiyle ayni (durgun bocek T_MIN gecikmeyle de zemine degmez,
+  // ayarDogrula 'uyaninca' degismezi), tavan tarafinda ona simetrik.
+  var IKINCI_SANS = dondur({
+    ISIK: 0.5,                          // isik en az bu orana dolar (zemin olumunde fazlasi korunur)
+    GERI_SAYIM: 3,                      // sn: dunya donuk (adim yok), sonra devam; sayaci arayuz tutar
+    TEMIZ_SN: 2,                        // bocegin onunde bu kadar saniyede bocege varacak dilimlerin tehlikeleri silinir
+    Y_MIN: D.Y_UST + (D.Y_ALT - Y_UYAN), Y_MAX: Y_UYAN
+  });
+  (function () {
+    var S = IKINCI_SANS, h = [], enGenis = Math.max(U.DAL_GEN, U.AG_GEN, U.KUS_GEN, U.DUSEN_GEN);
+    if (!(S.ISIK > 0 && S.ISIK <= 1)) h.push('ISIK (0, 1] disinda');
+    if (!(S.GERI_SAYIM >= 2 && S.GERI_SAYIM <= 3)) h.push('GERI_SAYIM 2-3 sn disinda');
+    if (!(S.Y_MIN < S.Y_MAX && S.Y_MIN > D.Y_UST + FREN_UST)) h.push('Y_MIN tavana fren payindan yakin');
+    if (!(S.Y_MAX + uyanmaDususu(M, D.DT, AD.T_MIN) < D.Y_ALT)) h.push('Y_MAX: T_MIN gecikmeli oyuncu zemine degiyor');
+    if (!(S.TEMIZ_SN > AD.T_MIN + AD.T_IVME)) h.push('TEMIZ_SN <= T_MIN + T_IVME');
+    // ilk kalan dilimin bosluk merkezi [MERKEZ_MIN, MERKEZ_MAX]; banda kistirilinca kalan fark kural 3 hiziyla kapanmali
+    if (!(Math.max(S.Y_MIN - U.MERKEZ_MIN, U.MERKEZ_MAX - S.Y_MAX, 0) <= AD.V_GUVENLI * (S.TEMIZ_SN - AD.T_MIN - AD.T_IVME)))
+      h.push('kistirilan dogma yuksekligi bosluga yetismiyor');
+    if (!(Z.HIZ_TAVAN * S.TEMIZ_SN + enGenis < U.UFUK)) h.push('temizlik uretim ufkunun otesinde (ilk kalan dilim yok)');
+    if (h.length) throw new Error('AtesBocegi.IKINCI_SANS gecersiz: ' + h.join('; '));
+  })();
+
   // ---------------------------------------------------------------
   // URETICI (3.4, 3.5)
   // ---------------------------------------------------------------
@@ -879,6 +902,42 @@
     return olay;
   }
 
+  // ---------------------------------------------------------------
+  // IKINCI SANS (saf; tools/atesBocegiIkinciSansTest.js)
+  // ---------------------------------------------------------------
+  // Guvenli yeniden dogma secimi; d'yi degistirmez. Dilimin bocege varis zamani s.x'tir (kus da sabit engellerle ayni
+  // anda varir, bkz. adayKur). Bocegin onunde TEMIZ_SN sn icinde varacak (s.x < sinir) ve geride kalmamis dilimler
+  // temizlenecek dilimlerdir; ilk kalan dilimin (s.x >= sinir) bomba/sarmasigi da onun yaklasma yolundadir (toz araligi,
+  // x < s.x): o da silinir. Yukseklik: ilk kalan dilimin bosluk merkezi, [Y_MIN, Y_MAX] bandina kistirilmis.
+  // Donus: { y, temiz: [dilim indeksi], ilk: dilim indeksi (-1: yok; IKINCI_SANS dogrulamasi ufuk icinde garanti eder) }.
+  function dogmaSec(d) {
+    var S = IKINCI_SANS, bx = d.mesafe + D.X_BOCEK, sinir = bx + zorluk(d.mesafe).hiz * S.TEMIZ_SN, temiz = [], ilk = -1, i, s;
+    for (i = 0; i < d.dilimler.length; i++) {
+      s = d.dilimler[i];
+      if (s.x + s.w < bx - M.R_CARPMA) continue;          // geride: bocege bir daha degmez (kusu da geride, daha hizli uzaklasir)
+      if (s.x < sinir) temiz.push(i); else { ilk = i; break; }
+    }
+    return { y: kistir(ilk >= 0 ? d.dilimler[ilk].c : D.Y_BASLA, S.Y_MIN, S.Y_MAX), temiz: temiz, ilk: ilk };
+  }
+  // Ikinci sansi uygular (d'yi degistirir; yalniz bitmis kosuda). dogmaSec'in dilimlerinde engel, bomba ve sarmasik
+  // silinir (toz ve kivilcim kalir); bocek y'de durgun, sersemlik ve dokunulmazlik yok, zemin korumasi uyanmadaki gibi
+  // ZEMIN_KORUMA; isik en az ISIK. Puan, mesafe, toz sayisi, esik puani ve bolge aynen kalir. Carpan: o.zincir verilirse
+  // (arayuz olumcul adimdan onceki zinciri verir; hasar zinciri sifirlar) zincir ona doner; zincir > 0 ise sure tazelenir.
+  // Donus: dogmaSec sonucu (bitmemis kosuda null, durum degismez).
+  function ikinciSans(d, o) {
+    if (!d || !d.bitti) return null;
+    var sec = dogmaSec(d), i, s, z = o && typeof o.zincir === 'number' && o.zincir > 0 ? Math.floor(o.zincir) : 0;
+    for (i = 0; i < sec.temiz.length; i++) { s = d.dilimler[sec.temiz[i]]; s.engeller = []; s.bomba = null; s.sarmasik = null; }
+    if (sec.ilk >= 0) { s = d.dilimler[sec.ilk]; s.bomba = null; s.sarmasik = null; }
+    d.bitti = 0; d.sebep = '';
+    d.y = sec.y; d.vy = 0; d.ay = 0;
+    d.sersem = 0; d.dokunulmaz = 0; d.zeminKoruma = M.ZEMIN_KORUMA;
+    d.isik = Math.min(1, Math.max(d.isik, IKINCI_SANS.ISIK));
+    if (z > d.zincir) d.zincir = z;
+    d.zincirSure = d.zincir > 0 ? P.ZINCIR_SURE : 0;
+    return sec;
+  }
+
   // EKONOMI-BASI (tools/atesBocegiTest.js bu blogu ayri calistirir; yalniz `ayar` parametresini kullanir)
   function esikOdulu(eskiRekor, puan, ayar) {
     var e = ayar.ekonomi, toplam = 0, adet = 0, k, esik, o;
@@ -908,6 +967,7 @@
     bolgeNo: bolgeNo, carpan: carpan, uretimPuani: uretimPuani, ileriTozPuani: ileriTozPuani,
     ureticiOlustur: ureticiOlustur, dilimZarfi: dilimZarfi,
     oyunOlustur: oyunOlustur, adim: adim,
+    IKINCI_SANS: IKINCI_SANS, dogmaSec: dogmaSec, ikinciSans: ikinciSans,
     esikOdulu: esikOdulu, kosuJetonu: kosuJetonu
   };
 });

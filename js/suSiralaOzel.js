@@ -238,6 +238,57 @@
     return liste;
   }
 
+  /* SIKIŞMA TESPİTİ (yalniz oyun arayuzu kullanir; kurallara/cozucuye dokunmaz).
+     Normal siseler arasinda ilerlemesiz gidip gelme olabilir (ayni rengi tek
+     bos yere dokup geri almak). Ulasilabilen durumlar yalniz sise->sise
+     hamleleriyle taranir; su durumlardan biri gorulurse ilerleme var:
+     kazanma, normal siselerde kosu (ayni renk dilimi) sayisinin azalmasi,
+     herhangi bir kaba dokum (geri alinamaz, oyunu ilerletir) ya da camur
+     vermeyen bir karistirma. Camur varsa bolum olu: ilerleme yok.
+     Tarama sinira takilirsa true (emin degilsek rahatsiz etme). */
+  function siseKosuSayisi(d) {
+    var n = 0;
+    for (var i = 0; i < d.tupler.length; i++) {
+      if (d.kapMi[i]) continue;
+      var t = d.tupler[i];
+      for (var k = 0; k < t.length; k++) if (k === 0 || t[k] !== t[k - 1]) n++;
+    }
+    return n;
+  }
+
+  function ilerlemeVarMi(d, sinir) {
+    if (kazanildiMi(d)) return true;
+    if (camurVarMi(d)) return false;
+    var tavan = sinir || 3000;
+    var k0 = siseKosuSayisi(d);
+    var gorulen = {};
+    gorulen[anahtar(d)] = true;
+    var kuyruk = [klonla(d)], bas = 0, sayac = 0;
+    while (bas < kuyruk.length) {
+      var s = kuyruk[bas++];
+      var hamleler = gecerliHamleler(s);
+      for (var i = 0; i < hamleler.length; i++) {
+        var a = hamleler[i][0], b = hamleler[i][1];
+        if (b === -1) {
+          var dk = klonla(s);
+          var r = karistir(dk, a);
+          if (r && !r.camur) return true;
+          continue;
+        }
+        if (s.kapMi[b]) return true;
+        var y = klonla(s);
+        hamleUygula(y, a, b);
+        if (siseKosuSayisi(y) < k0 || kazanildiMi(y)) return true;
+        var k = anahtar(y);
+        if (gorulen[k]) continue;
+        gorulen[k] = true;
+        if (++sayac > tavan) return true;
+        kuyruk.push(y);
+      }
+    }
+    return false;
+  }
+
   /* Cozucu ve oturum ayni yoldan gecsin diye tek giris noktasi */
   function hamleIsle(d, a, b) {
     if (b === -1) {
@@ -616,6 +667,8 @@
 
       oynanabilirMi: function () { return gecerliHamleler(this.durum).length > 0; },
       camurluMu: function () { return camurVarMi(this.durum); },
+      /* Sikistin bilgisi icin: ilerleme olan hamle kaldi mi */
+      ilerlemeVarMi: function () { return ilerlemeVarMi(this.durum); },
       kazandiMi: function () { return kazanildiMi(this.durum); },
 
       dok: function (a, b) {
@@ -697,6 +750,7 @@
     gecerliHamleler: gecerliHamleler,
     kazanildiMi: kazanildiMi,
     camurVarMi: camurVarMi,
+    ilerlemeVarMi: ilerlemeVarMi,
 
     CozucuOlustur: CozucuOlustur,
     cozumYolu: cozumYolu,

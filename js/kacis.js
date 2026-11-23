@@ -417,8 +417,53 @@
       if(kcHearts === 0){
         // "dın dın dııın" — kaybetme
         if(window.AppFX) window.AppFX.seq([[440,.15,.14,0],[370,.15,.14,170],[247,.52,.16,350]], 'sine');
-        setTimeout(showFailScreen, 520);
+        const oturum = kcOturum;
+        setTimeout(() => { if(oturum === kcOturum && kcHearts <= 0 && !kcKazanildi) kcKayip(); }, 520);
       }
+    }
+
+    // ---- REKLAM ortak: bolum oturumu + "hala bu bolum ekraninda mi" ----
+    // Reklam sonucu gec gelebilir (geri tusu, sahte katman suresi). Sonuc geldiginde
+    // oturum degistiyse (yeni bolum / Tekrar Dene / Bastan) ya da ekran terk edildiyse
+    // odul UYGULANMAZ.
+    let kcOturum = 0;                    // her loadLevel'de artar
+    function kcEkranda(){
+      const el = document.getElementById('screen-kacis-level1');
+      return !!el && !el.classList.contains('offstage') && (el.style.transform || '').indexOf('100%') < 0;
+    }
+    function kcReklamVar(){ return !!(window.Reklam && window.Reklam.destekleniyor()); }
+
+    // ---- ikinci sans: 3 kalp bitince "Reklam izle, 3 kalple devam et" ----
+    // Deneme (loadLevel) basina EN COK 1 kez sorulur. Kabul edilip reklam sonuna kadar
+    // izlenirse kalpler 3'e dolar, tahta oldugu gibi kalir. Ikinci sansla gecilen
+    // bolum altin/rekor icin 1 kalple gecilmis sayilir (bkz. kcKalpSayisi).
+    let kcIkinciSansSoruldu = false, kcIkinciSansAlindi = false;
+    // Kazanma basladi (kahraman / son yilan cikti): ikinci sans artik sorulmaz, acik
+    // pencere kapatilir, gec gelen sonuc uygulanmaz. loadLevel sifirlar.
+    let kcKazanildi = false;
+    function kcKalpSayisi(){ return kcIkinciSansAlindi ? Math.min(1, kcHearts) : kcHearts; }
+    function kcKayip(){
+      if(kcIkinciSansSoruldu || !kcReklamVar() || !kcEkranda()){ showFailScreen(); return; }
+      kcIkinciSansSoruldu = true;
+      const oturum = kcOturum;
+      window.Reklam.ikinciSans({
+        baslik: 'Kalplerin bitti',
+        metin: 'Reklam izlersen 3 kalple kaldığın yerden devam edersin. Bu bölümü geçersen 1 kalple geçmiş sayılırsın.',
+        evet: 'Reklam izle, 3 kalple devam et',
+        hayir: 'Hayır, bitir'
+      }).then(ok => {
+        if(oturum !== kcOturum || kcHearts > 0 || kcKazanildi) return;   // bolum degisti / kazanildi
+        if(ok && kcEkranda()){
+          kcIkinciSansAlindi = true;
+          kcHearts = KC_MAX_HEARTS;
+          renderHearts(-1);
+          renderHintBtn();
+          if(kcIpucuDizi > 0) kcIpucuIsaretle();
+          if(window.AppFX) window.AppFX.tone(660, 990, 0.2, 'triangle', 0.1);
+          return;
+        }
+        showFailScreen();                                    // "Hayır, bitir" / odulsuz kapatma
+      }, () => { if(oturum === kcOturum && kcHearts <= 0 && !kcKazanildi && kcEkranda()) showFailScreen(); });
     }
 
     // ---- ipucu: fiyat bolum icinde artar (20/30/50), her bolumde sifirlanir ----
@@ -432,10 +477,17 @@
       if(!btn) return;
       const price = hintPrice();
       const affordable = window.AppGold && window.AppGold.get() >= price;
-      btn.innerHTML = '<svg class="bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2Z"/></svg>' +
-        'İpucu <span class="price">' + window.CoinSVG(true) + price + '</span>';
-      btn.disabled = !affordable || kcHearts <= 0;
+      const bulb = '<svg class="bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2Z"/></svg>';
+      if(kcIpucuDizi > 0){
+        // reklamla alinmis sirali ipucu suruyor: dokununca isaret yeniden gosterilir (ucretsiz)
+        btn.innerHTML = bulb + 'İpucu <span class="price kc-ipucu-kalan">' + kcIpucuDizi + ' hamle</span>';
+        btn.disabled = kcHearts <= 0;
+        return;
+      }
+      btn.innerHTML = bulb + 'İpucu <span class="price">' + window.CoinSVG(true) + price + '</span>';
+      // reklam destegi varken altin yetmese de dugme acik: pencerede reklam secenegi var
+      btn.disabled = (!affordable && !kcReklamVar()) || kcHearts <= 0;
     }
     // Kahramani serbest birakmak icin gereken kume icinden SU AN hareket edebilen birini bul
       function findHintSnake(){
@@ -446,6 +498,17 @@
       const byId = {}; kcSnakes.forEach(s => byId[s.id] = s);
       const hero = byId['green'];
       if(!hero) return null;
+      const need = kcGerekliKume(occ, byId);
+      if(need.size === 0) return hero;                     // kahraman zaten serbest
+      for(const id of need){
+        const s = byId[id];
+        if(s && !findBlocker(s, occ)) return s;             // simdi oynanabilir olan ilk engel
+      }
+      return null;
+    }
+    // Kahramandan once MUTLAKA cikmasi gereken yilanlar: kahramanin yolunu kesenler,
+    // onlarin yolunu kesenler... (kapanis). findHintSnake ve kcCozumeKalan ortak kullanir.
+    function kcGerekliKume(occ, byId){
       const need = new Set(); const stack = ['green'];
       while(stack.length){
         const cur = byId[stack.pop()];
@@ -455,12 +518,87 @@
           if(!need.has(id)){ need.add(id); stack.push(id); }
         });
       }
-      if(need.size === 0) return hero;                     // kahraman zaten serbest
-      for(const id of need){
-        const s = byId[id];
-        if(s && !findBlocker(s, occ)) return s;             // simdi oynanabilir olan ilk engel
+      return need;
+    }
+    // Cozume kalan hamle (yilan cikisi) sayisi. Normal: gerekli kume + kahramanin kendisi
+    // (kume bir yilanin cikisiyla en fazla 1 kuculur: cikabilen yilanin yolunda kimse yoktur).
+    // Ozel: tahtada kalan (cikmakta olmayan) yilan sayisi.
+    function kcCozumeKalan(){
+      if(kcMode === 'ozel') return kcSnakes.filter(s => !s.exiting).length;
+      const byId = {}; kcSnakes.forEach(s => byId[s.id] = s);
+      const hero = byId['green'];
+      if(!hero || hero.exiting) return 0;
+      return kcGerekliKume(buildOccupancy(), byId).size + 1;
+    }
+
+    // ---- reklam ipucu (birim 'ipucu_joker'): 10 hamleye kadar SIRALI ipucu ----
+    // Cozume kalan hamle 10'dan azsa kalanin tamami. Her adimda findHintSnake'in
+    // sectigi yilan surekli isaretlenir; oyuncu hamle yaptikca bir sonrakine gecer.
+    // Hak, COZUME ILERLEYEN her cikista 1 azalir (onerilen yilan ya da gerekli kumeden
+    // baska bir yilan). Gereksiz (tuzak) yilan cikarilirsa hak yanmaz, isaret yeniden
+    // hesaplanir. Her adimdan sonra hak, cozume kalan hamleyle sinirlanir.
+    // Bolum yuklenince (yeni bolum / Tekrar Dene / Bastan) sifirlanir.
+    const KC_REKLAM_IPUCU = 10;
+    let kcIpucuDizi = 0, kcIpucuHedef = null;
+    function kcIpucuIsaretKaldir(){
+      if(kcIpucuHedef){
+        const hg = kcBodyEls.get(kcIpucuHedef);
+        if(hg) hg.svg.classList.remove('hint-mark', 'hint-surekli');
       }
-      return null;
+      kcIpucuHedef = null;
+    }
+    function kcIpucuIsaretle(){
+      kcIpucuIsaretKaldir();
+      if(kcIpucuDizi <= 0) return;
+      const t = findHintSnake();
+      if(!t){ kcIpucuDizi = 0; renderHintBtn(); return; }
+      kcIpucuHedef = t.id;
+      const hg = kcBodyEls.get(t.id);
+      if(hg){
+        hg.svg.classList.remove('hint-mark'); void hg.svg.getBoundingClientRect();
+        hg.svg.classList.add('hint-mark', 'hint-surekli');
+      }
+    }
+    // handleSnakeTap: bir yilan cikmaya basladiktan hemen sonra (once = cikistan onceki kalan)
+    function kcIpucuIlerle(once){
+      const sonra = kcCozumeKalan();
+      if(sonra < once) kcIpucuDizi -= (once - sonra);
+      kcIpucuDizi = Math.max(0, Math.min(kcIpucuDizi, sonra));
+      if(kcIpucuDizi > 0) kcIpucuIsaretle(); else kcIpucuIsaretKaldir();
+      renderHintBtn();
+    }
+    // Ipucu dugmesi. Reklam destegi yoksa (tarayici) eskisi gibi dogrudan altinli ipucu.
+    function kcIpucuTikla(){
+      if(kcHearts <= 0) return;
+      if(kcIpucuDizi > 0){
+        kcIpucuIsaretle();
+        if(window.AppFX) window.AppFX.tone(880, 1320, 0.18, 'triangle', 0.1);
+        return;
+      }
+      if(!kcReklamVar()){ useHint(); return; }
+      if(window.Reklam.acikMi()) return;
+      if(!findHintSnake()) return;
+      const kalan = Math.min(KC_REKLAM_IPUCU, kcCozumeKalan());
+      if(kalan <= 0) return;
+      const price = hintPrice();
+      const oturum = kcOturum;
+      window.Reklam.secim({
+        baslik: 'İpucu',
+        secenekler: [
+          { deger: 'altin', etiket: price + ' altın', alt: 'Tek hamle',
+            pasif: !(window.AppGold && window.AppGold.get() >= price) },
+          { deger: 'reklam', etiket: 'Reklam izle', alt: kalan + ' hamle sırayla', birim: 'ipucu_joker' }
+        ],
+        iptal: 'Vazgeç'
+      }).then(d => {
+        if(oturum !== kcOturum || !kcEkranda() || kcHearts <= 0) return;
+        if(d === 'altin'){ useHint(); return; }
+        if(d !== 'reklam') return;
+        kcIpucuDizi = Math.min(KC_REKLAM_IPUCU, kcCozumeKalan());
+        kcIpucuIsaretle();
+        renderHintBtn();
+        if(kcIpucuDizi > 0 && window.AppFX) window.AppFX.tone(880, 1320, 0.18, 'triangle', 0.1);
+      });
     }
     function useHint(){
       if(kcHearts <= 0) return;
@@ -474,7 +612,8 @@
       const hg = kcBodyEls.get(target.id);
       if(hg){
         hg.svg.classList.remove('hint-mark'); void hg.svg.getBoundingClientRect(); hg.svg.classList.add('hint-mark');
-        setTimeout(() => hg.svg.classList.remove('hint-mark'), 3300);
+        // reklam ipucu dizisi ayni yilani surekli isaretliyorsa ona dokunma
+        setTimeout(() => { if(!hg.svg.classList.contains('hint-surekli')) hg.svg.classList.remove('hint-mark'); }, 3300);
       }
       if(window.AppFX) window.AppFX.tone(880, 1320, 0.18, 'triangle', 0.1);
     }
@@ -553,8 +692,16 @@
       setTimeout(() => { box.innerHTML = ''; }, 1400);
     }
     function showWinCelebration(earned){
+      kcKazanildi = true;
+      // kahraman cikarken son kalp gittiyse acik ikinci sans / ipucu penceresi kapanir
+      // (sonucu kcKazanildi yuzunden uygulanmaz); oynayan reklama dokunulmaz.
+      if(window.Reklam && window.Reklam.pencereKapat) window.Reklam.pencereKapat();
       kcHideSwipeHint(false);
       kcHideTip();
+      kcIpucuDizi = 0; kcIpucuIsaretKaldir();
+      // reklam: bolum tamamlandi (sayac). Ozel bolumlerde de numara verilir (1-2 gecissiz).
+      const bolumNo = kcCurrentLevel;
+      if(window.Reklam) window.Reklam.bolumTamamlandi({ oyun: 'kacis', bolum: bolumNo });
       const txt = KC_WIN_TEXTS[Math.floor(Math.random() * KC_WIN_TEXTS.length)];
       paintBigText(document.getElementById('kcWinText'), txt, KC_WIN_GRAD);
       const gEl = document.getElementById('kcWinGold');
@@ -568,16 +715,22 @@
       burstConfetti();
       if(window.AppFX) window.AppFX.seq([[523.25,.16,.13,0],[659.25,.16,.13,90],[783.99,.16,.13,180],[1046.5,.3,.15,270]], 'triangle');
       setTimeout(() => {
-        kcOverlayEl.classList.remove('show');
-        kcRenderMap();
-        slideBack('kacisLevel1', kcMapKey());
+        const devam = () => {
+          kcOverlayEl.classList.remove('show');
+          kcRenderMap();
+          slideBack('kacisLevel1', kcMapKey());
+        };
+        // tamamlandi ekranindan cikarken gecis reklami (kurallar Reklam icinde);
+        // gosterilmezse hemen, gosterilirse kapaninca haritaya donulur
+        if(window.Reklam && kcEkranda()){
+          window.Reklam.gecisGoster({ oyun: 'kacis', bolum: bolumNo }).then(devam, devam);
+        } else devam();
       }, earned > 0 ? 1400 : 1300);
     }
     function showFailScreen(){
       kcHideSwipeHint(false);
       const txt = KC_FAIL_TEXTS[Math.floor(Math.random() * KC_FAIL_TEXTS.length)];
       paintBigText(document.getElementById('kcFailText'), txt, KC_FAIL_GRAD);
-      document.getElementById('kcAdNote').textContent = '';
       document.getElementById('kcFailOverlay').classList.add('show');
     }
     function kcMeasure(){
@@ -710,7 +863,7 @@
         }
         if(kcMode === 'ozel'){
           if(kcSnakes.length === 0){
-            const earned = awardOzelGold(kcCurrentLevel, kcHearts);
+            const earned = awardOzelGold(kcCurrentLevel, kcKalpSayisi());   // ikinci sansla: 1 kalp
             if(window.AppFX) window.AppFX.vibrate([18, 45, 18]);
             showWinCelebration(earned);
           }
@@ -718,7 +871,7 @@
         }
         if(snake.isHero){
           kcUnlockedLevel = Math.max(kcUnlockedLevel, Math.min(kcCurrentLevel + 1, KC_TOTAL_LEVELS));
-          const earned = awardGold(kcCurrentLevel, kcHearts);
+          const earned = awardGold(kcCurrentLevel, kcKalpSayisi());       // ikinci sansla: 1 kalp
           if(window.AppSaveProgress) window.AppSaveProgress({unlocked: kcUnlockedLevel});
           if(window.AppFX) window.AppFX.vibrate([18, 45, 18]);
           showWinCelebration(earned);
@@ -853,7 +1006,11 @@
         if(window.AppFX){ window.AppFX.tone(210, 120, 0.15, 'sine', 0.13); window.AppFX.vibrate(32); }
         loseHeart();
       }
-      else { exitSnake(snake); }
+      else {
+        const once = kcIpucuDizi > 0 ? kcCozumeKalan() : 0;
+        exitSnake(snake);
+        if(kcIpucuDizi > 0) kcIpucuIlerle(once);             // reklam ipucu dizisi ilerler
+      }
     }
     kcSnakeLayerEl.addEventListener('click', (e) => {
       const target = e.target.closest('.kc-snake');
@@ -974,7 +1131,7 @@
         const sahnede = ['screen-kacis-levels', 'screen-kacis-level1', 'screen-kacis-ozel', 'screen-kacis-mode']
           .some(id => !document.getElementById(id).classList.contains('offstage'));
         if(!sahnede) return;
-        if(kcSnakes.length){ buildKcCells(); kcRenderAll(); }
+        if(kcSnakes.length){ buildKcCells(); kcRenderAll(); if(kcIpucuDizi > 0) kcIpucuIsaretle(); }
         renderLevelNodes();
       }, 150);
     });
@@ -994,6 +1151,9 @@
     let kcIntroTimer = null;
     function loadLevel(n, yeniden){
       kcCurrentLevel = n;
+      kcOturum++;                // gec gelen reklam sonucu eski denemeye uygulanmasin
+      kcIpucuDizi = 0; kcIpucuHedef = null;
+      kcIkinciSansSoruldu = false; kcIkinciSansAlindi = false; kcKazanildi = false;
       kcSnakeLayerEl.innerHTML = '';
       kcArrowEl = null;          // katman temizlendi, ok elemani da gitti
       kcDomEls.clear();
@@ -1203,7 +1363,7 @@
       }
     }
 
-    document.getElementById('kcHintBtn').addEventListener('click', useHint);
+    document.getElementById('kcHintBtn').addEventListener('click', kcIpucuTikla);
     document.getElementById('kcBackToMapBtn').addEventListener('click', () => {
       document.getElementById('kcFailOverlay').classList.remove('show');
       kcRenderMap();
@@ -1220,10 +1380,6 @@
       if(kcOverlayEl.classList.contains('show')) return;
       if(document.getElementById('kcFailOverlay').classList.contains('show')) return;
       loadLevel(kcCurrentLevel, true);
-    });
-    document.getElementById('kcAdBtn').addEventListener('click', () => {
-      // reklam entegrasyonu henuz yok
-      document.getElementById('kcAdNote').textContent = 'Reklamlar yakında eklenecek.';
     });
 
     // ---- OZEL BOLUMLER (sekil bolumleri) ----

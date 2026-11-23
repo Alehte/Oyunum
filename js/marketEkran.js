@@ -1,7 +1,9 @@
 // marketEkran.js — MARKET'in gorunen yuzu.
 // Sadece DOM isi yapar; sahiplik/fiyat/secki/kutu sorularini AppMarket'e sorar.
 //
-// MAGAZA   : reklamsiz -> gunluk hediye -> kutular -> gunun seckisi (4 saatte bir)
+// MAGAZA   : reklamsiz -> gunluk hediye -> reklam satirlari (+200 altin, %20 indirim)
+//            -> kutular -> gunun seckisi (4 saatte bir)
+//            Reklam satirlari yalnizca Reklam.destekleniyor() iken gorunur (tarayicida gizli).
 // ENVANTER : butun temalar; sahip olunanlar "Kullan", digerleri kilitli
 //
 // ONIZLEME : kartlarda elle cizilmis resim YOK. Temanin gercek oyun nesneleri
@@ -274,6 +276,7 @@ window.MarketEkran = (function () {
     el.envanter  = q('mkEnvanter');
     el.noads     = q('mkNoAds');
     el.hediye    = q('mkHediye');
+    el.reklam    = q('mkReklam');
     el.sandiklar = q('mkSandiklar');
     el.vitrin    = q('mkVitrin');
     el.sayac     = q('mkVitrinSayac');
@@ -376,12 +379,18 @@ window.MarketEkran = (function () {
       return;
     }
 
-    if (eylem === 'indirim') {
+    if (eylem === 'reklamAltin' || eylem === 'reklamIndirim') {
       b.disabled = true;
       b.classList.add('bekliyor');
-      M.indirimAc(id, function (oldu) {
-        if (oldu) { mesaj('İndirim açıldı'); ciz(); }
-        else { b.disabled = false; b.classList.remove('bekliyor'); mesaj('Reklam tamamlanmadı'); }
+      var altinMi = eylem === 'reklamAltin';
+      (altinMi ? M.altinReklamIzle() : M.indirimReklamIzle()).then(function (r) {
+        if (r && r.odul) {
+          ses(700, 1050, .2, .18);
+          mesaj(altinMi ? '+' + r.altin + ' altın' : '%' + M.INDIRIM_YUZDE + ' indirim hakkın hazır');
+        } else {
+          mesaj('Reklam tamamlanmadı');
+        }
+        ciz();
       });
       return;
     }
@@ -389,7 +398,7 @@ window.MarketEkran = (function () {
     if (eylem === 'sandik') {
       var s = M.sandikBul(id);
       if (!s) return;
-      if (window.AppGold.get() < s.fiyat) {
+      if (window.AppGold.get() < M.sandikFiyat(id)) {
         if (window.AppFX) window.AppFX.vibrate(28);
         mesaj('Jeton yetmiyor');
         return;
@@ -493,12 +502,6 @@ window.MarketEkran = (function () {
       s += '<button class="mk-btn fiyat' + (yeter ? '' : ' pasif') + '"' +
            (yeter ? ' data-eylem="al" data-id="' + tema.id + '"' : ' disabled') + '>' +
            window.CoinSVG(true) + (indirimli ? '<s>' + temel + '</s>' : '') + '<span>' + f + '</span></button>';
-      if (indirimli) {
-        s += '<div class="mk-indirim acik">' + KAMERA_SVG + '%50 indirim aktif</div>';
-      } else if (M.reklamVarMi()) {   // reklam yoksa buton hic cikmaz
-        s += '<button class="mk-indirim" data-eylem="indirim" data-id="' + tema.id + '">' +
-             KAMERA_SVG + 'İzle · %50 indirim</button>';
-      }
     } else {
       s += '<div class="mk-kilit">' + KILIT_SVG + '<span>Kutudan ya da seçkiden</span></div>';
     }
@@ -529,8 +532,7 @@ window.MarketEkran = (function () {
       el.hediye.className = 'mk-hediye';
       el.hediye.innerHTML =
         '<span class="mk-hediye-yazi">GÜNLÜK ÜCRETSİZ HEDİYE</span>' +
-        '<button class="mk-hediye-btn" data-eylem="hediye">' +
-        (M.reklamVarMi() ? KAMERA_SVG + 'REKLAM İZLE &amp; AÇ' : 'AÇ') + '</button>';
+        '<button class="mk-hediye-btn" data-eylem="hediye">AÇ</button>';   // hediye her zaman reklamsiz
     } else {
       el.hediye.className = 'mk-hediye alindi';
       el.hediye.innerHTML =
@@ -539,18 +541,52 @@ window.MarketEkran = (function () {
     }
   }
 
+  // Hediyenin altindaki reklam satirlari. Destek yoksa (tarayici) kap tamamen gizli;
+  // reklam hazir degilse dugme pasif ve "Reklam hazır değil" yazar.
+  var reklamImza = '';
+  function reklamDurumImzasi() {
+    return [M.reklamDurumu(), M.altinReklamIzlenen(), M.indirimHakkiVar(), M.indirimReklamUygunMu()].join('|');
+  }
+  function reklamDugme(st, eylem) {
+    if (st !== 'hazir') return '<button class="rk-satir-btn pasif" disabled>Reklam hazır değil</button>';
+    return '<button class="rk-satir-btn" data-eylem="' + eylem + '">' + KAMERA_SVG + 'İZLE</button>';
+  }
+  function reklamCiz() {
+    if (!el.reklam) return;
+    reklamImza = reklamDurumImzasi();
+    var st = M.reklamDurumu();
+    if (st === 'gizli') { el.reklam.hidden = true; el.reklam.innerHTML = ''; return; }
+    var izl = M.altinReklamIzlenen(), top = M.REKLAM_ALTIN_GUNLUK, kalan = M.altinReklamKalan(), h = '';
+    h += '<div class="rk-satir' + (kalan ? '' : ' bitti') + '">' +
+         '<span class="rk-satir-yazi">Reklam izle +' + M.REKLAM_ALTIN + ' altın (' + izl + '/' + top + ')</span>' +
+         (kalan ? reklamDugme(st, 'reklamAltin') : '<span class="rk-satir-not">Yarın yine</span>') + '</div>';
+    if (M.indirimHakkiVar()) {
+      h += '<div class="rk-satir hak"><span class="rk-satir-yazi">%' + M.INDIRIM_YUZDE + ' indirim hakkın hazır</span>' +
+           '<span class="rk-satir-not">İlk tema ya da kutu alışında</span></div>';
+    } else {
+      var uygun = M.indirimReklamUygunMu();
+      h += '<div class="rk-satir' + (uygun ? '' : ' bitti') + '">' +
+           '<span class="rk-satir-yazi">Reklam izle, sonraki alışverişte %' + M.INDIRIM_YUZDE + ' indirim</span>' +
+           (uygun ? reklamDugme(st, 'reklamIndirim') : '<span class="rk-satir-not">Yarın yine</span>') + '</div>';
+    }
+    el.reklam.innerHTML = h;
+    el.reklam.hidden = false;
+  }
+
   function sandiklarCiz() {
-    var liste = M.sandiklar(), i, s = '', k, yeter, durum;
+    var liste = M.sandiklar(), i, s = '', k, yeter, durum, f;
     for (i = 0; i < liste.length; i++) {
       k = liste[i];
       durum = M.sandikDurum(k.id);
-      yeter = durum === 'aktif' && window.AppGold.get() >= k.fiyat;
+      f = M.sandikFiyat(k.id);
+      yeter = durum === 'aktif' && window.AppGold.get() >= f;
       s += '<div class="mk-sandik" style="--sandik-renk:' + k.renk + ';">' +
            sandikSVG(k.renk, koyulastir(k.renk)) +
            '<button class="mk-sandik-btn' + (yeter ? '' : ' pasif') + '"' +
            (yeter ? ' data-eylem="sandik" data-id="' + k.id + '"' : ' disabled') + '>' +
            '<b>' + k.ad.toLocaleUpperCase('tr-TR') + '</b>' +
-           (durum === 'aktif' ? '<span>' + window.CoinSVG(true) + k.fiyat + '</span>'
+           (durum === 'aktif' ? '<span>' + window.CoinSVG(true) +
+               (f !== k.fiyat ? '<s>' + k.fiyat + '</s>' : '') + f + '</span>'
              : '<span>' + (durum === 'tamam' ? 'Koleksiyon tamam' : 'Bu kutudan çıkacak tema kalmadı') + '</span>') +
            '</button></div>';
     }
@@ -594,6 +630,7 @@ window.MarketEkran = (function () {
     if (mod === 'magaza') {
       noAdsCiz();
       hediyeCiz();
+      reklamCiz();
       sandiklarCiz();
       vitrinCiz();
     } else {
@@ -625,6 +662,8 @@ window.MarketEkran = (function () {
       if (M.hediyeHazirMi()) hediyeCiz();
       else hs.textContent = sureYaz(M.hediyeKalanMs());
     }
+    // gun donumu (sayaclar sifirlanir) ya da reklam sonradan yuklendi / dustu
+    if (reklamDurumImzasi() !== reklamImza) reklamCiz();
   }
 
   // ---------------------------------------------------------------

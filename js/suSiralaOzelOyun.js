@@ -45,6 +45,7 @@
   var sonKazanilan = 0;
   var ogretimKilidi = false; /* tanitim yazisi / diyagram acikken tahta kilitli */
   var ogretimGorulen = {};   /* hangi tanitimlar zorunlu gosterildi */
+  var sikistiKapali = false; /* oyuncu Sikistin bilgisini kapatti; ilerleme olana kadar yeniden acilmaz */
 
   /* ---------- Kisayollar ---------- */
 
@@ -199,6 +200,7 @@
      ============================================================ */
 
   function haritaCiz() {
+    sikistiGizle();
     var ic = $('ssoHaritaIzgara');
     if (!ic) return;
     var p = ilerleme();
@@ -316,6 +318,29 @@
     secili = -1;
     doken = {}; dolan = {}; karistiran = {}; kutlanan = {};
     akanSayisi = 0;
+    sikistiKapali = false;
+    sikistiGizle();
+  }
+
+  /* ---------- Sikistin ----------
+     Kayip yok: camur olunca ya da ilerleten hamle kalmayinca
+     (SuSiralaOzel.ilerlemeVarMi) kapatilabilir bir bilgi cikar; tahta
+     kilitlenmez. Secenekler: Geri Al, Yeniden baslat (ozel modda joker yok). */
+  function sikistiGizle() {
+    var p = $('ssoSikisti');
+    if (p) p.hidden = true;
+  }
+
+  function sikistiGoster(camur) {
+    var metin = camur ? 'Çamur temizlenemez. Geri al ya da yeniden başla.'
+                      : 'İlerleten hamle kalmadı. Geri al ya da yeniden başla.';
+    var p = $('ssoSikisti');
+    if (!p) { mesajGoster(camur ? 'Çamur temizlenemez — geri al veya baştan başla' : 'Sıkıştın — geri al veya baştan başla'); return; }
+    var m = $('ssoSikistiMetin');
+    if (m) m.textContent = metin;
+    var geri = $('ssoSikistiGeri');
+    if (geri) geri.disabled = !oyun.gecmis.length;
+    p.hidden = false;
   }
 
   /* Tahtanin tamaminin bekledigi durumlar (geri al / bastan basla) */
@@ -1192,14 +1217,12 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
      ============================================================ */
 
   function sonKontrol() {
-    if (oyun.kazandiMi()) { setTimeout(bolumBitti, 240); return; }
-    if (oyun.camurluMu()) {
-      mesajGoster('Çamur temizlenemez — geri al veya baştan başla');
-      return;
-    }
-    if (!oyun.oynanabilirMi()) {
-      mesajGoster('Hamle kalmadı — geri al veya baştan başla');
-    }
+    if (oyun.kazandiMi()) { sikistiGizle(); setTimeout(bolumBitti, 240); return; }
+    var camur = oyun.camurluMu();
+    var ilerler = !camur && (typeof oyun.ilerlemeVarMi === 'function' ? oyun.ilerlemeVarMi() : oyun.oynanabilirMi());
+    if (ilerler) { sikistiKapali = false; sikistiGizle(); return; }
+    if (sikistiKapali) return;
+    sikistiGoster(camur);
   }
 
   /* yildiz sayisina gore toplam altin (0..3 yildiz) */
@@ -1278,23 +1301,34 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
       diyagramAc(false, null);
     });
 
-    var geri = $('ssoGeriBtn');
-    if (geri) geri.addEventListener('click', function () {
+    function geriAl() {
       if (!oyun || mesgul()) return;
       if (!oyun.geriAl()) { mesajGoster('Geri alınacak hamle yok'); return; }
       secili = -1;
+      sikistiGizle();
       tahtaKur(); barYenile();
       var s = $('ssoSonuc'); if (s) s.classList.remove('show');
-    });
+    }
+    var geri = $('ssoGeriBtn');
+    if (geri) geri.addEventListener('click', geriAl);
 
-    var bastan = $('ssoBastanBtn');
-    if (bastan) bastan.addEventListener('click', function () {
+    function bastanBasla() {
       if (!oyun || mesgul()) return;
       oyun.bastanBasla();
       sifirlaDurum();
       tahtaKur(); barYenile();
       var s = $('ssoSonuc'); if (s) s.classList.remove('show');
-    });
+    }
+    var bastan = $('ssoBastanBtn');
+    if (bastan) bastan.addEventListener('click', bastanBasla);
+
+    /* Sikistin bilgisi: secenekler alttaki Geri al / Bastan ile ayni yol */
+    var skGeri = $('ssoSikistiGeri');
+    if (skGeri) skGeri.addEventListener('click', geriAl);
+    var skBastan = $('ssoSikistiBastan');
+    if (skBastan) skBastan.addEventListener('click', bastanBasla);
+    var skKapat = $('ssoSikistiKapat');
+    if (skKapat) skKapat.addEventListener('click', function () { sikistiKapali = true; sikistiGizle(); });
 
     var sonraki = $('ssoSonrakiBtn');
     if (sonraki) sonraki.addEventListener('click', function () {
@@ -1330,6 +1364,7 @@ kapak.innerHTML = (global.AppMarket && global.AppMarket.siseKapakSvg ? global.Ap
   if (global.AppReset && global.AppReset.push) {
     global.AppReset.push(function () {
       if (global.AppProgress) { global.AppProgress.ssoAcik = 1; global.AppProgress.ssoYildiz = {}; }
+      sikistiGizle();
       oyun = null;
     });
   }

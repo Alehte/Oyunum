@@ -37,7 +37,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '20';
+var SURUM = '21';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
@@ -46,6 +46,8 @@ var CEKIRDEK = [
   'style.css',
   'manifest.json',
   'js/core.js',
+  'js/reklamAyar.js',
+  'js/reklam.js',
   'js/marketKatalog.js',
   'js/market.js',
   'js/marketEkran.js',

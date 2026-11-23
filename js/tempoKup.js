@@ -67,6 +67,9 @@
   // birlikte kaydedilir (tempoOyun.tb); oyun bitince bir kez odenip sifirlanir.
   var temizlikBirikim = 0;
   var sonKazanc = null;              // oyun sonunda odenen kazanc (bitis ekrani icin)
+  // Reklamli ikinci sans (kosu basina 1; kullanildi bilgisi oyun.ikinciSans, kayitta k.is).
+  // teklifBekliyor: kosu kaybedildi, kazanc HENUZ odenmedi, pencere sorulacak/acik.
+  var teklifBekliyor = false, teklifAcik = false;
   var hucreler = [], fxEl = null;
   var sonBoya = new Array(N * N);
   var suruk = null;                  // devam eden sürükleme
@@ -103,16 +106,24 @@
 
   function oyunKaydet() {
     if (!window.AppSaveProgress) return;
-    if (!oyun || oyun.bitti || oyun.hamle === 0) { window.AppSaveProgress({ tempoOyun: null }); return; }
-    window.AppSaveProgress({ tempoOyun: { k: oyun.kayit(), r: Array.prototype.slice.call(renk), t: tepsiRenk.slice(), rb: rekorBasta, tb: temizlikBirikim } });
+    // Ikinci sans teklifi beklerken kaybedilmis durum da saklanir (ib: 1, OPSIYONEL alan):
+    // uygulama o an kapanirsa acilista teklif yeniden sorulur ya da (destek yoksa)
+    // kazanc odenip oyun biter. Kazanc boylece ne kaybolur ne iki kez odenir.
+    var bekliyor = !!(oyun && oyun.bitti && teklifBekliyor);
+    if (!oyun || (oyun.bitti && !bekliyor) || oyun.hamle === 0) { window.AppSaveProgress({ tempoOyun: null }); return; }
+    var kayit = { k: oyun.kayit(), r: Array.prototype.slice.call(renk), t: tepsiRenk.slice(), rb: rekorBasta, tb: temizlikBirikim };
+    if (bekliyor) kayit.ib = 1;
+    window.AppSaveProgress({ tempoOyun: kayit });
   }
 
   function oyunYukle() {
     var kayit = window.AppProgress && window.AppProgress.tempoOyun;
     if (!kayit || !kayit.k || !(kayit.r instanceof Array) || kayit.r.length !== N * N) return false;
     var o = new C.Oyun();
-    if (!o.yukle(kayit.k)) return false;
+    // kaybedilmis kayit yalnizca ikinci sans teklifi bekliyorsa (ib) kabul edilir
+    if (!o.yukle(kayit.k) && !(kayit.ib === 1 && o.bitti)) return false;
     oyun = o;
+    teklifBekliyor = !!o.bitti;
     for (var i = 0; i < N * N; i++) {
       var dolu = !!(o.b[Math.floor(i / N)] & (1 << (i % N)));
       renk[i] = dolu ? (kayit.r[i] >= 0 ? kayit.r[i] : 0) : -1;
@@ -429,12 +440,71 @@
     }
     // tam temizlik = cekirdegin tanimi (hamle sonunda tahta tamamen bos)
     if (e.tam) temizlikBirikim += TEMIZLIK_ODUL;
+    // Kayip + reklam destegi + bu kosuda ikinci sans kullanilmadi: once teklif.
+    // Kazanc henuz odenmez; kaybedilmis durum "teklif bekliyor" olarak kaydedilir.
+    // (Tarayicida destek yok: asagidaki mevcut akis aynen calisir.)
+    if (e.bitti && ikinciSansVar()) {
+      teklifBekliyor = true;
+      oyunKaydet();
+      setTimeout(ikinciSansSor, e.hat ? 760 : 520);
+      return true;
+    }
     // Kazanc, oyunun bittigi kayitla AYNI anda odenir: arada uygulama kapanirsa
     // ne kaybolur ne de (yarim oyun kaydi silindigi icin) ikinci kez odenir.
     if (e.bitti) kazanciOde();
     oyunKaydet();
     if (e.bitti) setTimeout(oyunBitti, e.hat ? 760 : 520);
     return true;
+  }
+
+  // ---------------------------------------------------------------
+  // IKINCI SANS (reklam) — kayipta "Reklam izle ve devam et", kosu basina 1.
+  // Tempo hamleye bagli (sure yok): pencere/reklam suresince durdurulacak
+  // sayac yoktur. Izlenirse tepsiye tahtaya uyan 3 parca gelir
+  // (TempoCekirdek.ikinciSansSec); skor, seri ve sabir (carpan) korunur.
+  // ---------------------------------------------------------------
+  function ikinciSansVar() {
+    return !!(oyun && !oyun.ikinciSans && window.Reklam && window.Reklam.destekleniyor());
+  }
+
+  function ikinciSansSor() {
+    var kosu = oyun;
+    if (!kosu || !kosu.bitti || !teklifBekliyor || teklifAcik) return;
+    if (!ikinciSansVar()) { kayipBitir(); return; }   // destek yok / hak kullanildi: mevcut kayip akisi
+    if (ekran.classList.contains('offstage')) return;  // oyun ekranina donunce start() yeniden sorar
+    teklifAcik = true;
+    window.Reklam.ikinciSans({
+      baslik: 'Yer kalmadı',
+      metin: 'Reklam izlersen tahtana uyan 3 parça gelir. Skorun ve tempo çarpanın korunur.',
+      evet: 'Reklam izle ve devam et',
+      hayir: 'Hayır, bitir'
+    }).then(function (izlendi) { teklifSonucu(kosu, izlendi === true); },
+            function () { teklifSonucu(kosu, false); });
+  }
+
+  // Sonuc geldiginde hala ayni kosu mu (pencere acikken sifirlama/yeni oyun olabilir)?
+  function teklifSonucu(kosu, izlendi) {
+    teklifAcik = false;
+    if (oyun !== kosu || !kosu.bitti || !teklifBekliyor) return;
+    teklifBekliyor = false;
+    if (izlendi && kosu.ikinciSansUygula()) {
+      yeniRenkler();
+      tepsiCiz(true);
+      tempoYaz();
+      oyunKaydet();          // is: 1 ile birlikte: yenilemeyle tekrar kullanilamaz
+      dizi([[523, .12, .12, 0], [659, .12, .12, 80], [784, .22, .13, 160]], 'triangle');
+      titre([12, 40, 12]);
+      return;
+    }
+    kayipBitir();
+  }
+
+  // Mevcut kayip akisi (kazanc + kayit silme ayni anda, sonra bitis ekrani)
+  function kayipBitir() {
+    teklifBekliyor = false;
+    kazanciOde();
+    oyunKaydet();
+    oyunBitti();
   }
 
   function kazanciOde() {
@@ -699,6 +769,7 @@
     yeniRenkler();
     rekor = rekorOku(); rekorBasta = rekor;
     temizlikBirikim = 0; sonKazanc = null;
+    teklifBekliyor = false;
     bittiEl.classList.remove('show');
     if (fxEl) fxEl.innerHTML = '';
     ekranaYaz();
@@ -727,6 +798,8 @@
       }
       rekor = Math.max(rekor, rekorOku());
       ekranaYaz();           // tema değişmiş olabilir: renkler paletten yeniden okunur
+      // kaybedilmis, ikinci sans teklifi bekleyen kosu (yeniden acilis / ekrana donus)
+      if (teklifBekliyor) setTimeout(ikinciSansSor, 350);
     }
   };
 })();

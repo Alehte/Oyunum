@@ -246,6 +246,12 @@
   }
   window.addEventListener('popstate', () => {
     if(gecmisSariliyor){ gecmisSariliyor = false; return; }
+    // reklam penceresi aciksa geri tusu YALNIZCA onu kapatir; reklam oynarken yok
+    // sayilir. Ekran degismez, geri sarilan kayit yeniden itilir (navStack ayni kalir).
+    if(window.Reklam && window.Reklam.geriTusu && window.Reklam.geriTusu()){
+      history.pushState({s:aktifEkran}, '');
+      return;
+    }
     if(navBusy){ pendingPop = handlePopstate; return; }
     handlePopstate();
   });
@@ -300,8 +306,9 @@
   })();
   window.AppStore = Store;   // market.js NO ADS kaydini burada tutar
 
-  // GELISTIRME AYARI: varsayilan KAPALI. Acikken taslak reklam her zaman odul
-  // verir (market.js AppReklam). Acmak:  adrese ?gelistirme=1 ekle  (kalici kaydedilir)
+  // GELISTIRME AYARI: varsayilan KAPALI. Su an hicbir modul buna bagli degil (eski
+  // taslak reklam kaldirildi; reklam testi icin js/reklam.js ?reklamTest=1 / =2 kullanilir).
+  // Acmak:  adrese ?gelistirme=1 ekle  (kalici kaydedilir)
   // Kapatmak:                            adrese ?gelistirme=0 ekle
   // YALNIZCA yerelde calisir (localhost / 127.0.0.1 / file://). Yayindaki
   // adreste bayrak ve eski kayitli deger yok sayilir.
