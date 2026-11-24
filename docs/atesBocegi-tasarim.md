@@ -536,6 +536,8 @@ Uyanış durumu (73'te durgun) süreden bağımsız olduğu için toparlanma pay
 
 ### 12.2 Toz deseni zorluğu
 
+> **ESKİDİ (FAZ B, §13):** risk tozu, Bot T / Bot K ve risk testleri `docs/gorev-guncelleme-oyunlar.md` B.1 gereği tamamen kaldırıldı. Aşağıdaki metin tarihçe olarak duruyor.
+
 Hedef: yüksek skorda "her tozu toplamaya çalışan kaybeder", güvenli yolu izleyen yaşar. Sayılar `AtesBocegi.AYAR.uretici`'dedir.
 
 **Sabitler**
@@ -675,3 +677,107 @@ Sonraki en yakın çiftler: mürekkep/sedef 9,26, varsayılan/kumsal 9,37. **Sı
 - Lav, Toprak gibi sıcak temalarda bomba halesi zeminle aynı renk ailesindedir; ayrım koyu dikenli küre + açık kenar + nabızla sağlanır (kontrast testleri geçer). Cihazda göz kontrolü önerilir.
 - En yakın çift buz/çini (7,61): ikisi de mavi aileden (buz soluk gri-mavi, çini doygun kobalt/turkuaz). Sınırın üstünde ama en zayıf ayrım budur.
 - `tools/atesBocegiTemaTest.js` birkaç saniye uzadı (40 görüntü + CIEDE2000; toplam ~16 sn).
+
+---
+
+## 13. FAZ B: zorluk güncellemesi (docs/gorev-guncelleme-oyunlar.md, 2026-11-24)
+
+Kararlar (kullanıcı, koordinatör aracılığıyla): eşik birimi mesafe; ekranda "Bölge N", kodda `kademe`; salınan engel boşluğun dışında; hasar `I.HASAR`; risk tozu silinir; ulaşılabilirlik tam bilgili oyuncunun kinematik yetişmesi; yazı yalnız 2-5; `HIZ_TAVAN` 44; ayarlar `AYAR.zorluk`'ta (yeni dosya yok). Bütün sayılar `AtesBocegi.AYAR.zorluk`'ta.
+
+### 13.1 Kademe (ekranda "Bölge N")
+| Sabit | Değer | Anlam |
+|---|---|---|
+| `KADEME` | **[0, 500, 1600, 2800, 4000]** birim | Böceğin mesafesi; dilimin kademesi varış mesafesinden (`x − X_BOCEK`) |
+
+- Yeni rampayla varış süreleri 0 / 20,4 / 60,8 / 98,6 / 131,7 sn. Bot B gerçek ışıkla eşiklere varış (medyan): tozsuz 800 puan ≈ 964 birim, bomba 1200 ≈ 1421, sarmaşık 2000 ≈ 2536. Bölge 3 bombadan, Bölge 4 sarmaşıktan sonra gelir.
+- Mevcut puan eşikleri (tozsuz 800, bomba 1200, sarmaşık 2000, çakışma 5000) ve görsel biyom (`bolge`, 500 puanda bir, nefes dilimi, arpej sesi) değişmedi.
+- Çekirdek her eşikte bir kez `{tur: 'kademe', kademe}` olayı üretir (durumda `kademe`). Arayüz `#abBolge`'de "Bölge N" yazar: 1,5 sn, kendiliğinden kaybolur, ses yok, oyunu durdurmaz; yeni koşu ve çıkış gizler. 5'ten sonra olay yok.
+
+### 13.2 Hız ve tükeniş rampası
+`r = kıstır((mesafe − 500) / (RAMPA_SON − 500), 0, 1)`; `hiz = min(44, eski + HIZ_EK·r)`, `sizinti = min(SIZINTI_TAVAN, eski + SIZINTI_EK·r)`.
+
+| Sabit | Değer |
+|---|---|
+| `HIZ_EK` / `RAMPA_SON` | 10 / 5000 birim |
+| `SIZINTI_EK` / `SIZINTI_TAVAN` | 0,012 / 0,06 |
+| `HIZ_TAVAN` | 44 (değişmedi) |
+
+| Mesafe | 500 | 1600 | 2800 | 4000 | 5000 | 8000 | 20000 |
+|---|---|---|---|---|---|---|---|
+| Hız (eski) | 25,01 (aynı) | 27,04 | 29,01 | 30,73 | 32,01 | 35,13 | 41,22 |
+| Hız (yeni) | 25,01 | 29,49 | 34,12 | 38,51 | 42,01 | 44 | 44 |
+| Sızıntı (yeni) | 0,0292 | 0,0345 | 0,0400 | 0,0452 | 0,0494 | 0,0530 | 0,0596 |
+
+- Hız 41'e 4707 birimde, tavan 44'e 6803 birimde ulaşır (1 birim adımla ölçüldü; eski eğride 44'e ~60000'de).
+- Kademe 1'de (mesafe ≤ 500) hız ve sızıntı eski formülle bit bit aynı (test).
+- `tAra` ve `bosluk` eski `z` eğrisinde kalır. Aralık `hiz·tAra` birim olduğu için bütün adalet süreleri saniye cinsinden ölçeklenir. Üst hızda: `T_MIN` 0,6 sn (ışık yarıçapı tabanı `minYaricap(44)` = 35), varışlar arası en az `tAra` 1,25 sn, en küçük geçit `bosluk` 16 birim (serbest 12,8), dikey geçiş en çok 8,2 birim.
+- Tozsuz pencere değişmezine rampa terimi eklendi: `3 · 1,9 · min(0,06, 0,05 + 0,012) = 0,342 < 0,35`.
+- Açılış dilimlerinin merkez farkı `min(ACILIS_FARK, maxDc)` ile sınırlandı. Mesafe 0'da eskisiyle aynıdır; yalnız yüksek hızda başlatılan test koşusunda kısılır.
+
+### 13.3 Salınan engel (Bölge 3+): ipe asılı örümcek
+| Sabit | Değer |
+|---|---|
+| `SAL_GEN` × `SAL_BOY` | 5 × 5–8 (çarpma kutusu yalnız gövde; ip yalnız görsel) |
+| `SAL_GENLIK` | 2 → 5 birim (kademe 3 başından 5 başına doğrusal) |
+| `SAL_PERIYOT` | 2,4 → 1,4 sn (tepe dikey hız 5,2 → 22,4 b/sn < 30) |
+| `SAL_AGIRLIK` | kademe 1–5: 0 / 0 / 2 / 3 / 5 (biyom satırına 5. ağırlık) |
+| `SAL_KENAR` | 2 |
+
+- `y = yc + gen·sin(om·d.t + faz)`. `d.t` ikinci şans geri sayımında donuktur.
+- Süpürülen zarf `[yc − gen, yc + gen + h]` boşluğun bir yanındadır ve uç noktada boşluk kenarına değer. Bu yüzden her fazda geçit = `bosluk(z)` ≥ 16. Adalet testi 64 fazda ölçer.
+- Ağ gibi karşı yana ek dal (`EK_DAL`) alabilir. Hasar `I.HASAR` 0,34; sersemletme, dokunulmazlık ve ışık sönmesi mevcut kurallarla aynı.
+- Kademe 1–2 için 4 elemanlı biyom satırı kullanılır: rastgele sayı tüketimi ve seçim eskisiyle aynıdır.
+
+### 13.4 Düzensiz ışık (Bölge 4+)
+`j = kıstır((mesafe − 2800) / (4000 − 2800), 0, 1)`; açılış, nefes, tozsuz, bomba ve sarmaşık dilimlerine uygulanmaz.
+
+| Sabit | Değer | Anlam |
+|---|---|---|
+| `DAG_Y` | 3 | y kayması ±3·j (yay sapması ±2'nin üstüne) |
+| `DAG_X` | 0,35 | x kayması ± 0,35·j·toz aralığı |
+| `DAG_ATLA` | 0,25 | toz düşme olasılığı 0,25·j (en az 2 toz kalır) |
+| `DAG_BOSLUK` | 0,34 | ardışık iki toz düşmez; düşmede komşu noktalar arası ≤ yayın 0,34'ü |
+| `ISIK_MARJ` | 5,8 | `R_CARPMA + R_TOPLA`; doğumda ışık–engel zarfı uzaklığı alt sınırı |
+
+- Yayın son tozu kaymaz. Böylece tutma aralığı (11.6) ve tozsuz değişmezi aynı kalır.
+- Kinematik ulaşılabilirlik (`ulasimSiniri`): oyuncu önceki boşluğun merkezinden (x = a + R_CARPMA, durgun) tam girdiyle tozun `R_TOPLA`'sına varır, durup döner (2·`T_IVME`) ve sonraki boşluğun serbest bandına b − R_CARPMA'da varır. Toz `KIVILCIM_Y` bandında olmalıdır. Kayan toz bu aralığa ve x'te `[a + ISIK_MARJ, b − ISIK_MARJ]`'a kıstırılır; aralık boşsa toz kaymaz. HEAD'deki mevcut yay tozları bu kurala 0 ihlalle uyuyor (en az pay 2,24; x marjı en az 6,52).
+- **Sapma (ölçümle):** görevdeki "Bölge 5 tam dağınık" hedefi kısıldı. Işık 0'da `T_MIN` gecikmeli oyuncu (Bot B) sonraki boşluğu yalnız toz yolundan erken öğrenir (ışık yarıçapı tabanı yalnız ~0,2 sn bilgi payı bırakır). Ölçümler:
+  - y kayması (40 tohum): `DAG_Y` 3'te 0 hasar, 4'te 2, 10'da onlarca.
+  - Sınırsız düşmede (1000 tohum) Bot B ışık 0'da 15, gerçek ışıkta 6 tohumda çarptı. `DAG_BOSLUK` sonrası 0.
+  - Kontrol: kıstırma açık + `DAG_Y` 15'te yapısal ulaşılabilirlik geçiyor, ama Bot B çarpıyor.
+- B.1: ışıkların yerleşimi x'te engellerden ayrıktır (tozlar önceki dilim arkası ile bu dilim önü arasında). Sarmaşığın sütun hizasındaki tozları sonradan yutması bu kurala istisnadır: doğumda sütun yoktur. Test bu tozları ayrı sayar.
+
+### 13.5 Risk tozu kaldırıldı
+- Silinenler: `RISK_*` sabitleri ve değişmezleri, `riskSec`, ayrı rng akışı (`rs`, `riskYan`), mıknatıs istisnası, UI kuyruk istisnası.
+- Testlerden silinenler: Bot T, Bot K, risk koşuları ve 8 adalet testi; çekirdekte 4 test; hash `2e61cd7b` / `6a4bf060`.
+- Yerine eklenen test: Bölge 2 öncesi (varış ≤ 500) üretim, risk tozu çıkarılmış HEAD (32f4eef) üretimiyle bayt bayt aynı (300 tohum, 3000 dilim, özet `c40d01b6`).
+
+### 13.6 İkinci şans
+`dogmaSec`, varışı `TEMIZ_SN + tAra`'dan erken olabilecek her dilimin salınanını da siler. Varış süresinin alt sınırı `(s.x − bx) / s.hiz`'dir (hız mesafeyle azalmaz). Test gerçek ilerlemeyle ölçer: en yakın salınanın varışı ≥ `TEMIZ_SN + tAra` (kademe 3–5'te 62 salınanlı ölüm, en az pay 0,385 sn).
+
+### 13.7 Test kancası
+`oyunOlustur(tohum, {mesafe, puan})` koşuyu o mesafe ve puanla başlatır: ilk 3 dilim açılış dilimidir; kademe, biyom ve eşik puanı buna göre kurulur. Arayüz bunu kullanmaz; üretimde URL parametresi yoktur. Headless test (`tools/atesBocegiBolgeTest.js`) sayfaya eklediği sarmalayıcıyla bu kancayı kullanır.
+
+### 13.8 Açık noktalar
+- (Çözüldü, §13.9) Bomba yüksek hızda yerleşemiyordu: kaçış modeli bombayı yalnız 42 birimlik en dar ekrana girince görünür sayıyordu; hız 41'i (4707 birim) aşınca hiçbir aday geçmiyordu (HEAD'de 20000+ birimde). Ön işaret eklendi.
+- Bölge yazısı ile biyom geçişi farklı anlarda gelir (biri mesafe, öteki puan).
+
+### 13.9 Bomba ön işareti (kullanıcı kararı, denetim sonrası)
+- `AYAR.uretici.BOMBA_ON_ISARET` = **6** birim. Bomba en dar ekrana (`W − X_BOCEK` = 42 birim önde) girmeden 6 birim önce, oyun dünyasının sağ kenarında bombanın y'sinde kendi ışığıyla (karanlık katmanın üstünde) bir ön işaret belirir: sola bakan bomba kenar renkli ok + bomba çekirdek renkli nokta, koyu kontur (engel dolgusu, ≥ 1 cihaz pikseli). Azaltılmış harekette yanıp sönmez. Bomba ekranda göründüğü (geniş ekranda `GW ≥ W + 6`) her durumda işaret çizilmez.
+- Kaçış modeli (`bombaSec`) ve adalet testi görünürlüğü işaretten sayar (`xGor = bomba.x − (W − X_BOCEK) − 6`). Tam adalet testinde bomba görünür → çarpma en kısa süresi raporlanır (≥ `T_MIN`).
+- `ayarDogrula` değişmezi üretecin ölçütüyle (`ikiYonUygun`, `f ≤ g` dalı) kurulur. `HIZ_TAVAN`'da, `T = (W − X_BOCEK + 6 − R_BOMBA − R_CARPMA) / 44 − T_MIN − PAY_KACIS_SN` = 0,368 sn. Ivme ızgarasının (9 nokta, [−A, +A]) her `ay`'ı için aşağı yanın `ay` ile ve yukarı yanın `−ay` ile T'de aldığı yolların toplamı ≥ `2·(R_BOMBA + R_CARPMA + PAY_KACIS)` olmalı. En kötüsü 10,86 ≥ 7,40. Hız sınırı yüzünden toplam `ay ≠ 0`'da `ay = 0`'dakinden küçük olabilir; yalnız `ay = 0` denetimi yetmez (sınır örneği: ON 3,2 + PAY_KACIS 0,45). `BOMBA_ON_ISARET` 0 iken değişmez kırılır.
+- Adalet testi bomba görünür → çarpma süresini `T_MIN + kaçış(durgun, ivme 0) + PAY_KACIS_SN` = 0,958 sn ile sınar; testteki görünürlük sabiti 48 birim AYAR'dan türetilmez, eşitliği ayrı denetlenir.
+- Bomba oranı (puan ≈ 0,75·mesafe, bomba eşiği geçilmiş dilimler; 150 tohum):
+
+| Mesafe | HEAD | Yeni |
+|---|---|---|
+| 0–2000 | %16,8 | %16,7 |
+| 2000–4000 | %12,6 | %12,5 |
+| 4000–6000 | %11,4 | %12,0 |
+| 6000–8000 | %10,8 | %11,2 |
+| 8000–12000 | %10,9 | %11,6 |
+| 12000–20000 | %6,2 | %10,8 |
+| 20000–60000 | %0,0 | %9,6 |
+
+- Ulaşılabilirlik bağımsız benzetimle denetlenir (adalet testi; çekirdeğin kaçış işlevlerini kullanmayan, `adim()` ile aynı bütünlemeli frenli bang-bang oyuncu). Eski `isikUlasir` (yalnız testte kullanılan totoloji) kaldırıldı.
+- Alt yandaki (zemin tarafı) örümcek ipsiz çizilir; üst yandaki tavandan ipe asılıdır.

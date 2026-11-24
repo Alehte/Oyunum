@@ -29,7 +29,7 @@ function ortam() {
       parentNode: { classList: { toggle() {}, remove() {} }, setAttribute() {} },
       click() { if (dinle.click) dinle.click(); }, textContent: '', innerHTML: '', width: 0, height: 0 };
   })());
-  ['screen-ates', 'abAlan', 'abTuval', 'abPuan', 'abRekor', 'abCarpan', 'abIsik', 'abIpucu', 'abDuraklat', 'abSonuc', 'abSonBaslik',
+  ['screen-ates', 'abAlan', 'abTuval', 'abPuan', 'abRekor', 'abCarpan', 'abIsik', 'abIpucu', 'abDuraklat', 'abSonuc', 'abSonBaslik', 'abBolge',
     'abSonAlt', 'abDurBtn', 'abDevam', 'abYeniden', 'abTekrar', 'abAna', 'atesBackBtn'].forEach(el);
   const AB2 = Object.assign({}, AB, { oyunOlustur(t) { o.durum = AB.oyunOlustur(t); return o.durum; } });
   const sb = {
@@ -684,7 +684,9 @@ dene('K3: dal sprite onbellegi 3 desen varyanti (e.x tabanli) ayri tuval; ayni v
   const o = ortam(); o.O.start(); o.kare(1);
   const m = o.durum.mesafe;
   const say = xs => { let n = 0; const orj = o.sb.document.createElement; o.sb.document.createElement = (...a) => { n++; return orj(...a); };
-    o.durum.dilimler[2].engeller = xs.map(x => ({ tur: 'dal', yon: 'ust', x: m + x, y: 0, w: 5, h: 33.3 })); o.kare(2); o.sb.document.createElement = orj; return n; };
+    // w 4,75: gercek dal hep DAL_GEN (5); onbellek anahtari (w, yuvarlanmis h, yon, varyant) rastgele tohumlu dunyadaki bir dalla
+    // cakisip sayimi 2'ye dusurmesin (eskiden h 33,3 ~ 33,5 olan gercek ust dal ara sira ayni anahtari aliyordu)
+    o.durum.dilimler[2].engeller = xs.map(x => ({ tur: 'dal', yon: 'ust', x: m + x, y: 0, w: 4.75, h: 33.3 })); o.kare(2); o.sb.document.createElement = orj; return n; };
   assert.strictEqual(say([10, 11, 12]), 3, '3 varyant 3 tuval');
   assert.strictEqual(say([13, 14, 15, 16, 30]), 0, 'ayni varyantlar yeniden kullanilir');
 });
@@ -780,6 +782,96 @@ dene('zemin olumu sonrasi yeni kosu temiz: olum turu sifirlanir, bocek yerinde c
   assert.strictEqual(tr[1][1], DUNYA.Y_BASLA);
   o.bas(); o.kare(30); assert.strictEqual(o.durum.bitti, 0); assert.ok(o.durum.t > 0.3);
   assert.strictEqual(o.sb.AppProgress.atesBocegi.kosu, 1, 'yalniz ilk kosu kayitli');
+});
+
+console.log('FAZ B (tasarim 13): kademe yazisi ve salinan orumcek');
+// Kademe esiginin hemen altina atlatir (cekirdek eksik dilimleri uretir, geridekileri atar); bocek korunur.
+function atla(o, m) { const d = o.durum; d.mesafe = m; d.isik = 1; d.dokunulmaz = 100; d.zeminKoruma = 100; }
+dene('kademe yazisi: esik gecisinde "Bölge N" gosterilir, oyun durmaz, 1,5 sn sonra kendiliginden kaybolur; 5ten sonra yazi yok', () => {
+  const o = ortam(); o.yeni(); const b = o.el('abBolge');
+  assert.ok(!b.cl.has('show'));
+  atla(o, 499.5); o.kare(3);
+  assert.strictEqual(b.textContent, 'Bölge 2'); assert.ok(b.cl.has('show'));
+  const t0 = o.durum.t; o.kare(60); assert.ok(o.durum.t > t0 + 0.9, 'oyun durmadi'); assert.ok(b.cl.has('show'), '1 sn sonra hala gorunur');
+  o.kare(40); assert.ok(!b.cl.has('show') && b.textContent === '', '1,5 sn sonra kaybolur');
+  [[1599.8, 'Bölge 3'], [2799.8, 'Bölge 4'], [3999.8, 'Bölge 5']].forEach(([m, y]) => { atla(o, m); o.kare(3); assert.strictEqual(b.textContent, y); o.kare(100); });
+  atla(o, 9000); o.kare(30); atla(o, 30000); o.kare(30);
+  assert.ok(!b.cl.has('show') && b.textContent === '', '5ten sonra yazi yok');
+  assert.strictEqual(o.durum.bitti, 0);
+});
+dene('kademe yazisi: ayni adimda olum (bitti) gelirse "Bölge N" gosterilmez', () => {
+  const o = ortam(); o.yeni(); const b = o.el('abBolge');
+  // Belirlenimli: once 400'e atlanir (bocegin yakinindaki dilimler uretilir), onlarin tozu/kivilcimi silinir; sonra esigin hemen
+  // altina atlanir (yeni dilimler ufukta, bocekten uzak). Sizinti bu adimda isigi bitirir, ayni adimda kademe 2 gecilir.
+  atla(o, 400); o.kare(1);
+  o.durum.dilimler.forEach(s => { s.toz = []; s.kivilcim = null; s.bomba = null; });
+  atla(o, 499.95); o.durum.isik = 1e-6; o.durum.dokunulmaz = 0;
+  o.kare(1);
+  assert.strictEqual(o.durum.bitti, 1); assert.strictEqual(o.durum.kademe, 2);
+  assert.ok(!b.cl.has('show') && b.textContent === '', 'olumde yazi yok');
+});
+// Bomba on isareti (13): en dar ekran (GW = W = 50): bomba ekran x'i (GW, W + BOMBA_ON_ISARET] iken sag kenarda bombanin y'sinde
+// bomba renkli isaret (karanligin ustunde); daha uzaktayken yok; azaltilmis harekette alfa sabit.
+function darOrtam(az) {
+  const o = ortam(); o.azHareket = az;
+  o.el('abAlan').getBoundingClientRect = () => ({ width: 280, height: 560, left: 0, top: 0 });   // en/boy 0,5: GA = GW = W
+  o.yeni(); return o;
+}
+const BON = AB.AYAR.uretici.BOMBA_ON_ISARET;
+dene('bomba on isareti: en dar ekranda bomba W .. W + ' + BON + ' arasinda sag kenarda isaret; otesinde yok; azaltilmis harekette sabit', () => {
+  [false, true].forEach(az => {
+    const isaret = (sx, ad) => {
+      const o = darOrtam(az); o.durum.dokunulmaz = 100;
+      o.durum.dilimler[0].bomba = { x: o.durum.mesafe + sx, y: 37, alindi: 0 };
+      const alfa = []; o.alfaAc = true; o.stilAc = true; o.log = []; o.kare(1); const l = o.log; o.log = null;
+      const i = l.findIndex(c => c[0] === 'translate' && Math.abs(c[1][0] - (W - 1.8)) < 1e-9 && Math.abs(c[1][1] - 37) < 1e-9);
+      if (i >= 0) for (let j = i; j < l.length && l[j][0] !== 'restore'; j++) if (l[j][0] === 'alpha') alfa.push(l[j][1][0]);
+      return { var: i >= 0, alfa };
+    };
+    assert.ok(isaret(W + 3, 'ic').var, 'W + 3 isaret yok (az ' + az + ')');
+    assert.ok(isaret(W + BON - 0.01, 'sinir').var, 'W + ON isaret yok');
+    assert.ok(!isaret(W + BON + 0.5, 'otesi').var, 'W + ON otesinde isaret var');
+    assert.ok(!isaret(W - 5, 'ekranda').var, 'bomba ekrandayken isaret var');
+    if (az) assert.ok(isaret(W + 3).alfa.every(a => a === 1), 'azaltilmis harekette sabit alfa');
+  });
+  const g = /function ozIsikCiz[\s\S]*?\n  \}/.exec(KAYNAK)[0];
+  assert.ok(/c\.fillStyle = rk\.bombaKenar; c\.strokeStyle = rk\.dolgu; c\.lineWidth = 2 \* Math\.max\(0\.23, pxD\)/.test(g) && /rk\.bombaCekirdek/.test(g), 'isaret bomba renkleri + koyu kontur');
+});
+dene('bomba on isareti genislige gore: GW 52 -> isaret GW icinde (GW - 1,8), yalniz GW < bomba x <= W + ' + BON + '; GW 56 ve 60 -> isaret yok', () => {
+  const kos = (GW, sx) => {
+    const o = ortam(); o.el('abAlan').getBoundingClientRect = () => ({ width: GW * 5.6, height: 560, left: 0, top: 0 });   // olcek 5,6 px/birim
+    o.yeni(); o.durum.dokunulmaz = 100;
+    o.durum.dilimler[0].bomba = { x: o.durum.mesafe + sx, y: 37, alindi: 0 };
+    o.log = []; o.kare(1); const l = o.log; o.log = null;
+    return l.filter(c => c[0] === 'translate' && Math.abs(c[1][1] - 37) < 1e-9 && Math.abs(c[1][0] - (GW - 1.8)) < 1e-6).length > 0;
+  };
+  assert.ok(kos(52, 54), 'GW 52, bomba 54: isaret yok');
+  assert.ok(kos(52, W + BON - 0.01), 'GW 52, bomba W + ON: isaret yok');
+  assert.ok(!kos(52, 51.5), 'GW 52, bomba ekranda: isaret var');
+  assert.ok(!kos(52, W + BON + 0.5), 'GW 52, bomba W + ON otesi: isaret var');
+  [56, 60].forEach(GW => [53, 55.9, W + BON + 0.5].forEach(sx => assert.ok(!kos(GW, sx), 'GW ' + GW + ', bomba ' + sx + ': isaret var')));
+});
+dene('kademe yazisi: yeni kosu ve cikis (dur) yaziyi gizler; ses calmaz', () => {
+  const o = ortam(); o.yeni(); const b = o.el('abBolge');
+  atla(o, 1599.7); const ses0 = o.sesLog.length; o.kare(2);
+  assert.ok(b.cl.has('show')); assert.ok(o.sesLog.slice(ses0).every(x => x[0] !== 'seq'), 'kademe gecisinde arpej yok');
+  o.O.start(); assert.ok(!b.cl.has('show') && b.textContent === '');
+  o.yeni(); atla(o, 2799.7); o.kare(2); assert.ok(b.cl.has('show'));
+  o.O.dur(); assert.ok(!b.cl.has('show'));
+});
+dene('salinan orumcek: ust/alt ve azaltilmis harekette cizim hatasiz; ust yanda tavandan ip, alt yanda ip yok; engel paleti', () => {
+  [false, true].forEach(az => ['ust', 'alt'].forEach(yon => {
+    const o = ortam(); o.azHareket = az; o.yeni(); const m = o.durum.mesafe;
+    const e = { tur: 'salinan', yon: yon, x: m + 24, y: 40, w: 5, h: 6, yc: 40, gen: 3, om: 3, faz: 0 };
+    o.durum.dilimler[0].engeller = [e]; o.durum.dokunulmaz = 100;
+    o.log = []; o.kare(1); const l = o.log; o.log = null;
+    const cx = e.x + e.w / 2, ip = l.some(c => c[0] === 'moveTo' && Math.abs(c[1][0] - cx) < 1e-9 && (c[1][1] === 0 || c[1][1] === H));
+    assert.strictEqual(ip, yon === 'ust', yon + ' ip (yalniz ust yandaki orumcek tavandan asili; alt yan ipsiz)');
+    assert.ok(l.filter(c => c[0] === 'ellipse').length >= 1, 'karin');
+    assert.ok(Math.abs(e.y - (e.yc + e.gen * Math.sin(e.om * o.durum.t + e.faz))) < 1e-9, 'govde cekirdekle salinir');
+  }));
+  const k = KAYNAK.slice(KAYNAK.indexOf('function orumcekCiz'), KAYNAK.indexOf('function engelCiz'));
+  assert.ok(/rk\.kenar/.test(k) && /rk\.dolgu/.test(k) && !/#[0-9A-Fa-f]{6}/.test(k), 'orumcek renkleri engel paletinden');
 });
 
 console.log(gecti + ' deneme gecti');

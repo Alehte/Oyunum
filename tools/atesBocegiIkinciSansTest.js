@@ -39,7 +39,7 @@ function hedefY(d) {
   return D.Y_BASLA;
 }
 function olumUret(tohum, secenek) {
-  const r = rng(tohum ^ 0xA5A5), d = AB.oyunOlustur(tohum);
+  const r = rng(tohum ^ 0xA5A5), d = AB.oyunOlustur(tohum, secenek.bas);   // 13: bas = test kancasi {mesafe, puan}
   if (secenek.yuksekPuan) { d.puan = 2600 + Math.floor(r() * 3000); }
   const bozul = Math.floor((2 + r() * 20) * ADIM_SN), mod = r() < 0.5 ? 'birak' : 'rastgele';
   let n = 0, basili = false, zincirOnce = 0, olay = [];
@@ -96,6 +96,8 @@ dene('bitmemis kosuda ikinciSans null, durum degismez; dogmaSec durumu degistirm
 
 const OLUMLER = [];
 for (let t = 1; t <= 160; t++) OLUMLER.push(Object.assign(olumUret(t * 7919, { dusukIsik: t % 2 === 0, yuksekPuan: t % 3 === 0 }), { tohum: t * 7919 }));
+// 13: kademe 3-5 (salinan engelli) olumler: test kancasiyla 1700-9000 birimden baslayan kosular (hiz rampasi dahil)
+for (let t = 1; t <= 80; t++) OLUMLER.push(Object.assign(olumUret(t * 104729, { dusukIsik: t % 2 === 0, bas: { mesafe: 1700 + (t % 8) * 1000, puan: 2600 + t * 40 } }), { tohum: t * 104729, salinanli: 1 }));
 
 dene('olum ornekleri: isik (hasar + sizinti) ve zemin olumleri, bomba/sarmasikli dilimler kapsanir', () => {
   const sebep = {}, tur = {};
@@ -179,6 +181,31 @@ dene('ilk N adim (N = TEMIZ_SN - 0,1 sn) hicbir politikada tehlike carpismasi yo
   console.log('       N = ' + N + ' adim; havada/gecikmeli en yakin zemin payi ' + enKucukZemin.toFixed(2) + ', tavan payi ' + enKucukTavan.toFixed(2));
 });
 
+dene('salinan (13): canlaninca en yakin salinan engelin gercek varisi >= TEMIZ_SN + tAra (hiz rampasi dahil); temizlik gercekten calisti', () => {
+  let temizlenen = 0, kalan = 0, enAz = Infinity, ornek = 0, pencere = 0;   // pencere: canlanmadan once TEMIZ_SN + tAra icinde varacak salinanli dilim
+  const varis = (d, x) => {                       // bocegin on kenari x'e kac sn'de varir (adim() ile ayni ilerleme)
+    let m = d.mesafe, t = 0;
+    while (m + D.X_BOCEK + M.R_CARPMA < x && t < 60) { m += AB.zorluk(m).hiz * D.DT; t += D.DT; }
+    return t;
+  };
+  for (const o of OLUMLER.filter(q => q.salinanli)) {
+    const d = kopya(o.d), bx = d.mesafe + D.X_BOCEK;
+    const once = d.dilimler.filter(s => s.x + s.w >= bx - M.R_CARPMA && s.engeller.some(e => e.tur === 'salinan') && varis(d, s.x) < S.TEMIZ_SN + s.tAra).length;
+    if (d.dilimler.some(s => s.engeller.some(e => e.tur === 'salinan'))) ornek++;
+    const sec = AB.ikinciSans(d, { zincir: o.zincirOnce });
+    temizlenen += sec.salinan.length;
+    for (const s of d.dilimler) {
+      if (s.x + s.w < bx - M.R_CARPMA || !s.engeller.some(e => e.tur === 'salinan')) continue;
+      kalan++;
+      const v = varis(d, s.x); enAz = Math.min(enAz, v - (S.TEMIZ_SN + s.tAra));
+      assert.ok(v >= S.TEMIZ_SN + s.tAra - 1e-9, 'tohum ' + o.tohum + ' dilim ' + s.no + ': salinan ' + v.toFixed(3) + ' sn');
+    }
+    pencere += once;
+  }
+  console.log('       ' + ornek + ' salinanli olum; once pencerede ' + pencere + ' salinanli dilim, ilk kalan ve sonrasindan temizlenen ' + temizlenen +
+              ' (TEMIZ_SN icindekiler engelleriyle silinir), kalan ' + kalan + ', en az pay ' + enAz.toFixed(3) + ' sn');
+  assert.ok(ornek > 30 && pencere > 10 && temizlenen > 5 && kalan > 10);
+});
 dene('canlanmis durum JSON gidis-donusuyle ayni devam eder (determinizm)', () => {
   const o = OLUMLER[5], a = kopya(o.d); AB.ikinciSans(a, { zincir: o.zincirOnce });
   const b = kopya(a);

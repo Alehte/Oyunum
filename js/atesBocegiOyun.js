@@ -19,6 +19,7 @@
   // yalniz atmosfer (arka plan + karanlik; bantlarda arka plan dikey aynalanir). Bocek solda (XB); ek genislik saga, ileriye
   // acilir. Cekirdegin uretim ufku GW_MAX'in otesinde.
   var GW_MAX = H * D.ORAN_MAX, GW = W, GA = W, BY = 0;
+  var BOMBA_ON = AYAR.uretici.BOMBA_ON_ISARET;   // 13: bomba on isareti (birim; cekirdek kacis modeli ayni degeri kullanir)
   var KENAR_SOLMA = 6;                // GW sinirindaki kendi isikli nesne (bomba) bu kadar birimde belirir (yalniz GA > GW_MAX)
 
   // ---------------------------------------------------------------
@@ -77,6 +78,8 @@
   var ipucuEl = q('abIpucu'), durEl = q('abDuraklat'), sonEl = q('abSonuc');
   var sonBaslik = q('abSonBaslik'), sonAlt = q('abSonAlt');
   var geriSayimEl = q('abGeriSayim');   // ikinci sans geri sayimi (eski onbellekli index.html'de yoksa sayi gosterilmez)
+  var bolgeEl = q('abBolge');           // 13: kademe gecisinde "Bolge N" yazisi (eski onbellekli index.html'de yoksa gosterilmez)
+  var BOLGE_YAZI_SN = 1.5, bolgeKalan = 0;   // yazi suresi (sn; CSS animasyonuyla ayni), kalan sure
 
   // ---------------------------------------------------------------
   // DURUM
@@ -582,9 +585,44 @@
     c.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); c.ellipse(x, y, rx, ry, rot, 0, 6.2832);
   }
 
+  // 13: salinan engel = orumcek. Carpma kutusu yalniz govde (e.x..e.x+w, e.y..e.y+h). Ust yandaki tavandan ipe asilidir (ip
+  // yalniz gorsel); alt yandaki (zemin tarafi) ipsiz cizilir: zeminden cikan ip asili gorunmuyordu. Renkler engel paletinden
+  // (rk.dolgu / rk.kenar: kontrast testi engellerle ayni).
+  function orumcekCiz(c, e) {
+    var cx = e.x + e.w / 2, cy = e.y + e.h / 2, lw = c.lineWidth, i, sy, k, dx, ph;
+    if (e.yon !== 'alt') {
+      c.globalAlpha = 0.75; c.strokeStyle = rk.kenar; c.lineWidth = lw * 0.55;                  // ip (tavandan)
+      c.beginPath(); c.moveTo(cx, 0); c.lineTo(cx, e.y + e.h * 0.2); c.stroke();
+    }
+    c.globalAlpha = 1; c.strokeStyle = rk.kenar; c.lineWidth = lw * 0.8;
+    ph = azHareketOn ? 0 : Math.sin(zaman * 9 + e.x) * 0.25;
+    c.beginPath();                                                                             // 8 bacak (4 + 4), dizden kirik
+    for (i = 0; i < 4; i++) {
+      sy = cy - e.h * 0.18 + i * e.h * 0.13; k = (i - 1.5) * e.h * 0.12;
+      for (dx = -1; dx <= 1; dx += 2) {
+        c.moveTo(cx + dx * e.w * 0.12, sy);
+        c.lineTo(cx + dx * e.w * 0.36, sy - e.h * 0.16 + k * 0.4 + (i & 1 ? ph : -ph));
+        c.lineTo(cx + dx * e.w * 0.5, sy + k + e.h * 0.08);
+      }
+    }
+    c.stroke();
+    c.fillStyle = rk.dolgu; c.lineWidth = lw;
+    c.beginPath(); c.ellipse(cx, cy + e.h * 0.14, e.w * 0.24, e.h * 0.27, 0, 0, 6.2832);          // karin
+    c.moveTo(cx + e.w * 0.15, cy - e.h * 0.2); c.arc(cx, cy - e.h * 0.2, e.w * 0.15, 0, 6.2832);   // bas-gogus
+    c.fill(); c.stroke();
+    c.fillStyle = rk.kenar; c.beginPath();                                                      // gozler ve sirt deseni
+    c.arc(cx - e.w * 0.06, cy - e.h * 0.23, 0.17, 0, 6.2832); c.moveTo(cx + e.w * 0.06 + 0.17, cy - e.h * 0.23); c.arc(cx + e.w * 0.06, cy - e.h * 0.23, 0.17, 0, 6.2832);
+    c.fill();
+    c.globalAlpha = 0.7; c.lineWidth = lw * 0.6; c.beginPath();
+    c.moveTo(cx, cy + e.h * 0.02); c.lineTo(cx, cy + e.h * 0.3); c.moveTo(cx - e.w * 0.1, cy + e.h * 0.14); c.lineTo(cx + e.w * 0.1, cy + e.h * 0.14);
+    c.stroke();
+    c.globalAlpha = 1; c.lineWidth = lw; c.fillStyle = rk.dolgu; c.strokeStyle = rk.kenar;
+  }
+
   function engelCiz(c, e) {
     var a, mx, yy, k, lw;
     if (e.tur === 'dal') dalCizSprite(c, e, e.yon === 'ust');
+    else if (e.tur === 'salinan') orumcekCiz(c, e);
     else if (e.tur === 'ag') agCiz(c, e);
     else if (e.tur === 'kus') kusCiz(c, e);
     else if (e.tur === 'dusen') {
@@ -786,6 +824,17 @@
           c.beginPath(); c.arc(0, 0, M.R_BOMBA * 0.36 * nabiz, 0, 6.2832); c.fill();
           c.restore();
         }
+        // 13: on isaret. Bomba en dar ekrana (W) girmeden BOMBA_ON_ISARET birim once, oyun dunyasinin sag kenarinda bombanin
+        // y'sinde, kendi isigiyla (karanligin ustunde) sola bakan bomba renkli ok + cekirdek. Kacis modeli gorunurlugu buradan
+        // sayar. Genis ekranda (GW >= W + ON) bomba zaten gorunur: isaret yok. Azaltilmis harekette sabit (yanip sonmez).
+        if (x > GW && x <= W + BOMBA_ON) {
+          a = azHareketOn ? 1 : 0.65 + 0.35 * Math.sin(zaman * 18);
+          c.save(); c.translate(GW - 1.8, t.y);
+          c.globalAlpha = a * (1 - p); c.fillStyle = rk.bombaKenar; c.strokeStyle = rk.dolgu; c.lineWidth = 2 * Math.max(0.23, pxD); c.lineJoin = 'round';
+          c.beginPath(); c.moveTo(-1.5, 0); c.lineTo(1.0, -1.45); c.lineTo(1.0, 1.45); c.closePath(); c.fill(); c.stroke();
+          c.fillStyle = rk.bombaCekirdek; c.beginPath(); c.arc(0.2, 0, 0.45, 0, 6.2832); c.fill();
+          c.restore();
+        }
       }
       sa = s.sarmasik;
       if (sa && sa.faz >= 1) {
@@ -950,7 +999,7 @@
         c.globalAlpha = 1; c.fillStyle = pal.toz; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL, 0, 6.2832); c.fill();
         c.globalAlpha = 0.8; c.fillStyle = BOCEK_KANAT; c.beginPath(); c.arc(x, t.y, M.R_TOZ_GORSEL * 0.5, 0, 6.2832); c.fill();      // sicak cekirdek
         mx = x - XB; my = t.y - durum.y; md = mx * mx + my * my;
-        if (md < rm2 && md > 1 && !(durum.sersem > 0) && !t.risk) {                                                                    // miknatisla cekiliyor: kisa kuyruk (sersemken ve risk tozunda miknatis kapali, 12.2)
+        if (md < rm2 && md > 1 && !(durum.sersem > 0)) {                                                                                // miknatisla cekiliyor: kisa kuyruk (sersemken miknatis kapali, 12.1)
           md = Math.sqrt(md); c.globalAlpha = 0.4; c.strokeStyle = pal.toz; c.lineWidth = M.R_TOZ_GORSEL;
           c.beginPath(); c.moveTo(x, t.y); c.lineTo(x + mx / md * 2.4, t.y + my / md * 2.4); c.stroke();
         }
@@ -1196,6 +1245,7 @@
         gecis = azHareketOn ? 1 : 0;
         dizi([[392, .12, .09, 0], [523, .12, .09, 100], [659, .2, .09, 200]], 'triangle');
       }
+      else if (o.tur === 'kademe') { if (!durum.bitti) bolgeYaz(o.kademe); }              // 13: "Bolge N" (sessiz; ayni adimda olum varsa yazi yok)
       else if (o.tur === 'sersem') { ton(640, 320, 0.12, 'triangle', 0.08); ton(900, 700, 0.18, 'sine', 0.04); titret(20); }   // tavana carpma: hafif "tok"
       else if (o.tur === 'uyandi') { ton(500, 760, 0.08, 'sine', 0.05); }
       else if (o.tur === 'zemin') { ton(330, 660, 0.12, 'square', 0.06); }                 // zemine degme: kisa sicrama sesi (olum sesi bitti'de)
@@ -1211,6 +1261,15 @@
     }
   }
 
+  // 13: kademe yazisi. Kendiliginden BOLGE_YAZI_SN sonra kaybolur (CSS animasyonu da ayni surede soner); yeni kosu / cikis gizler.
+  function bolgeYaz(n) {
+    if (!bolgeEl) return;
+    bolgeEl.textContent = 'Bölge ' + n;
+    bolgeEl.classList.remove('show'); void bolgeEl.offsetWidth; bolgeEl.classList.add('show');   // animasyon her geciste bastan
+    bolgeKalan = BOLGE_YAZI_SN;
+  }
+  function bolgeGizle() { bolgeKalan = 0; if (bolgeEl) { bolgeEl.classList.remove('show'); bolgeEl.textContent = ''; } }
+
   function rafDurdur() { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } }
 
   function dongu(z) {
@@ -1223,6 +1282,7 @@
     dt = Math.min(dt, MAKS_FARK);
     zaman = saniye;
     if ((kare++ & 31) === 0) azHareketOn = azHareket();
+    if (bolgeKalan > 0) { bolgeKalan -= dt; if (bolgeKalan <= 1e-9) bolgeGizle(); }
     if (!bekle && !duraklatildi && !durum.bitti && geriSayim > 0) geriSayimIlerlet(dt);   // ikinci sans: dunya donuk
     else if (!bekle && !duraklatildi && !durum.bitti) {
       birikim += dt;
@@ -1335,7 +1395,7 @@
     hizOnbellek = AB.zorluk(0).hiz; hizSayac = 0; parcBirikim = 0;
     parc.fill(0); kanatFaz = 0; azHareketOn = azHareket();
     sonme = -1; olumTur = '';
-    sansKullanildi = false; geriSayimGizle();
+    sansKullanildi = false; geriSayimGizle(); bolgeGizle();
     sonEl.classList.remove('show'); durEl.classList.remove('show');
     ipucuEl.classList.remove('show'); void ipucuEl.offsetWidth; ipucuEl.classList.add('show');     // belirme animasyonu her kosuda yeniden
     hudSifirla();
@@ -1364,7 +1424,7 @@
   function dur() {
     rafDurdur();
     odemeyiTamamla();                 // sonme ya da teklif sirasinda cikis: bitmis kosu odenir (teklif sonucu artik yok sayilir)
-    geriSayimGizle();
+    geriSayimGizle(); bolgeGizle();
     calisiyor = false; duraklatildi = false; basili = false; isaretciler = 0; tusBasili = false;
     kosuNo++; sonme = -1;                       // sonme akisi biter; sonuc karti gelmez
     durEl.classList.remove('show'); sonEl.classList.remove('show');

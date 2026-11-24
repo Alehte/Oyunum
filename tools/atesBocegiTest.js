@@ -130,10 +130,12 @@ dene('zorluk(0) = taban degerleri', () => {
   assert.strictEqual(z.z, 0); assert.strictEqual(z.hiz, 24); assert.strictEqual(z.tAra, 1.9);
   assert.strictEqual(z.bosluk, 24); assert.strictEqual(z.sizinti, 0.028);
 });
-dene('zorluk(9000) ~%63, zorluk(1e7) tavanda', () => {
+dene('zorluk(9000) ~%63, zorluk(1e7) tavanda (13: rampa dahil)', () => {
   const z = AB.zorluk(9000); yakin(z.z, 1 - Math.exp(-1), 1e-12);
-  yakin(z.hiz, 24 + 18 * z.z + 2 * Math.log2(1 + 9000 / 40000), 1e-9);
-  const t = AB.zorluk(1e7); assert.strictEqual(t.hiz, 44); yakin(t.tAra, 1.25, 1e-9); yakin(t.bosluk, 16, 1e-9); yakin(t.sizinti, 0.05, 1e-9);
+  yakin(z.hiz, Math.min(44, 24 + 18 * z.z + 2 * Math.log2(1 + 9000 / 40000) + A.zorluk.HIZ_EK), 1e-9);
+  const y = AB.zorluk(3000), ry = (3000 - 500) / (5000 - 500);      // rampa ortasi
+  yakin(y.hiz, 24 + 18 * y.z + 2 * Math.log2(1 + 3000 / 40000) + 10 * ry, 1e-9); yakin(y.sizinti, 0.028 + 0.022 * y.z + 0.012 * ry, 1e-12);
+  const t = AB.zorluk(1e7); assert.strictEqual(t.hiz, 44); yakin(t.tAra, 1.25, 1e-9); yakin(t.bosluk, 16, 1e-9); yakin(t.sizinti, 0.06, 1e-9);
 });
 dene('zorluk: hiz monoton artar', () => { let o = 0; for (let d = 0; d < 200000; d += 97) { const h = AB.zorluk(d).hiz; assert.ok(h >= o); o = h; } });
 dene('minYaricap(24)=20, (44)=35', () => { yakin(AB.minYaricap(24), 20, 1e-9); yakin(AB.minYaricap(44), 35, 1e-9); });
@@ -302,8 +304,7 @@ dene('durum alanlari; durumda islev yok', () => {
   })(d, 'durum');
 });
 dene('JSON gidis-donusu: geri yuklenen durum 8000 adim boyunca ayni', () => {
-  const a = AB.oyunOlustur(4242);
-  a.puan = 5200;                                  // yeni mekanikler (tozsuz/bomba/sarmasik) devrede
+  const a = AB.oyunOlustur(4242, { mesafe: 2400, puan: 5200 });   // yeni mekanikler (tozsuz/bomba/sarmasik; 13: salinan, duzensiz isik)
   for (let i = 0; i < 4000; i++) { a.isik = 1; AB.adim(korumali(a), girdi(i)); }
   const b = JSON.parse(JSON.stringify(a));
   assert.deepStrictEqual(b, kopya(a));
@@ -313,11 +314,12 @@ dene('JSON gidis-donusu: geri yuklenen durum 8000 adim boyunca ayni', () => {
     const ob = AB.adim(b, girdi(i));
     assert.deepStrictEqual(ob, AB.adim(a, girdi(i)));
     ob.forEach(o => { turler[o.tur] = 1; });
-    a.dilimler.forEach(s => { if (s.tozsuz) turler.tozsuzDilim = 1; if (s.bomba) turler.bombaDilim = 1; if (s.sarmasik && s.sarmasik.faz) turler.sarmasikFaz = 1; });
+    a.dilimler.forEach(s => { if (s.tozsuz) turler.tozsuzDilim = 1; if (s.bomba) turler.bombaDilim = 1; if (s.sarmasik && s.sarmasik.faz) turler.sarmasikFaz = 1;
+      if (s.dag > 0) turler.dagDilim = 1; if (s.engeller.some(e => e.tur === 'salinan')) turler.salinanDilim = 1; });
   }
   assert.strictEqual(JSON.stringify(b), JSON.stringify(a));
   assert.ok(a.uretici.n > 50);
-  ['sarmasikUyari', 'tozsuzDilim', 'bombaDilim', 'sarmasikFaz', 'sersem', 'uyandi'].forEach(k => assert.ok(turler[k], k + ' sinanmadi'));
+  ['sarmasikUyari', 'tozsuzDilim', 'bombaDilim', 'sarmasikFaz', 'sersem', 'uyandi', 'dagDilim', 'salinanDilim', 'kademe'].forEach(k => assert.ok(turler[k], k + ' sinanmadi'));
 });
 
 console.log('Uretici');
@@ -386,11 +388,12 @@ dene('dilim nesnesi cizim alanlari', () => {
       ['x', 'y', 'w', 'h'].forEach(k => assert.ok(Number.isFinite(e[k]), e.tur + '.' + k));
       if (e.tur === 'kus') assert.ok(Number.isFinite(e.x0) && e.ek === A.adalet.KUS_EK);
       if (e.tur === 'dusen') assert.ok(Number.isFinite(e.sarmasik) && e.faz === 0 && e.sure === 0);
+      if (e.tur === 'salinan') assert.ok(['yc', 'gen', 'om', 'faz'].every(k => Number.isFinite(e[k])) && (e.yon === 'ust' || e.yon === 'alt'));
     });
     s.toz.forEach(t => assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y) && t.alindi === 0 && t.yutuldu === 0));
     assert.strictEqual(s.tozsuz, 0); assert.strictEqual(s.bomba, null); assert.strictEqual(s.sarmasik, null);
   }
-  assert.deepStrictEqual(Object.keys(tur).sort(), ['ag', 'dal', 'dusen', 'kus']);
+  assert.deepStrictEqual(Object.keys(tur).sort(), ['ag', 'dal', 'dusen', 'kus', 'salinan']);
 });
 
 // Puani yapay ilerleten surucu: ureticiyi dogrudan cagirir. puanF(i) -> i. dilimin uretim puani.
@@ -615,48 +618,6 @@ dene('miknatis yutulan ve alinan tozu cekmez', () => {
   assert.strictEqual(say(o, 'toz'), 0); assert.strictEqual(y1.x, XB + 3); assert.strictEqual(a1.x, XB + 5);
   assert.strictEqual(y1.alindi, 0, 'yutulan toz toplanmaz');
 });
-dene('risk tozu (12.2): miknatis cekmez (R_MIKNATIS icinde kipirdamaz); dogrudan temasla alinir', () => {
-  const d = bosDurum(); d.y = 50; d.vy = 0; d.ay = 0;
-  const rt = { x: XB + 5, y: 52, alindi: 0, yutuldu: 0, risk: 1 }, nt = { x: XB + 5, y: 48, alindi: 0, yutuldu: 0 };
-  d.dilimler = [dilim([], [nt, rt])];
-  AB.adim(d, false);
-  assert.strictEqual(rt.x, XB + 5); assert.strictEqual(rt.y, 52); assert.ok(nt.x !== XB + 5, 'normal toz cekilmeli');
-  const e = bosDurum(); e.y = 50; e.vy = 0;
-  const r2 = { x: XB + 0.2, y: 50 + A.hareket.R_TOPLA - 0.5, alindi: 0, yutuldu: 0, risk: 1 };
-  e.dilimler = [dilim([], [r2])];
-  assert.strictEqual(say(AB.adim(e, false), 'toz'), 1); assert.strictEqual(r2.alindi, 1);
-});
-dene('risk tozu puan ve isigi normal tozla ayni (ekstra yok), zincir ayni', () => {
-  const sonuc = risk => {
-    const d = bosDurum(); d.y = 50; d.vy = 0; d.isik = 0.5; d.zincir = 7;
-    d.dilimler = [dilim([], [Object.assign({ x: XB + 0.2, y: 50, alindi: 0, yutuldu: 0 }, risk ? { risk: 1 } : {})])];
-    const o = AB.adim(d, false);
-    return [o.filter(q => q.tur === 'toz').map(q => q.puan), d.puan, d.isik, d.zincir, d.zincirSure, d.toz];
-  };
-  assert.deepStrictEqual(sonuc(true), sonuc(false));
-});
-dene('bozuk ayar: risk tozu carpmadan alinabilir (RISK_DERIN kucuk) / duvara yakin / olasilik', () => {
-  const a = ayarKopya(); a.uretici.RISK_DERIN = 2.5; assert.ok(AB.ayarDogrula(a).some(h => /risk tozu dala/.test(h)), JSON.stringify(AB.ayarDogrula(a)));
-  const b = ayarKopya(); b.hareket.R_TOPLA = 5.2; assert.ok(AB.ayarDogrula(b).some(h => /risk tozu dala/.test(h)));
-  const c = ayarKopya(); c.uretici.RISK_Y_MIN = 8; assert.ok(AB.ayarDogrula(c).some(h => /risk tozu frenle/.test(h)));
-  const e = ayarKopya(); e.uretici.RISK_TAVAN = 1.2; assert.ok(AB.ayarDogrula(e).length > 0);
-  const f = ayarKopya(); f.uretici.RISK_OLASILIK = 0.9; assert.ok(AB.ayarDogrula(f).length > 0);
-});
-dene('risk tozu (12.2): RISK_PUAN altinda yok; ustunde dikenli dalda, guvenli zarf disinda, toz dizisinin sonunda', () => {
-  let n = 0;
-  for (let t = 1; t <= 60; t++) {
-    surucu(t, 600, rampaPuan).forEach(s => {
-      const rk = s.toz.filter(z => z.risk); if (!rk.length) return; n++;
-      assert.ok(s._p >= A.uretici.RISK_PUAN && rk.length === 1 && s.toz[s.toz.length - 1] === rk[0]);
-      assert.ok(!s.nefes && !s.tozsuz && !s.bomba && !s.sarmasik);
-      const r = rk[0], z = AB.dilimZarfi(s);
-      assert.ok(r.y <= z.ust - A.uretici.RISK_DERIN + 1e-9 || r.y >= z.alt + A.uretici.RISK_DERIN - 1e-9);
-      assert.ok(s.engeller.some(e => e.tur === 'dal' && Math.abs(e.x + e.w / 2 - r.x) < 1e-9 && r.y >= e.y && r.y <= e.y + e.h));
-    });
-  }
-  assert.ok(n > 500, n);
-});
-
 console.log('Tavan sersemlemesi ve zemin olumu (12.1)');
 const MH = A.hareket, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;
 const SERSEM_ADIM = Math.round(MH.SERSEM_SURE / DT), KORUMA_ADIM = Math.round(MH.ZEMIN_KORUMA / DT);
@@ -1013,7 +974,7 @@ dene('dilimler UFUK ileriye kadar uretilir, arkadakiler atilir', () => {
   assert.ok(d.dilimler.length < 12);
 });
 // Gorunen genislik (atesBocegiOyun.js): W .. H * ORAN_MAX. Uretim ufku cihazdan bagimsiz: kosu sirasinda uretilen her
-// dilimin her nesnesi (engel, kus, dusen dal, toz, risk tozu, kivilcim, bomba, sarmasik sutunu; cizim yaricapi/halesi
+// dilimin her nesnesi (engel, kus, dusen dal, salinan, toz, kivilcim, bomba, sarmasik sutunu; cizim yaricapi/halesi
 // dahil) dogdugu adimda en genis gorunur alanin sag kenarinin (ekran x = GW_MAX) otesindedir, dolayisiyla her GW'de.
 const GW_MAX = A.dunya.H * A.dunya.ORAN_MAX, GW_LER = [A.dunya.W, 64, 82, 120, 160, GW_MAX];
 function dilimSolKenar(s) {        // dilimin en soldaki cizilen noktasi (dunya x'i)
@@ -1026,7 +987,7 @@ function dilimSolKenar(s) {        // dilimin en soldaki cizilen noktasi (dunya 
   return x;
 }
 dene('hicbir nesne gorunur alanin icinde dogmaz (GW = ' + GW_LER.map(g => g.toFixed(1)).join(', ') + '); puan 0 ve 6200', () => {
-  const tur = { kus: 0, dusen: 0, bomba: 0, sarmasik: 0, risk: 0, kivilcim: 0 };
+  const tur = { kus: 0, dusen: 0, salinan: 0, bomba: 0, sarmasik: 0, kivilcim: 0 };
   let enAz = Infinity, dilim = 0;
   [[7, 0], [8, 6200], [9, 6200]].forEach(([t, puan]) => {
     const d = AB.oyunOlustur(t); let son = d.dilimler[d.dilimler.length - 1].no;
@@ -1038,9 +999,8 @@ dene('hicbir nesne gorunur alanin icinde dogmaz (GW = ' + GW_LER.map(g => g.toFi
         son = s.no; dilim++;
         const sx = dilimSolKenar(s) - d.mesafe; enAz = Math.min(enAz, sx);
         GW_LER.forEach(g => assert.ok(sx >= g, 'dilim ' + s.no + ' ekran x ' + sx.toFixed(2) + ' < GW ' + g.toFixed(1)));
-        s.engeller.forEach(e => { if (e.tur === 'kus' || e.tur === 'dusen') tur[e.tur]++; });
+        s.engeller.forEach(e => { if (e.tur === 'kus' || e.tur === 'dusen' || e.tur === 'salinan') tur[e.tur]++; });
         if (s.bomba) tur.bomba++; if (s.sarmasik) tur.sarmasik++; if (s.kivilcim) tur.kivilcim++;
-        if (s.toz.some(z => z.risk)) tur.risk++;
       }
     }
   });
@@ -1071,7 +1031,9 @@ dene('ayni tohum ve girdi: iki kosuda ayni dilim dizisi (determinizm; cihaz bagi
   };
   const a = kayit(), b = kayit();
   assert.ok(Object.keys(a).length > 50); assert.deepStrictEqual(a, b);
-  assert.strictEqual(AB.oyunOlustur.length, 1); assert.strictEqual(AB.adim.length, 2);
+  // 13: ikinci parametre yalniz test kancasi { mesafe, puan } (genislik degil); verilmezse eski davranis aynen
+  assert.strictEqual(AB.oyunOlustur.length, 2); assert.strictEqual(AB.adim.length, 2);
+  assert.strictEqual(JSON.stringify(AB.oyunOlustur(4242, {})), JSON.stringify(AB.oyunOlustur(4242)));
 });
 dene('esik telafisi: uretim puani = en buyuk(puan + L / MESAFE_BIRIM + en kucuk(ileri toz puani, ESIK_TOZ_TAVAN)) (L = UFUK - ESIK_UFUK), azalmaz; dilim.puan ve agirlik bolgesi bununla', () => {
   const L = A.uretici.UFUK - A.uretici.ESIK_UFUK, ek = L / A.puan.MESAFE_BIRIM, TV = A.uretici.ESIK_TOZ_TAVAN;
@@ -1096,14 +1058,14 @@ dene('esik telafisi: uretim puani = en buyuk(puan + L / MESAFE_BIRIM + en kucuk(
   }
   assert.ok(n > 20 && enCok > 10 && dustu > 0, 'n ' + n + ' toz terimi en cok ' + enCok + ' dusen adim ' + dustu);
 });
-dene('ileri toz puani (esik telafisi): pencere (bx, bx + L]; alinmis/yutulmus/risk tozu ve kivilcim sayilmaz; zincir carpani zincir + k; tozsuz pencere 0', () => {
+dene('ileri toz puani (esik telafisi): pencere (bx, bx + L]; alinmis/yutulmus toz ve kivilcim sayilmaz; zincir carpani zincir + k; tozsuz pencere 0', () => {
   const L = A.uretici.UFUK - A.uretici.ESIK_UFUK, T = A.puan.TOZ;
   const d = bosDurum(); d.y = 50;
   assert.strictEqual(AB.ileriTozPuani(d), 0, 'dilim yok');
   const bx = d.mesafe + XB, tz = (x, ek) => Object.assign({ x: bx + x, y: 50, alindi: 0, yutuldu: 0 }, ek || {});
-  d.dilimler = [dilim([], [tz(-0.5), tz(0), tz(1), tz(2, { alindi: 1 }), tz(3, { yutuldu: 1 }), tz(4, { risk: 1 }), tz(5)], { x: bx + 6, y: 50, alindi: 0 }),
+  d.dilimler = [dilim([], [tz(-0.5), tz(0), tz(1), tz(2, { alindi: 1 }), tz(3, { yutuldu: 1 }), tz(5)], { x: bx + 6, y: 50, alindi: 0 }),
                 dilim([], [tz(L - 1), tz(L), tz(L + 0.01)], null), dilim([], [tz(L + 5)], null)];
-  // sayilan: x = 1, 5, L - 1, L (4 toz); bx'te ya da gerisinde, alinmis, yutulmus, risk, pencere disi, kivilcim sayilmaz
+  // sayilan: x = 1, 5, L - 1, L (4 toz); bx'te ya da gerisinde, alinmis, yutulmus, pencere disi, kivilcim sayilmaz
   d.zincir = 0; assert.strictEqual(AB.ileriTozPuani(d), 4 * T);
   d.zincir = 3; assert.strictEqual(AB.ileriTozPuani(d), T * (AB.carpan(3) + AB.carpan(4) + AB.carpan(5) + AB.carpan(6)));
   d.zincir = 100; assert.strictEqual(AB.ileriTozPuani(d), 4 * T * A.puan.CARPAN_TAVAN);
@@ -1120,6 +1082,144 @@ dene('ileri toz puani (esik telafisi): pencere (bx, bx + L]; alinmis/yutulmus/ri
 });
 
 // ---- Ekonomi: blok ayrica kesilip calistirilir ----
+
+// ---------------------------------------------------------------
+// FAZ B (tasarim 13): kademe, hiz/sizinti rampasi, salinan engel, duzensiz isik, test kancasi
+// ---------------------------------------------------------------
+console.log('Kademe ve rampa (13)');
+const Z13 = A.zorluk, KAD = Z13.KADEME;
+dene('kademeNo: KADEME [0, 500, 1600, 2800, 4000] birim; 5 en cok', () => {
+  assert.deepStrictEqual(Array.from(KAD), [0, 500, 1600, 2800, 4000]);
+  assert.deepStrictEqual([0, 499.99, 500, 1599, 1600, 2799, 2800, 3999.9, 4000, 1e7].map(AB.kademeNo), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+});
+dene('rampa: kademe 1 (mesafe <= 500) hiz/sizinti eski formulle bit bit ayni; sonra monoton, tavanli (44 / 0,06)', () => {
+  for (let d = 0; d <= KAD[1]; d += 3.7) {
+    const z = AB.zorluk(d), zz = 1 - Math.exp(-d / 9000);
+    assert.strictEqual(z.hiz, Math.min(44, 24 + 18 * zz + 2 * Math.log2(1 + d / 40000)), 'hiz ' + d);
+    assert.strictEqual(z.sizinti, 0.028 + 0.022 * zz, 'sizinti ' + d);
+  }
+  let h = 0, s = 0;
+  for (let d = 0; d < 300000; d += 13) {
+    const z = AB.zorluk(d);
+    assert.ok(z.hiz >= h && z.sizinti >= s - 1e-15 && z.hiz <= Z13.HIZ_TAVAN && z.sizinti <= Z13.SIZINTI_TAVAN, 'd ' + d); h = z.hiz; s = z.sizinti;
+  }
+  const e = AB.zorluk(Z13.RAMPA_SON), ze = 1 - Math.exp(-Z13.RAMPA_SON / 9000);
+  yakin(e.hiz, Math.min(44, 24 + 18 * ze + 2 * Math.log2(1 + Z13.RAMPA_SON / 40000) + Z13.HIZ_EK), 1e-12);
+  yakin(AB.zorluk(8000).hiz, 44, 1e-12, 'tavan ~8000');
+});
+dene('oyunOlustur(tohum, {mesafe, puan}): baslangic mesafe/puan/kademe/esik/bolge; ilk 3 dilim acilis; baslangicta kademe olayi yok', () => {
+  const d = AB.oyunOlustur(77, { mesafe: 3000, puan: 6000 });
+  assert.strictEqual(d.mesafe, 3000); assert.strictEqual(d.puan, 6000); assert.strictEqual(d.kademe, 4);
+  assert.ok(d.esikPuan >= AB.uretimPuani(6000, 0)); assert.strictEqual(d.bolge, AB.bolgeNo(AB.uretimPuani(6000, 0))); assert.strictEqual(d.gorunenBolge, d.bolge);
+  assert.ok(d.dilimler[0].x > 3000 + XB && d.dilimler.slice(0, 3).every(s => s.engeller.every(e => e.tur === 'dal') && s.alt - s.ust === A.uretici.ACILIS_BOSLUK));
+  const o = AB.adim(korumali(d), false);
+  assert.strictEqual(o.filter(q => q.tur === 'kademe').length, 0);
+  assert.strictEqual(AB.oyunOlustur(5).kademe, 1);
+});
+dene('kademe olayi: her esikte bir kez, artan sirada, esigi gecen adimda (2, 3, 4, 5; 5ten sonra yok)', () => {
+  [[11, 0], [12, 450], [13, 3990]].forEach(([t, m0]) => {
+    const d = AB.oyunOlustur(t, { mesafe: m0 }), gor = [];
+    for (let i = 0; i < 120 * 400 && d.mesafe < 6000; i++) {
+      d.isik = 1; d.dokunulmaz = 1; const once = d.mesafe;
+      AB.adim(korumali(d), girdi(i)).forEach(o => { if (o.tur === 'kademe') { gor.push(o.kademe); assert.ok(once < KAD[o.kademe - 1] && d.mesafe >= KAD[o.kademe - 1], 'esik adimi ' + o.kademe); } });
+    }
+    assert.deepStrictEqual(gor, [2, 3, 4, 5].filter(k => KAD[k - 1] > m0), 'tohum ' + t);
+    assert.strictEqual(d.kademe, 5);
+  });
+});
+dene('salinan (13): yalniz kademe 3+; supurulen zarf boslugu kesmez, her fazda gecit >= bosluk; duvardan SAL_KENAR; genlik/periyot kademeyle', () => {
+  let n = 0, ust = 0, kd5 = 0, kd3 = 0;
+  for (let t = 1; t <= 40; t++) surucu(t, 400, i => i * 25).forEach(s => {
+    const m = s.x - XB;
+    assert.strictEqual(s.kademe, AB.kademeNo(m));
+    s.engeller.filter(e => e.tur === 'salinan').forEach(e => {
+      n++; if (e.yon === 'ust') ust++; if (s.kademe === 5) kd5++; if (s.kademe === 3) kd3++;
+      assert.ok(s.kademe >= 3, 'kademe ' + s.kademe);
+      const f = Math.max(0, Math.min(1, (m - KAD[2]) / (KAD[4] - KAD[2])));
+      yakin(e.gen, Z13.SAL_GENLIK[0] + (Z13.SAL_GENLIK[1] - Z13.SAL_GENLIK[0]) * f, 1e-9, 'genlik');
+      yakin(2 * Math.PI / e.om, Z13.SAL_PERIYOT[0] + (Z13.SAL_PERIYOT[1] - Z13.SAL_PERIYOT[0]) * f, 1e-9, 'periyot');
+      assert.ok(e.w === Z13.SAL_GEN && e.h >= Z13.SAL_BOY_MIN && e.h <= Z13.SAL_BOY_MAX && e.x === s.x);
+      const y1 = e.yc - e.gen, y2 = e.yc + e.gen + e.h;
+      assert.ok(y1 >= Z13.SAL_KENAR - 1e-9 && y2 <= A.dunya.H - Z13.SAL_KENAR + 1e-9, 'duvar');
+      assert.ok(e.yon === 'ust' ? Math.abs(y2 - s.ust) < 1e-9 : Math.abs(y1 - s.alt) < 1e-9, 'uc noktada bosluk kenarina deger');
+      for (let k = 0; k < 64; k++) {                           // her faz: govde boslugu kesmez, gecit = bosluk
+        const y = e.yc + e.gen * Math.sin(k * Math.PI / 32);
+        assert.ok(y + e.h <= s.ust + 1e-9 || y >= s.alt - 1e-9, 'faz ' + k);
+      }
+      assert.ok(s.alt - s.ust >= s.bosluk - 1e-9);
+    });
+  });
+  console.log('       ' + n + ' salinan (ust ' + ust + ', kademe 3: ' + kd3 + ', kademe 5: ' + kd5 + ')');
+  assert.ok(n > 200 && ust > 20 && n - ust > 20 && kd3 > 10 && kd5 > 50);
+});
+dene('salinan adimi: y = yc + gen * sin(om * t + faz); carpma isik -HASAR (0,34), dokunulmaz, zincir 0; govde disinda (ip) carpma yok', () => {
+  const kur = y0 => { const d = bosDurum(); d.y = y0; d.vy = 0; d.ay = 0; d.zincir = 6; d.isik = 0.9;
+    const e = { tur: 'salinan', yon: 'ust', x: d.mesafe + XB - 1, y: 0, w: 5, h: 6, yc: 40, gen: 3, om: 2 * Math.PI / 2, faz: 0.4 };
+    d.dilimler = [dilim([e], [])]; return [d, e]; };
+  const [d, e] = kur(10);                                     // govdenin ustunde (ip bolgesi): carpma yok
+  const o = AB.adim(d, false);
+  yakin(e.y, 40 + 3 * Math.sin(Math.PI * d.t + 0.4), 1e-12);
+  assert.strictEqual(o.filter(q => q.tur === 'hasar').length, 0);
+  const [d2, e2] = kur(43);
+  const o2 = AB.adim(d2, false), h = o2.find(q => q.tur === 'hasar');
+  assert.ok(h && h.engel === 'salinan', JSON.stringify(o2));
+  yakin(d2.isik, 0.9 - A.isik.HASAR - AB.zorluk(0).sizinti * DT, 1e-12); assert.strictEqual(d2.zincir, 0); yakin(d2.dokunulmaz, A.isik.DOKUNULMAZ, 1e-12);
+  assert.strictEqual(A.isik.HASAR, 0.34); assert.ok(e2.y > 30);
+});
+// Ulasilabilirlik bagimsiz benzetimle tools/atesBocegiAdaletTest.js'de (cekirdek kacis islevleri kullanilmaz).
+dene('duzensiz isik (13): kademe < 4 dag 0; kademe 5 dag 1; son toz yayda; tozlar x marjinda; dusen toz boslugu sinirli; en az 2 toz', () => {
+  let n = 0, kayan = 0, dag1 = 0;
+  for (let t = 1; t <= 40; t++) {
+    const L = surucu(t, 300, i => i * 25);
+    L.forEach((s, i) => {
+      const m = s.x - XB, p = L[i - 1];
+      if (s.kademe < 4) assert.strictEqual(s.dag, 0);
+      if (!s.dag || !p) return; n++; if (s.dag === 1) dag1++;
+      yakin(s.dag, Math.min(1, (m - KAD[3]) / (KAD[4] - KAD[3])), 1e-9);
+      assert.ok(!s.tozsuz && !s.bomba && !s.sarmasik && !s.nefes && s.toz.length >= 2 && s.toz.length <= A.uretici.TOZ_MAX);
+      const a = p.x + p.w, b = s.x, c1 = p.c, c2 = s.c;
+      const son = s.toz[s.toz.length - 1], f = (son.x - a) / (b - a);
+      let once = a; s.toz.forEach(z => { assert.ok(z.x - once <= (Z13.DAG_BOSLUK + 2 * Z13.DAG_X / (A.uretici.TOZ_MIN + 1)) * (b - a) + 1e-9, 'toz boslugu'); once = z.x; });
+      assert.ok(Math.abs(son.y - (c1 + (c2 - c1) * (1 - Math.cos(Math.PI * f)) / 2)) <= A.uretici.TOZ_SAPMA + 1e-9, 'son toz yayda');
+      s.toz.forEach((z, j) => {
+        assert.ok(z.x >= a + Z13.ISIK_MARJ - 1e-9 && z.x <= b - Z13.ISIK_MARJ + 1e-9 && (!j || z.x > s.toz[j - 1].x), 'x marji / sira');
+        const fj = (z.x - a) / (b - a); if (Math.abs(z.y - (c1 + (c2 - c1) * (1 - Math.cos(Math.PI * fj)) / 2)) > A.uretici.TOZ_SAPMA + 1e-6) kayan++;
+      });
+    });
+  }
+  console.log('       ' + n + ' duzensiz dilim (dag 1: ' + dag1 + '), yaydan TOZ_SAPMA otesine kayan toz ' + kayan);
+  assert.ok(n > 500 && dag1 > 200 && kayan > 500);
+});
+dene('bomba sikligi (13, on isaret): mesafe kovasi 5000-8000 / 8000-20000 / 20000-30000 birimde bomba orani > %8 (HEAD: 20000+ %0)', () => {
+  // puan ~ 0,75 * mesafe (Bot B gercek isik olcumune yakin); bomba esigi (1200) gecilmis, siradan + ozel dilimler dahil
+  const kova = [[5000, 8000], [8000, 20000], [20000, 30000]].map(k => ({ k, d: 0, b: 0 }));
+  for (let t = 1; t <= 40; t++) {
+    const u = AB.ureticiOlustur(t);
+    for (let i = 0; i < 800; i++) {
+      const p = Math.round((u.veri.x - XB) * 0.75), s = u.sonraki(AB.bolgeNo(p), p), m = s.x - XB;
+      if (m >= 30000) break;
+      const q = kova.find(o => m >= o.k[0] && m < o.k[1]);
+      if (q && p >= A.uretici.BOMBA_PUAN) { q.d++; if (s.bomba) q.b++; }
+    }
+  }
+  console.log('       bomba orani: ' + kova.map(o => o.k.join('-') + ' %' + (100 * o.b / o.d).toFixed(1) + ' (' + o.d + ' dilim, hiz ' + AB.zorluk(o.k[0]).hiz.toFixed(1) + ')').join(', '));
+  kova.forEach(o => assert.ok(o.d > 1000 && o.b / o.d > 0.08, o.k.join('-') + ' %' + (100 * o.b / o.d).toFixed(1)));
+});
+dene('bozuk ayar (13): KADEME sirasiz, sizinti tavani tozsuz ekonomisini asar, kademe 1-2 salinan, ISIK_MARJ kucuk, salinan hizli', () => {
+  const durum = f => { const a = ayarKopya(); f(a); return AB.ayarDogrula(a); };
+  assert.ok(durum(a => { a.zorluk.KADEME = [0, 500, 400, 2800, 4000]; }).some(h => /KADEME/.test(h)));
+  assert.ok(durum(a => { a.zorluk.SIZINTI_TAVAN = 0.07; a.zorluk.SIZINTI_EK = 0.03; }).some(h => /tozsuz pencerede isik/.test(h)));
+  assert.ok(durum(a => { a.zorluk.SAL_AGIRLIK = [0, 1, 2, 3, 5]; }).some(h => /SAL_AGIRLIK/.test(h)));
+  assert.ok(durum(a => { a.zorluk.ISIK_MARJ = 1; }).some(h => /ISIK_MARJ/.test(h)));
+  assert.ok(durum(a => { a.zorluk.SAL_GENLIK = [2, 12]; }).some(h => /tepe hizi/.test(h)));
+  assert.ok(durum(a => { a.zorluk.RAMPA_SON = 100; }).some(h => /rampa/.test(h)));
+  assert.ok(durum(a => { a.zorluk.DAG_BOSLUK = 1; }).some(h => /duzensiz isik/.test(h)));
+  assert.ok(durum(a => { a.uretici.BOMBA_ON_ISARET = 0; }).some(h => /bomba HIZ_TAVAN/.test(h)), 'on isaretsiz bomba HIZ_TAVAN degismezi');
+  // sinir: ay = 0'da yollar toplami 7,382 >= 2 * 3,65 = 7,30 ama ay = -A'da 7,207 < 7,30 (hiz siniri): yalniz ay = 0 denetimi kacirir
+  assert.ok(durum(a => { a.uretici.BOMBA_ON_ISARET = 3.2; a.adalet.PAY_KACIS = 0.45; }).some(h => /bomba HIZ_TAVAN/.test(h)), 'bomba degismezi butun ivme izgarasini denetler');
+  assert.ok(!durum(a => { a.uretici.BOMBA_ON_ISARET = 4; }).some(h => /bomba HIZ_TAVAN/.test(h)), 'ON 4 yeterli (toplam 8,07 >= 7,40)');
+});
+
 console.log('Ekonomi (EKONOMI blogu)');
 const bas = kaynak.indexOf('// EKONOMI-BASI'), son = kaynak.indexOf('// EKONOMI-SONU');
 const ctx = {};

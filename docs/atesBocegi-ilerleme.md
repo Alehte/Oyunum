@@ -53,3 +53,19 @@ Cihazda bakılacak:
 - Işık dışındaki dekor (%11) gerçek ekranda seçiliyor mu; çok soluksa DEKOR_SIZINTI en çok 0,15.
 - Çentikli ekran: safe-area dolgusuyla .ab-alan genişliği.
 - Eşik hissi: risk tozu, bomba ve sarmaşık eskisiyle aynı puanlarda mı geliyor. Hiç toz toplamayan oyuncuda eşik en kötü ~85 puan erken gelebilir.
+
+## 2026-11-24 oturumu (docs/gorev-guncelleme-oyunlar.md FAZ B; commit koordinatörde)
+Yapıldı (sw.js SURUM 23 → 24; ayrıntı tasarım §13):
+- Risk tozu, Bot T / Bot K ve risk testleri silindi. Bölge 2 öncesi üretim, risk tozu çıkarılmış HEAD (32f4eef) üretimiyle bayt bayt aynı (özet `c40d01b6`).
+- Kademe (ekranda "Bölge N", mesafe): 0 / 500 / 1600 / 2800 / 4000 birim (0 / 20 / 61 / 99 / 132 sn). Yazı 1,5 sn, yalnız 2–5, sessiz. Biyom değişimi aynen.
+- Hız ve tükeniş rampası kademe 2'den: `HIZ_EK` 10, `RAMPA_SON` 5000, `HIZ_TAVAN` 44 (6803 birimde; 41'e 4707), `SIZINTI_EK` 0,012, `SIZINTI_TAVAN` 0,06. Kademe 1 bit bit eskisi.
+- Salınan engel (kademe 3+): ipe asılı örümcek; genlik 2 → 5, periyot 2,4 → 1,4 sn. Süpürülen zarf boşluğun dışında, her fazda geçit ≥ bosluk. Hasar 0,34.
+- Düzensiz ışık (kademe 4+): `DAG_Y` 3, `DAG_X` 0,35, `DAG_ATLA` 0,25, `DAG_BOSLUK` 0,34. Kinematik ulaşılabilirlik ve `ISIK_MARJ` 5,8 ile kıstırılıyor.
+- İkinci şans: salınan da temizleniyor; en yakın salınanın varışı ≥ `TEMIZ_SN + tAra`.
+- Test kancası `oyunOlustur(tohum, {mesafe, puan})`. Yeni headless test `tools/atesBocegiBolgeTest.js`: yerel sunucu, 390x844, normal ve `?reklamTest=1`.
+Sapmalar: "Bölge 5 tam dağınık" kısıldı (y kayması ±3, düşme sınırlı); ışık 0'da `T_MIN` gecikmeli Bot B'nin tek erken bilgisi toz yolu (ölçüm §13.4). Bomba ~4700 birimden sonra yerleşemiyordu; kullanıcı kararıyla 6 birimlik bomba ön işareti eklendi, oran üst hızda %9,6-11,6 (§13.9). Alt örümcek ipsiz.
+Cihazda bakılacak:
+- Hız rampası hissi (2 dk'da 25 → 44).
+- Örümceğin ışıkta okunurluğu (9 tema).
+- "Bölge N" yazısının yeri (HUD'un altı, %16).
+- Düzensiz ışığın görünür olup olmadığı.

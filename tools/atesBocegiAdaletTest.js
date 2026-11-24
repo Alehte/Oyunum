@@ -1,5 +1,7 @@
 // atesBocegiAdaletTest.js — tohum x bot adalet testi (tasarim 8.2).
-// Calistirma:  node tools/atesBocegiAdaletTest.js [tohumSayisi=1000] [mesafe=20000] [uzunTohum=100] [uzunMesafe=60000] [sersemTohum=60] [riskTohum=100]
+// Calistirma:  node tools/atesBocegiAdaletTest.js [tohumSayisi=1000] [mesafe=20000] [uzunTohum=100] [uzunMesafe=60000] [sersemTohum=60] [ustTohum=200]
+// FAZ B (tasarim 13): kademe olaylari, salinan engel (supurulen zarf, her fazda gecit), dogumda isik-engel marji, kinematik
+// ulasilabilirlik, duzensiz isik; ust hiz kumesi (60000 birimden, puan 6000: hiz 44, en dar bosluk, kademe 5) olum nedenleri.
 // Botlar yalniz cekirdek API'sini (oyunOlustur, adim, dilimZarfi, zorluk, isikYaricapi, minYaricap,
 // kosuJetonu, kacisSuresi, kacisMesafesi, frenMesafesi, uyanmaY, uyanmaDususu, rngOlustur) ve durum/dilim alanlarini okur. Bot A ve Bot D (ideal) dilimin butun
 // alanlarini bilir. Bot B yalniz gorebildigini bilir: isik cemberine giren engel/toz, ekrandaki bomba, uyarisi
@@ -13,7 +15,13 @@ const A = AB.AYAR, DT = A.dunya.DT, XB = A.dunya.X_BOCEK, H = A.dunya.H, RC = A.
 const T_MIN = A.adalet.T_MIN, K = A.adalet.KUS_EK, V = A.adalet.V_GUVENLI, T_IVME = A.adalet.T_IVME;
 const U = A.uretici, EPS = 1e-9, NEFES_SURE = U.NEFES_SURE, RT = A.hareket.R_TOPLA;
 const RB = A.hareket.R_BOMBA + RC, PAYK = A.adalet.PAY_KACIS, Y_UST = A.dunya.Y_UST, Y_ALT = A.dunya.Y_ALT;
-const EKRAN = A.dunya.W - XB;            // bomba kendi isigiyla ekrana girince gorunur (en dar ekran W; genis ekran yalniz daha erken gosterir)
+const EKRAN = A.dunya.W - XB;            // en dar ekranin bocek onundeki genisligi (sarmasik sutun x'i bu kadar uzakta bilinir)
+// 13: bomba, en dar ekrana girmeden 6 birim once sag kenardaki on isaretle (kendi isigiyla) gorunur. AYAR'dan turetilmez
+// (kendini dogrulamasin): W - X_BOCEK + 6 = 48 sabit; AYAR ile esitligi ayri testte.
+const BOMBA_GOR = 48;
+// Bomba gorunur -> carpma mesafesi (R_BOMBA + R_CARPMA) en az: T_MIN + kacis (R_BOMBA + R_CARPMA + PAY_KACIS; durgun, ivme 0 =
+// iki yonlu kacisin en kotu baslangici) + PAY_KACIS_SN. kacisSuresi gercek butunlemedir (tools/atesBocegiTest.js'de sinanir).
+const BOMBA_KACIS_SN = A.adalet.T_MIN + AB.kacisSuresi(RB + PAYK, 0, 0) + A.adalet.PAY_KACIS_SN;
 // Esik telafisi (atesBocegi.js uretimPuani; dilim UFUK'ta uretilir, esikler ESIK_UFUK'a gore). Cekirdekten bagimsiz AYAR'dan:
 // (a) TELAFI_TAVAN: uretildigi adimda dilim.puan <= puan + L / MESAFE_BIRIM + ESIK_TOZ_TAVAN (L = UFUK - ESIK_UFUK). puan azalmaz,
 //     uretim puani en cok bu kadar ileri bakar; ustel toz hizi gibi sinirsiz bir tahmin bu denetimi gecemez.
@@ -24,7 +32,7 @@ const EKRAN = A.dunya.W - XB;            // bomba kendi isigiyla ekrana girince 
 //     uzun B -49); ileri toz telafisinde 1000 tohumda en kotu -3 (Bot A sarmasik), diger tur/botlarda >= +19; denetci botu >= +29.
 //     ESIK_TOL = 5: olculen en kotunun 2 puan altinda; kucuk tahmin hatasina izin verir, -21/-39 turu erken tehlikeyi yakalar.
 const ESIK_L = U.UFUK - U.ESIK_UFUK, TELAFI_TAVAN = ESIK_L / A.puan.MESAFE_BIRIM + U.ESIK_TOZ_TAVAN, ESIK_TOL = 5;
-const ESIK_TUR = [['risk tozu', U.RISK_PUAN], ['tozsuz', U.TOZSUZ_PUAN], ['bomba', U.BOMBA_PUAN], ['sarmasik', U.SARMASIK_PUAN]];
+const ESIK_TUR = [['tozsuz', U.TOZSUZ_PUAN], ['bomba', U.BOMBA_PUAN], ['sarmasik', U.SARMASIK_PUAN]];
 const ESIK_EKRAN = [A.dunya.W, 82, H * A.dunya.ORAN_MAX];   // en dar ekran (denetlenen), 82 (ornek orta), 20:9 (bilgi)
 const esikOlc = {};                                          // kosu adi -> esik turu -> ekran -> [gercek puan - esik]
 
@@ -42,21 +50,23 @@ function dene(ad, fn) {
 // ---------------------------------------------------------------
 // Yapisal denetci: her yeni dilim + her engelin gorunurluk / varis zamani
 // ---------------------------------------------------------------
-const ist = { bolgeOlay: 0, dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakKivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0 },
+const ist = { bolgeOlay: 0, dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakKivilcim: 0, tur: { dal: 0, ag: 0, kus: 0, dusen: 0, salinan: 0 },
               enAzPay: Infinity, enAzAra: Infinity, enCokDcOran: 0, kusur: [],
               // yeni mekanikler (tasarim 11): yapisal denetimden gecen dilim sayilari (butun kosular)
               m: { tozsuz: 0, pencere: 0, bomba: 0, sarmasik: 0, sutun: 0, sarmasik5000: 0, cakismaYan: 0, tozsuz5000: 0,
                    enAzPencereAra: Infinity, enCokPencere: 0, enAzKacisPay: Infinity, enAzBombaPay: Infinity, enAzDonusPay: Infinity },
               // zaman denetimi (Bot A kosusu)
               z: { sarmasik: 0, enAzUyari: Infinity, enAzUyariVaris: Infinity, bomba: 0, enAzBombaGorVaris: Infinity },
-              // risk tozu (tasarim 12.2): yapisal denetim
-              r: { aday: 0, dilim: 0, ust: 0, ardisik: 0, donusum: 0, enAzUzak: Infinity } };
+              // FAZ B (tasarim 13): yapisal denetim (butun denetlenen kosular)
+              f: { kademe: [0, 0, 0, 0, 0], salinan: 0, salKademe: [0, 0, 0, 0, 0], gecitEnAz: Infinity, marjEnAz: Infinity, isik: 0,
+                   sarYutulacak: 0, ulasimEnAz: Infinity, dag: 0, dag1: 0, kayan: 0, boslukEnCok: 0, kademeOlay: 0, enCokHiz: 0, enCokSizinti: 0 } };
 function kusur(tohum, s, msg) { ist.kusur.push('tohum ' + tohum + ' dilim ' + (s ? s.no : '-') + ': ' + msg); }
 
 // En kotu durum zarfi (3.4 tablosu), ham engel verisinden; dilimin varis anindaki x araligi.
 function zarflar(s) {
   return s.engeller.map(e => {
     if (e.tur === 'kus') return { x1: s.x, x2: s.x + s.w, y1: e.y, y2: e.y + e.h };
+    if (e.tur === 'salinan') return { x1: e.x, x2: e.x + e.w, y1: e.yc - e.gen, y2: e.yc + e.gen + e.h };   // 13: supurulen kutu
     if (e.tur === 'dusen') return { x1: e.x, x2: e.x + e.w, y1: 0, y2: e.sarmasik + e.h };
     return { x1: e.x, x2: e.x + e.w, y1: e.y, y2: e.y + e.h };
   });
@@ -124,8 +134,8 @@ function koridorAcik(y, x1, x2, dolu) {
   return dolu.every(z => z.x2 < x1 - RC || z.x1 > x2 + RC || y < z.y1 - RC || y > z.y2 + RC);
 }
 
-function yeniDenetci(t) {
-  return { t: t, son: null, sonNo: -1, ustSay: 0, altSay: 0, nefesBekle: false,
+function yeniDenetci(t, basX) {
+  return { t: t, basX: basX === undefined ? XB : basX, son: null, sonNo: -1, ustSay: 0, altSay: 0, nefesBekle: false,
            aktif: [], sonVaris: null, tehlike: [],
            pencereUz: 0, pencereSon: -1e9, tozsuzNo: [], sarmasikNo: [], tA: A.dunya.Y_BASLA, tU: A.dunya.Y_BASLA };
 }
@@ -134,50 +144,87 @@ function yeniDenetci(t) {
 // tozsuz dilimde onceki aralikla birlesir. Tozsuz dilimin serbest bandi bu araligi kapsamalidir.
 function tutmaGuncelle(dn, s, c, zf, Ylist) {
   let a = c, u = c;
-  const yt = s.toz.filter(tz => !tz.risk);                 // 12.2: risk tozu yol tozu degil
+  const yt = s.toz;
   if (s.tozsuz) { a = Math.min(c, dn.tA); u = Math.max(c, dn.tU); }
   else if (yt.length) { const y = yt[yt.length - 1].y; a = Math.min(a, y); u = Math.max(u, y); }
   Ylist.forEach(Y => { const y = Math.max(zf.ust + RC + PAYK, Math.min(zf.alt - RC - PAYK, Y)); a = Math.min(a, y); u = Math.max(u, y); });
   dn.tA = a; dn.tU = u;
 }
-// 12.2 risk tozu: yalniz RISK_PUAN ve sonrasinda, siradan dilimde (acilis/nefes/tozsuz/bomba/sarmasik disi), en cok
-// bir tane, toz dizisinin sonunda; bir dikenli dalin x ortasinda, dal ucundan (= bosluk kenari) RISK_DERIN otede,
-// RISK_Y araliginda: guvenli zarfin (dilimZarfi) disinda. Carpmadan alinamazlik burada gercek dal geometrisiyle
-// sayisal olarak: carpmayan bocek dalin x araligindaki adimlarda (adim ayrikligi HIZ_TAVAN*DT) uctan R_CARPMA
-// otede, disinda en dik egimle (max VY / HIZ_TABAN) uzaklasir; toza en kisa uzaklik > R_TOPLA (miknatis cekmez).
-const KE = Math.max(A.hareket.VY_YUKARI, A.hareket.VY_ASAGI) / A.zorluk.HIZ_TABAN, ADIM_X = A.zorluk.HIZ_TAVAN * DT;
-function riskUzaklik(rt, dal, ust) {
-  let en = Infinity;
-  for (let x = rt.x - 8; x <= rt.x + 8; x += 0.04) {         // en yakin nokta tozdan ~3 birim icinde
-    const dx = Math.max(0, dal.x + ADIM_X - x, x - (dal.x + dal.w - ADIM_X));
-    const dy = ust ? Math.max(0, dal.y + dal.h + RC - KE * dx - rt.y) : Math.max(0, rt.y - (dal.y - RC + KE * dx));
-    en = Math.min(en, Math.hypot(x - rt.x, dy));
-  }
-  return en;
+// ---- FAZ B (tasarim 13): kademe, rampa, salinan, isik-engel marji, kinematik ulasilabilirlik, duzensiz isik.
+// Bagimsiz: yalniz AYAR, AB.kademeNo, AB.zorluk ve AB.kacisMesafesi (gercek butunleme) kullanilir.
+const Z13 = A.zorluk, KAD = Z13.KADEME, MARJ = Z13.ISIK_MARJ;
+const ulas = t => t > 0 ? Math.max(0, AB.kacisMesafesi(t, 0, 0)) : 0;
+// Kinematik ulasilabilirlik: tam bilgili oyuncu onceki boslugun merkezinde (x = a + R_CARPMA'da durgun) tam girdiyle tozun
+// R_TOPLA'sina varir; durup donerek (2 * T_IVME) sonraki boslugun serbest bandina (R_CARPMA + PAY_KACIS icerisi) b - R_CARPMA'da
+// varir; toz KIVILCIM_Y bandinda (duvara degen bocek toplayamaz). Donus: en kucuk pay (birim; < 0 ulasilamaz).
+function ulasimPayi(tz, a, b, c1, c2, g2, hiz) {
+  const tG = (tz.x - a - RC) / hiz, tC = (b - RC - tz.x) / hiz;
+  const g1 = ulas(tG) + RT, gg = ulas(tC - 2 * T_IVME) + RT + (g2 / 2 - RC - PAYK);
+  return Math.min(g1 - Math.abs(tz.y - c1), gg - Math.abs(tz.y - c2), tz.y - U.KIVILCIM_Y_MIN, U.KIVILCIM_Y_MAX - tz.y);
 }
-function riskDenetle(dn, s, zf, puan, ozel) {
-  const rk = s.toz.filter(tz => tz.risk), t = dn.t;
-  if (puan >= U.RISK_PUAN && !ozel && !s.tozsuz && !s.bomba && !s.sarmasik) ist.r.aday++;
-  if (!rk.length) return;
-  ist.r.dilim++;
-  if (rk.length > 1) kusur(t, s, 'dilimde birden cok risk tozu');
-  if (puan < U.RISK_PUAN) kusur(t, s, 'risk tozu esik altinda (' + puan + ')');
-  if (ozel || s.tozsuz || s.bomba || s.sarmasik) kusur(t, s, 'risk tozu nefes/acilis/tozsuz/bomba/sarmasik dilimde');
-  if (s.toz[s.toz.length - 1] !== rk[rk.length - 1] || s.toz.some((tz, i) => i && tz.x < s.toz[i - 1].x)) kusur(t, s, 'risk tozu sonda degil / x sirasi bozuk');
-  rk.forEach(rt => {
-    if (rt.alindi !== 0 || rt.yutuldu !== 0) kusur(t, s, 'risk tozu alinmis/yutulmus dogdu');
-    const ust = rt.y < zf.ust;
-    if (!(ust ? rt.y <= zf.ust - U.RISK_DERIN + 1e-9 : rt.y >= zf.alt + U.RISK_DERIN - 1e-9)) kusur(t, s, 'risk tozu guvenli zarfa RISK_DERIN\'den yakin');
-    if (rt.y < U.RISK_Y_MIN - EPS || rt.y > U.RISK_Y_MAX + EPS) kusur(t, s, 'risk tozu RISK_Y araligi disinda (' + rt.y + ')');
-    const dal = s.engeller.find(e => e.tur === 'dal' && e.yon === (ust ? 'ust' : 'alt') && rt.x >= e.x && rt.x <= e.x + e.w && rt.y >= e.y && rt.y <= e.y + e.h);
-    if (!dal) { kusur(t, s, 'risk tozu dikenli dalin icinde degil'); return; }
-    if (Math.abs(rt.x - (dal.x + dal.w / 2)) > 1e-9) kusur(t, s, 'risk tozu dalin ortasinda degil');
-    const u = riskUzaklik(rt, dal, ust);
-    ist.r.enAzUzak = Math.min(ist.r.enAzUzak, u);
-    if (!(u > RT)) kusur(t, s, 'risk tozu carpmadan alinabilir (uzaklik ' + u.toFixed(3) + ' <= R_TOPLA)');
-    if (dn.riskSon !== undefined) { ist.r.ardisik++; if (dn.riskSon !== ust) ist.r.donusum++; }
-    dn.riskSon = ust; if (ust) ist.r.ust++;
+const noktaZarf = (x, y, z) => Math.hypot(Math.max(0, z.x1 - x, x - z.x2), Math.max(0, z.y1 - y, y - z.y2));
+function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
+  const t = dn.t, m = s.x - XB, F = ist.f, kd = AB.kademeNo(m);
+  if (s.kademe !== kd) kusur(t, s, 'dilim kademesi ' + s.kademe + ' != ' + kd);
+  F.kademe[kd - 1]++;
+  // rampa tavanlari
+  F.enCokHiz = Math.max(F.enCokHiz, s.hiz); F.enCokSizinti = Math.max(F.enCokSizinti, zr.sizinti);
+  if (s.hiz > Z13.HIZ_TAVAN + EPS || zr.sizinti > Z13.SIZINTI_TAVAN + EPS) kusur(t, s, 'rampa tavani asildi');
+  // salinan: kademe 3+, supurulen zarf boslugun disinda (zarflar() + kural 1 'zarf boslugu kesiyor' da yakalar), duvar payi,
+  // genlik/periyot kademe ilerlemesiyle, her fazda (64 ornek) gecit = bosluktaki serbest en buyuk aralik >= bosluk(z)
+  const fo = Math.max(0, Math.min(1, (m - KAD[2]) / (KAD[4] - KAD[2])));
+  s.engeller.forEach(e => {
+    if (e.tur !== 'salinan') return;
+    F.salinan++; F.salKademe[kd - 1]++;
+    if (kd < 3) kusur(t, s, 'salinan kademe 3 oncesi');
+    if (ozel) kusur(t, s, 'salinan acilis/nefes diliminde');
+    const y1 = e.yc - e.gen, y2 = e.yc + e.gen + e.h;
+    if (y1 < Z13.SAL_KENAR - EPS || y2 > H - Z13.SAL_KENAR + EPS) kusur(t, s, 'salinan duvara SAL_KENAR\'dan yakin');
+    if (!(y2 <= zf.ust + EPS || y1 >= zf.alt - EPS)) kusur(t, s, 'salinan supurulen zarfi boslugu kesiyor');
+    if (Math.abs(e.gen - (Z13.SAL_GENLIK[0] + (Z13.SAL_GENLIK[1] - Z13.SAL_GENLIK[0]) * fo)) > 1e-9 ||
+        Math.abs(2 * Math.PI / e.om - (Z13.SAL_PERIYOT[0] + (Z13.SAL_PERIYOT[1] - Z13.SAL_PERIYOT[0]) * fo)) > 1e-9) kusur(t, s, 'salinan genlik/periyot kademeyle uyumsuz');
+    for (let k = 0; k < 64; k++) {
+      const y = e.yc + e.gen * Math.sin(2 * Math.PI * k / 64), lo = Math.max(zf.ust, Math.min(zf.alt, y)), hi = Math.max(zf.ust, Math.min(zf.alt, y + e.h));
+      const gecit = Math.max(lo - zf.ust, zf.alt - hi);
+      F.gecitEnAz = Math.min(F.gecitEnAz, gecit);
+      if (gecit < zr.bosluk - EPS) { kusur(t, s, 'salinan fazinda gecit ' + gecit.toFixed(3) + ' < bosluk'); break; }
+    }
   });
+  // dogumda isik (toz + kivilcim) her engel zarfindan (bu ve onceki dilim; salinan: supurulen kutu, kus: varistaki x araligi)
+  // >= ISIK_MARJ ve x'te [a + MARJ, b - MARJ]. Sarmasik istisnasi: sarmasigin sutun hizasindaki tozlari sonradan yutmasi
+  // tasarimdir (dogumda sutun yok); bu tozlar ayri sayilir ve yalniz sutun hizasindakiler olabilir.
+  const isiklar = s.toz.concat(s.kivilcim ? [s.kivilcim] : []);
+  isiklar.forEach(tz => {
+    F.isik++;
+    let en = Infinity; zarfTum.forEach(z => { en = Math.min(en, noktaZarf(tz.x, tz.y, z)); });
+    F.marjEnAz = Math.min(F.marjEnAz, en, tz.x - a, b - tz.x);
+    if (en < MARJ - EPS) kusur(t, s, 'isik engel zarfina ' + en.toFixed(3) + ' < ISIK_MARJ');
+    if (tz.x < a + MARJ - EPS || tz.x > b - MARJ + EPS) kusur(t, s, 'isik x marji disinda');
+  });
+  if (s.sarmasik) s.toz.forEach(tz => {
+    const sut = s.sarmasik.sutunlar.find(cl => tz.x >= cl.x && tz.x <= cl.x + cl.w && tz.y >= cl.y && tz.y <= cl.y + cl.h);
+    if (!sut) return;
+    F.sarYutulacak++;
+    if (!(sut.tx === tz.x && sut.ty === tz.y)) kusur(t, s, 'sarmasik sutun hizasi disinda bir tozu kapatiyor');
+  });
+  // kinematik ulasilabilirlik: her toz (kivilcim: kural 7 bacak denetimi)
+  s.toz.forEach(tz => {
+    const pay = ulasimPayi(tz, a, b, pc, c, zf.alt - zf.ust, s.hiz);
+    F.ulasimEnAz = Math.min(F.ulasimEnAz, pay);
+    if (pay < -1e-9) kusur(t, s, 'ulasilamaz toz (pay ' + pay.toFixed(4) + ')');
+  });
+  // duzensiz isik: kademe 4+, siradan dilim, dag = kademe 4 -> 5 ilerlemesi, son toz yayda (kural 6 denetimi)
+  const beklenen = kd >= 4 && !ozel && !s.tozsuz && !s.bomba && !s.sarmasik ? Math.max(0, Math.min(1, (m - KAD[3]) / (KAD[4] - KAD[3]))) : 0;
+  if (Math.abs((s.dag || 0) - beklenen) > 1e-9) kusur(t, s, 'dag ' + s.dag + ' != ' + beklenen);
+  if (s.dag > 0) {
+    F.dag++; if (s.dag === 1) F.dag1++;
+    s.toz.forEach(tz => { if (Math.abs(tz.y - yol(pc, c, (tz.x - a) / (b - a))) > U.TOZ_SAPMA + 1e-6) F.kayan++; });
+    // dusen toz bilgi boslugu: komsu noktalar (a, tozlar) arasi <= (DAG_BOSLUK + kayma payi 2 * DAG_X / (TOZ_MIN + 1)) * (b - a)
+    const sinir = (Z13.DAG_BOSLUK + 2 * Z13.DAG_X / (U.TOZ_MIN + 1)) * (b - a);
+    let once = a, enCok = 0; s.toz.forEach(tz => { enCok = Math.max(enCok, tz.x - once); once = tz.x; });
+    F.boslukEnCok = Math.max(F.boslukEnCok, enCok / (b - a));
+    if (enCok > sinir + 1e-9) kusur(t, s, 'dag toz boslugu ' + (enCok / (b - a)).toFixed(3) + ' > sinir');
+  }
 }
 function dilimDenetle(dn, s, gorPuan) {
   const puan = s.puan;                                        // uretim puani (tasarim 11.8; esik telafisi dahil, AB.uretimPuani)
@@ -211,7 +258,7 @@ function dilimDenetle(dn, s, gorPuan) {
   });
   // kural 4
   if (c < U.MERKEZ_MIN - EPS || c > U.MERKEZ_MAX + EPS) kusur(t, s, 'merkez ' + c + ' sinir disi');
-  const pc = p ? p.c : A.dunya.Y_BASLA, px = p ? p.x : XB, pw = p ? p.w : 0;
+  const pc = p ? p.c : A.dunya.Y_BASLA, px = p ? p.x : dn.basX, pw = p ? p.w : 0;
   if (p) {
     // kural 2 (yapisal): hiz artan -> gercek sure >= Δx / hiz(sonraki)
     const ara = (s.x - p.x) / zr.hiz;
@@ -236,13 +283,14 @@ function dilimDenetle(dn, s, gorPuan) {
   }
   // kural 6: toz
   // Toz/kivilcim x'i (a, b) acik araliginda: sabit zarflar [p.x, p.x+w] ve [s.x, s.x+w] disinda kalir.
-  const a = px + pw, b = s.x, yt = s.toz.filter(tz => !tz.risk);   // 12.2: risk tozu ayri denetlenir (riskDenetle)
+  const a = px + pw, b = s.x, yt = s.toz;
   const tozSay = yt.length + (s.bomba ? 1 : 0);             // bomba bir ic tozun yerindedir
-  if (s.tozsuz ? s.toz.length !== 0 : (tozSay < U.TOZ_MIN || tozSay > U.TOZ_MAX)) kusur(t, s, 'toz sayisi ' + tozSay);
-  yt.forEach(tz => {
+  // 13: duzensiz dilimde (dag > 0) tozlar dusebilir (en az 2) ve son toz disindakiler yaydan kayabilir (fazBDenetle)
+  if (s.tozsuz ? s.toz.length !== 0 : (tozSay < (s.dag > 0 ? 2 : U.TOZ_MIN) || tozSay > U.TOZ_MAX)) kusur(t, s, 'toz sayisi ' + tozSay);
+  yt.forEach((tz, i) => {
     if (!(tz.x > a && tz.x < b)) kusur(t, s, 'toz araligin disinda');
     const f = (tz.x - a) / (b - a);
-    if (Math.abs(tz.y - yol(pc, c, f)) > U.TOZ_SAPMA + 1e-6) kusur(t, s, 'toz egriden sapmis');
+    if ((!(s.dag > 0) || i === yt.length - 1) && Math.abs(tz.y - yol(pc, c, f)) > U.TOZ_SAPMA + 1e-6) kusur(t, s, 'toz egriden sapmis');
   });
   // kural 7: kivilcim
   const kv = s.kivilcim;
@@ -305,7 +353,7 @@ function dilimDenetle(dn, s, gorPuan) {
     if (Math.abs(bo.y - yol(pc, c, (bo.x - a) / (b - a))) > U.TOZ_SAPMA + 1e-6) kusur(t, s, 'bomba yaydan sapmis');
     // kacilabilirlik: her olasi oyuncu durumunda en az bir yana
     const hA = [{ x: bo.x - RB, y: bo.y + RB + PAYK }], hY = [{ x: bo.x - RB, y: bo.y - RB - PAYK }];
-    if (k) { const n = ikiYonDenetle(k, bo.x - EKRAN, hA, hY, bo.x + RB); if (n) kusur(t, s, 'bomba: ' + n); }
+    if (k) { const n = ikiYonDenetle(k, bo.x - BOMBA_GOR, hA, hY, bo.x + RB); if (n) kusur(t, s, 'bomba: ' + n); }
     [hA, hY].forEach(h => { Ylist.push(h[0].y); if (!koridorAcik(h[0].y, bo.x - RB, bo.x + RB, zarfTum)) kusur(t, s, 'bomba kacis seviyesi engel zarfinda'); });
   }
   if (s.sarmasik) {
@@ -335,7 +383,7 @@ function dilimDenetle(dn, s, gorPuan) {
     Ylist.push(Y);
     if (s.kivilcim) kusur(t, s, 'sarmasik dilimde kivilcim');
   }
-  riskDenetle(dn, s, zf, puan, ozel);
+  fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel);
   if (!s.nefes) dn.oncekiGercek = { x: s.x, w: s.w };
   tutmaGuncelle(dn, s, c, zf, Ylist);
   dn.son = { no: s.no, x: s.x, w: s.w, c: c, tehlike: !!(s.bomba || s.sarmasik), ust: zf.ust, alt: zf.alt, nefes: s.nefes, engeller: s.engeller.map(e => Object.assign({}, e)) };
@@ -376,12 +424,12 @@ function tehlikeZamanDenetle(dn, d, bx0, t0) {
       }
     } else {
       const bo = s.bomba;
-      if (k.gor === null && bo.x - bx <= EKRAN) k.gor = bo.x - bx0 > EKRAN ? ara(bo.x - EKRAN) : d.t;
+      if (k.gor === null && bo.x - bx <= BOMBA_GOR) k.gor = bo.x - bx0 > BOMBA_GOR ? ara(bo.x - BOMBA_GOR) : d.t;
       if (bx >= bo.x - RB) {
         ist.z.bomba++;
         const gv = ara(bo.x - RB) - k.gor;
         ist.z.enAzBombaGorVaris = Math.min(ist.z.enAzBombaGorVaris, gv);
-        if (!(gv >= A.adalet.T_MIN)) kusur(dn.t, s, 'bomba carpma mesafesine ' + gv.toFixed(4) + ' sn kala gorundu');
+        if (!(gv >= BOMBA_KACIS_SN - 1e-9)) kusur(dn.t, s, 'bomba carpma mesafesine ' + gv.toFixed(4) + ' sn kala gorundu (< ' + BOMBA_KACIS_SN.toFixed(4) + ')');
         dn.tehlike.splice(i--, 1);
       }
     }
@@ -529,42 +577,6 @@ function botD(kayit) {
     return kontrol(d, (z.ust + z.alt) / 2);
   };
 }
-// Bot T (tam toplayici, 12.2): Bot A gibi; siradaki (gecilmemis) dilimde alinmamis risk tozu varsa once onundeki
-// yol tozlarini izler, risk tozuna yetisme payi kalmayinca (|dy| / RT_VY * hiz + 2 birim) risk tozunu sert hedefler
-// (dala girer), alinca ya da gecince Bot A'ya doner. Isik sabit: olum degil hasar olculur.
-const RT_VY = 22;
-function botT() {
-  const planlar = new Map();
-  return d => {
-    const bx = d.mesafe + XB, [ilk, ikinci] = ilkIkinci(d.dilimler, bx);
-    if (!ilk) return kontrol(d, d.y);
-    const rt = ilk.toz.find(t => t.risk && !t.alindi);
-    if (rt && rt.x + RT >= bx) {
-      const yol = ilk.toz.find(t => !t.risk && !t.alindi && !t.yutuldu && t.x + RT >= bx);
-      if (yol && rt.x - bx > Math.abs(rt.y - d.y) / RT_VY * AB.zorluk(d.mesafe).hiz + 2) return kontrol(d, yol.y);
-      return kontrol(d, rt.y, true);
-    }
-    const y = idealKacis(d, bx, planlar, ilk, ikinci);
-    if (y !== null) return kontrol(d, y.y, y.sert);
-    const z = AB.dilimZarfi(ilk); return kontrol(d, (z.ust + z.alt) / 2);
-  };
-}
-// Bot K (kenar siyiran, miknatis olcumu 12.2): Bot A gibi; risk tozlu dilimde dalin x araligini guvenli boslugun
-// risk tozu tarafindaki kenarindan (R_CARPMA + K_PAY) gecer: risk tozuna carpmadan en cok yaklasan yol. Risk tozu
-// carpmadan (bedava) alinmamali.
-const K_PAY = 0.5;
-function botK() {
-  const planlar = new Map();
-  return d => {
-    const bx = d.mesafe + XB, [ilk, ikinci] = ilkIkinci(d.dilimler, bx);
-    if (!ilk) return kontrol(d, d.y);
-    const y = idealKacis(d, bx, planlar, ilk, ikinci);
-    if (y !== null) return kontrol(d, y.y, y.sert);
-    const z = AB.dilimZarfi(ilk), rt = ilk.toz.find(t => t.risk && !t.alindi);
-    if (rt && bx >= ilk.x - 2 * RT) return kontrol(d, rt.y < z.ust ? z.ust + RC + K_PAY : z.alt - RC - K_PAY);
-    return kontrol(d, (z.ust + z.alt) / 2);
-  };
-}
 function cemberKesar(e, bx, by, r) {
   const cx = Math.max(e.x, Math.min(bx, e.x + e.w)), cy = Math.max(e.y, Math.min(by, e.y + e.h));
   return (bx - cx) * (bx - cx) + (by - cy) * (by - cy) <= r * r;
@@ -626,7 +638,7 @@ function botB(sabit) {
     let ilk = -1;
     for (let i = 0; i < kuyruk.length; i++) {
       const k = kuyruk[i], s = k.s;
-      if (k.tp && k.tgor === Infinity && (s.bomba ? s.bomba.x - bx <= EKRAN : s.sarmasik.faz >= 1)) k.tgor = d.t;
+      if (k.tp && k.tgor === Infinity && (s.bomba ? s.bomba.x - bx <= BOMBA_GOR : s.sarmasik.faz >= 1)) k.tgor = d.t;
       if (s.sarmasik && k.tgor <= sinir) k.tp = sarmasikBilinen(s.sarmasik, bx);
       if (ilk < 0 && s.x + s.w + RC >= bx) ilk = i;
     }
@@ -646,7 +658,9 @@ function botB(sabit) {
 // secenek: isikSabit, zaman (zaman denetimi: Bot A), yapi (yapisal denetim; dilim dizisi puana bagli oldugu icin
 // her kosuda), kayit (Bot D), mesafe.
 function kos(t, bot, secenek) {
-  const d = AB.oyunOlustur(t), dn = yeniDenetci(t), hedefMesafe = secenek.mesafe || MESAFE;
+  const d = AB.oyunOlustur(t, secenek.bas), dn = yeniDenetci(t, (secenek.bas ? secenek.bas.mesafe : 0) + XB), hedefMesafe = secenek.mesafe || MESAFE;
+  // 13: olum nedenleri (olay turu / engel turu / bitis sebebi) ve kademe olaylari (sirayla, esigi gecen adimda, her biri bir kez)
+  const neden = {}; let kdSon = AB.kademeNo(d.mesafe);
   const mek = { tozsuz: [], bomba: [], sarmasik: [] };
   // (b) esik: her tur icin esigi gecen ilk nefes olmayan dilim; ekrana (ESIK_EKRAN) varista gercek puan - esik
   const denetle = secenek.yapi || secenek.zaman, izE = ESIK_TUR.map(() => null), kayE = ESIK_TUR.map(() => ESIK_EKRAN.map(() => false));
@@ -680,6 +694,16 @@ function kos(t, bot, secenek) {
     if (secenek.isikSabit) d.isik = 1;
     const bx0 = d.mesafe + XB, t0 = d.t;
     const olay = AB.adim(d, bot(d));
+    for (const o of olay) {
+      const k = o.tur === 'hasar' ? 'hasar/' + o.engel : o.tur === 'bitti' ? 'bitti/' + o.sebep : o.tur;
+      if (o.tur === 'hasar' || o.tur === 'ag' || o.tur === 'bomba' || o.tur === 'sarmasik' || o.tur === 'sersem' || o.tur === 'zemin' || o.tur === 'bitti') neden[k] = (neden[k] || 0) + 1;
+      if (o.tur === 'kademe') {
+        ist.f.kademeOlay++;
+        const K = A.zorluk.KADEME[o.kademe - 1];
+        if (!(o.kademe === kdSon + 1 && bx0 - XB < K && d.mesafe >= K && d.kademe === o.kademe)) kusur(t, null, 'kademe olayi ' + o.kademe + ' (onceki ' + kdSon + ', mesafe ' + d.mesafe.toFixed(2) + ')');
+        kdSon = o.kademe;
+      }
+    }
     adimSay++;
     yeni();
     if (denetle) esikBak();
@@ -704,8 +728,9 @@ function kos(t, bot, secenek) {
     if (secenek.zaman) { zamanDenetle(dn, d); tehlikeZamanDenetle(dn, d, bx0, t0); }
     if (d.isik < enAzIsik) enAzIsik = d.isik;
   }
+  if (kdSon !== AB.kademeNo(d.mesafe)) kusur(t, null, 'kademe olayi eksik: ' + kdSon + ' / ' + AB.kademeNo(d.mesafe));
   const bx = d.mesafe + XB, gecilen = L => L.filter(s => s.x + s.w < bx).length;
-  return { d: d, carpma: carpma, bomba: bomba, enAzIsik: enAzIsik, adim: adimSay, yutuldu: yutuldu, uyari: uyari, sersem: sersem, zemin: zemin,
+  return { d: d, neden: neden, carpma: carpma, bomba: bomba, enAzIsik: enAzIsik, adim: adimSay, yutuldu: yutuldu, uyari: uyari, sersem: sersem, zemin: zemin,
            tozsuz: gecilen(mek.tozsuz), bombaDilim: gecilen(mek.bomba), sarmasikDilim: gecilen(mek.sarmasik), puan: d.puan };
 }
 
@@ -767,60 +792,56 @@ for (let i = 0; i < SERSEM_TOHUM; i++) {
     }
   }
 }
-// Toz deseni zorlugu (12.2): Bot T (tam toplayici), Bot K (kenar siyiran) ve Bot A (secici) ayni tohumlarda, isik
-// sabit (olum degil hasar olculur). Dilim = gecilen gercek dilim (nefes haric), uretim puani (dilim.puan) >= esik.
-// Hasar = hasar/ag/sarmasik/bomba olayi, bocegin o an icinde bulundugu (gecilmemis ilk) dilime yazilir.
-// Risk tozu alimi 'bedava': alimdan once DOKUNULMAZ sn ve sonra 0,5 sn icinde hasar yok.
-// Toz olayinin puani her tozda (risk dahil) P.TOZ * carpan(o anki zincir) olmali (risk tozu ekstra puan vermez).
-const RISK_TOHUM = process.argv[7] !== undefined ? +process.argv[7] : 100, RISK_MESAFE = MESAFE;   // gercek isikli Tg/Bg: ilk yarisi (sure)
-const RISK_ESIK = 2400, RISK_PENCERE = 7;               // olcum: bkz. tasarim 12.2
-const HASAR_TUR = { hasar: 1, ag: 1, sarmasik: 1, bomba: 1 };
-function riskKos(t, bot, gercekIsik) {
-  const d = AB.oyunOlustur(t), r = { dilim: [], riskVar: 0, riskAl: 0, bedava: 0, puanHata: 0, sersem: 0, zemin: 0, bitti: 0, puan: 0 };
-  const hasarNo = new Map(), alim = [], hasarT = [], izle = [];
-  let sonNo = -1, sonGec = -1;
-  while (d.mesafe < RISK_MESAFE && !d.bitti) {
-    if (!gercekIsik) d.isik = 1;
-    let zb = d.zincirSure > 0 && d.zincirSure - DT <= 0 ? 0 : d.zincir;   // adim zincir suresini tozdan once dusurur
-    const olay = AB.adim(d, bot(d)), bx = d.mesafe + XB;
-    for (const s of d.dilimler) if (s.no > sonNo) { sonNo = s.no; s.toz.forEach(tz => { if (tz.risk) izle.push(tz); }); }
-    for (const o of olay) {
-      if (HASAR_TUR[o.tur]) {
-        zb = 0; hasarT.push(d.t);
-        const s = d.dilimler.find(q => q.x + q.w + RC >= bx); if (s) hasarNo.set(s.no, (hasarNo.get(s.no) || 0) + 1);
-      } else if (o.tur === 'toz') { if (o.puan !== A.puan.TOZ * AB.carpan(zb)) r.puanHata++; zb++; }
-      else if (o.tur === 'sersem') r.sersem++; else if (o.tur === 'zemin') r.zemin++;
-    }
-    for (let i = 0; i < izle.length; i++) if (izle[i].alindi) { alim.push(d.t); izle.splice(i--, 1); }
-    for (const s of d.dilimler) if (s.no > sonGec && s.x + s.w + RC < bx) {
-      sonGec = s.no;
-      const rv = s.toz.some(tz => tz.risk);
-      if (!s.nefes) r.dilim.push({ p: s.puan, h: hasarNo.get(s.no) || 0, risk: rv ? 1 : 0, al: rv && s.toz.some(tz => tz.risk && tz.alindi) ? 1 : 0 });
-    }
+// Ust hiz kumesi (13, B.3): kosu 60000 birimden ve puan 6000 ile baslar (hiz 44 tavanda, tAra ~1,25, bosluk ~16, kademe 5:
+// salinan en sik ve en genis, isik tam duzensiz; bomba/sarmasik/tozsuz esikleri gecilmis). Bot A (sabit isik, zaman denetimi),
+// Bot B (isik 0 sabit, T_MIN gecikmeli) ve Bot B gercek isikla; yapisal denetim her kosuda. Olum nedenleri raporlanir (hedef 0).
+const UST_TOHUM = process.argv[7] !== undefined ? +process.argv[7] : 200, UST_BAS = { mesafe: 60000, puan: 6000 }, UST_UZUN = 6000;
+const ust = { A: [], B: [], Bg: [] };
+for (let i = 0; i < UST_TOHUM; i++) {
+  const t = tohum(500000 + i), sec = o => Object.assign({ bas: UST_BAS, mesafe: UST_BAS.mesafe + UST_UZUN }, o);
+  const ua = kos(t, botA(), sec({ isikSabit: true, zaman: true }));
+  ust.A.push(Object.assign(ozet(Object.assign(ua, { t: t })), { neden: ua.neden }));
+  const ub = kos(t, botB(true), sec({ isikSabit: true, yapi: true }));
+  ust.B.push(Object.assign(ozet(Object.assign(ub, { t: t })), { neden: ub.neden }));
+  const ug = kos(t, botB(false), sec({ yapi: true }));
+  ust.Bg.push(Object.assign(ozet(Object.assign(ug, { t: t })), { neden: ug.neden, isik: ug.enAzIsik, bitti: ug.d.bitti, hiz: AB.zorluk(ug.d.mesafe).hiz }));
+}
+// Bagimsiz ulasilabilirlik benzetimi (13, denetci): cekirdegin isikUlasir / kacisMesafesi / benzet'ini KULLANMAZ. adim()
+// butunlemesinin aynisi (ivme rampasi, hiz siniri), gercek A_YUKSEL / G_SUZUL; frenli bang-bang oyuncu. Onceki boslugun
+// merkezinde (x = a + R_CARPMA, durgun) baslar; 1. bacak tozun R_TOPLA'sina, 2. bacak sonraki boslugun serbest bandina
+// (merkezden g2/2 - R_CARPMA) b - R_CARPMA'da; duvara (Y_UST / Y_ALT) degmez. Duzensiz dilimlerin her tozu.
+const UB_TOHUM = 120, UB_MESAFE = 30000, UB_K = 1 - Math.exp(-DT / A.hareket.T_RAMPA);
+function ubAdim(s, bas) {
+  s.ay += ((bas ? -A.hareket.A_YUKSEL : A.hareket.G_SUZUL) - s.ay) * UB_K; s.vy += s.ay * DT;
+  if (s.vy < -A.hareket.VY_YUKARI) s.vy = -A.hareket.VY_YUKARI; else if (s.vy > A.hareket.VY_ASAGI) s.vy = A.hareket.VY_ASAGI;
+  s.y += s.vy * DT;
+}
+function ubFren(s) { const q = { y: 0, vy: s.vy, ay: s.ay }, bas = s.vy > 0; let n = 0; while (n++ < 400 && (bas ? q.vy > 0 : q.vy < 0)) ubAdim(q, bas); return q.y; }
+const ubKontrol = (s, hedef) => s.y + ubFren(s) > hedef;     // durunca hedefin altinda kalacaksa yuksel
+function ubDene(a, b, c1, c2, g2, hiz, tz) {
+  const s = { y: c1, vy: 0, ay: 0 }; let x = a + RC, enYakin = Infinity, alindi = false;
+  while (x < b - RC) {
+    ubAdim(s, ubKontrol(s, alindi ? c2 : tz.y)); x += hiz * DT;
+    if (!alindi) { const dd = Math.hypot(x - tz.x, s.y - tz.y); enYakin = Math.min(enYakin, dd); if (dd <= RT) alindi = true; if (x > tz.x + RT) break; }
+    if (s.y < Y_UST || s.y > Y_ALT) return { ok: false, neden: 'duvar', pay: -1 };
   }
-  r.riskVar = r.dilim.reduce((q, x) => q + x.risk, 0); r.riskAl = r.dilim.reduce((q, x) => q + x.al, 0);
-  r.bedava = alim.filter(ta => !hasarT.some(th => th >= ta - A.isik.DOKUNULMAZ - EPS && th <= ta + 0.5)).length;
-  r.bitti = d.bitti; r.puan = d.puan; r.mesafe = d.mesafe;
-  return r;
+  if (!alindi) return { ok: false, neden: 'toz', pay: enYakin - RT };
+  while (x < b - RC) { ubAdim(s, ubKontrol(s, c2)); x += hiz * DT; }
+  const ic = g2 / 2 - RC, pay = ic - Math.abs(s.y - c2);
+  return { ok: pay >= -1e-9, neden: pay >= -1e-9 ? '' : 'bosluk', pay: pay };
 }
-const rs = { T: [], K: [], A: [], Tg: [], Bg: [] };
-for (let i = 0; i < RISK_TOHUM; i++) {
-  const t = tohum(300000 + i);
-  rs.T.push(riskKos(t, botT())); rs.K.push(riskKos(t, botK())); rs.A.push(riskKos(t, botA()));
-  if (2 * i < RISK_TOHUM) { rs.Tg.push(riskKos(t, botT(), true)); rs.Bg.push(riskKos(t, botB(false), true)); }
-}
-// esikten sonraki dilimlerde dilim basina hasar ve RISK_PENCERE dilimlik ardisik (ortusmeyen) pencereler
-function riskOzet(L, esik) {
-  let dilim = 0, hasar = 0, pen = 0, pen2 = 0, penTop = 0;
-  L.forEach(r => {
-    const D = r.dilim.filter(x => x.p >= esik);
-    dilim += D.length; hasar += D.reduce((q, x) => q + x.h, 0);
-    for (let j = 0; j + RISK_PENCERE <= D.length; j += RISK_PENCERE) {
-      const h = D.slice(j, j + RISK_PENCERE).reduce((q, x) => q + x.h, 0);
-      pen++; penTop += h; if (h >= 2) pen2++;
-    }
-  });
-  return { dilim, hasar, oran: hasar / Math.max(1, dilim), pen, penOrt: penTop / Math.max(1, pen), pen2: pen2 / Math.max(1, pen) };
+const ub = { toz: 0, kot: { toz: 0, bosluk: 0, duvar: 0 }, ornek: [], enAzPay: Infinity };
+for (let t = 1; t <= UB_TOHUM; t++) {
+  const u = AB.ureticiOlustur(t); let p = null;
+  for (let i = 0; ; i++) {
+    const pu = 2500 + i * 3, s = u.sonraki(AB.bolgeNo(pu), pu); if (s.x - XB > UB_MESAFE) break;
+    if (p && s.dag > 0) s.toz.forEach(tz => {
+      ub.toz++; const r = ubDene(p.x + p.w, s.x, p.c, s.c, s.alt - s.ust, s.hiz, tz);
+      if (r.ok) ub.enAzPay = Math.min(ub.enAzPay, r.pay);
+      else { ub.kot[r.neden]++; if (ub.ornek.length < 3) ub.ornek.push('tohum ' + t + ' dilim ' + s.no + ' ' + r.neden + ' ' + r.pay.toFixed(3)); }
+    });
+    p = s;
+  }
 }
 const sure = ((Date.now() - bas) / 1000).toFixed(1);
 
@@ -841,7 +862,7 @@ dene('yapisal kurallar 1-9 + T_MIN gorunurluk (' + ist.dilim + ' dilim)', () => 
   Object.keys(esikOlc).forEach(ad => console.log('  bilgi esik ' + ad + ': ' + ESIK_TUR.map(([n, T], j) => n + ' ' + T + ' [' +
     ESIK_EKRAN.map((E, e) => 'E' + E.toFixed(0) + ' ' + ozet(esikOlc[ad][j][e])).join(', ') + ']').join('; ')));
   dene('esik telafisi: (a) uretim puani <= gercek puan + ' + TELAFI_TAVAN + '; (b) esigi gecen ilk dilim ekran x = W konumuna vardiginda gercek puan >= esik - ' + ESIK_TOL +
-       ' (risk/tozsuz ' + U.RISK_PUAN + ', bomba ' + U.BOMBA_PUAN + ', sarmasik ' + U.SARMASIK_PUAN + '; Bot A, B, Bg, uzun A/B)', () => {
+       ' (tozsuz ' + U.TOZSUZ_PUAN + ', bomba ' + U.BOMBA_PUAN + ', sarmasik ' + U.SARMASIK_PUAN + '; Bot A, B, Bg, uzun A/B)', () => {
     const k = ist.kusur.filter(x => / esigi erken| telafi tavanini /.test(x));
     assert.strictEqual(k.length, 0, k.length + ' kusur: ' + k.slice(0, 5).join(' | '));
     ESIK_TUR.forEach(([n], j) => assert.ok(tum[j][0].length > 0, n + ' esigi hic olculmedi'));
@@ -865,6 +886,7 @@ dene('tum kosular ' + MESAFE + ' birime ulasti (A, B)', () => {
 dene('yeni mekanikler sinandi: tozsuz pencere, bomba, sarmasik (5000 alti ve ustu), 5000+ yan yana', () => {
   const m = ist.m;
   assert.ok(m.pencere > 0 && m.bomba > 0 && m.sarmasik > 0, JSON.stringify(m));
+  assert.ok(ist.f.salinan > 0 && ist.f.dag1 > 0 && ist.f.kademe[4] > 0, 'salinan / duzensiz isik / kademe 5 sinanmadi');
   assert.ok(m.sarmasik5000 > 0 && m.tozsuz5000 > 0, '5000+ sarmasik/tozsuz yok');
   assert.ok(ist.z.sarmasik > 0 && ist.z.bomba > 0, 'zaman denetimi yok');
   if (UZUN_TOHUM) assert.ok(m.cakismaYan > 0, '5000+ yan yana sarmasik-tozsuz ornegi yok');
@@ -873,7 +895,11 @@ dene('sarmasik uyari >= T_MIN (en az ' + ist.z.enAzUyari.toFixed(4) + ' sn), uya
      ' (en az ' + ist.z.enAzUyariVaris.toFixed(4) + ' sn, degismez ' + SA_KACIS.toFixed(4) + ')', () => {
   assert.ok(ist.z.enAzUyari >= A.adalet.T_MIN - EPS && ist.z.enAzUyariVaris >= SA_KACIS - 1e-6);
 });
-dene('bomba gorunur -> carpma mesafesi >= T_MIN (en az ' + ist.z.enAzBombaGorVaris.toFixed(4) + ' sn)', () => assert.ok(ist.z.enAzBombaGorVaris >= A.adalet.T_MIN));
+dene('bomba on isareti: testin BOMBA_GOR sabiti (48) = AYAR (W - X_BOCEK + BOMBA_ON_ISARET)', () => assert.strictEqual(A.dunya.W - XB + U.BOMBA_ON_ISARET, BOMBA_GOR));
+dene('bomba gorunur (on isaret) -> carpma mesafesi >= T_MIN + kacis + PAY_KACIS_SN = ' + BOMBA_KACIS_SN.toFixed(4) + ' sn (en az ' + ist.z.enAzBombaGorVaris.toFixed(4) + ' sn)', () => {
+  assert.ok(ist.z.bomba > 0 && ist.z.enAzBombaGorVaris >= BOMBA_KACIS_SN - 1e-9);
+  assert.strictEqual(ist.kusur.filter(x => /bomba carpma mesafesine/.test(x)).length, 0);
+});
 dene('Bot D (kivilcim kovalar): carpismasiz alma orani >= %95', () => {
   const oran = kivD.temiz / kivD.deneme;
   console.log('       ' + kivD.deneme + ' kivilcim, alinan ' + kivD.alinan + ', carpismasiz alinan ' + kivD.temiz + ' (%' + (100 * oran).toFixed(2) + '), toplam carpisma ' + kivD.carpma + ' (' + kivD.tohumCarpma + ' tohum), tavan ' + kivD.sersem + ', zemin ' + kivD.zemin);
@@ -887,72 +913,71 @@ dene('Bot S (bilerek tavana carpar, uyaninca T_MIN gecikmeli): ' + bs.sersem + '
   assert.ok(bs.sersem > 0); assert.strictEqual(bs.zemin, 0); assert.ok(bs.enAzPay > 0);
 });
 dene('bolge olaylari nefes varisinda (' + ist.bolgeOlay + ' olay)', () => assert.ok(ist.bolgeOlay > 0));
-// ---- 12.2 toz deseni zorlugu
-// Ozetler HEAD'deki (risk tozu oncesi) cekirdekle hesaplandi: 800 oncesi uretim bayt bayt ayni; 800 sonrasi
-// risk tozlari cikarilinca da ayni (risk tozu ayri rng akisi, ana akisin tuketimi degismedi). Uretici bilerek
-// degisirse ozet yeniden hesaplanir.
+// ---- FAZ B (tasarim 13)
+// Bolge 2 oncesi uretim: HEAD (32f4eef) cekirdeginin risk tozlari cikarilmis uretimiyle bayt bayt ayni. Ozet HEAD ile
+// hesaplandi (300 tohum, puan i * 250: tozsuz/bomba/sarmasik/kivilcim ve eski risk tozu esikleri dilim 4-8'de gecilir).
+// Dilimin yeni alanlari (kademe, dag) ozet disi. Uretici bilerek degisirse ozet yeniden hesaplanir.
 function fnv(h, s) { for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h; }
-function uretimOzeti(tohumlar, n, puanF, soy) {
-  let h = 0x811C9DC5, risk = 0;
-  for (let t = 1; t <= tohumlar; t++) {
+dene('Bolge 2 oncesi (varis mesafesi <= KADEME[1]) uretim HEAD ile ayni (risk tozu cikarilmis HEAD): 300 tohum, ozet c40d01b6', () => {
+  let h = 0x811C9DC5, n = 0; const tur = { bomba: 0, sarmasik: 0, tozsuz: 0, kivilcim: 0 };
+  for (let t = 1; t <= 300; t++) {
     const u = AB.ureticiOlustur(t);
-    for (let i = 0; i < n; i++) {
-      const p = puanF(i), s = u.sonraki(AB.bolgeNo(p), p);
-      risk += s.toz.filter(z => z.risk).length;
-      if (soy) s.toz = s.toz.filter(z => !z.risk);
-      h = fnv(0x811C9DC5, h.toString(16) + JSON.stringify(s));
+    for (let i = 0; ; i++) {
+      const p = i * 250, s = u.sonraki(AB.bolgeNo(p), p);
+      if (s.x - XB > A.zorluk.KADEME[1]) break;
+      if (s.bomba) tur.bomba++; if (s.sarmasik) tur.sarmasik++; if (s.tozsuz) tur.tozsuz++; if (s.kivilcim) tur.kivilcim++;
+      h = fnv(0x811C9DC5, h.toString(16) + JSON.stringify(s, (k, v) => (k === 'kademe' || k === 'dag') ? undefined : v)); n++;
     }
   }
-  return { h: h.toString(16), risk: risk };
-}
-dene('800 oncesi desen degismedi: 200 tohum x 120 dilim (puan 0-799) uretim ozeti eskiyle ayni, risk tozu yok', () => {
-  const o = uretimOzeti(200, 120, i => Math.min(U.RISK_PUAN - 1, i * 7), false);
-  assert.deepStrictEqual(o, { h: '2e61cd7b', risk: 0 });
+  console.log('       ' + n + ' dilim ' + JSON.stringify(tur));
+  assert.deepStrictEqual([h.toString(16), n], ['c40d01b6', 3000]);
 });
-dene('800 sonrasi risk tozlari cikarilinca uretim eskiyle ayni (100 tohum x 600 dilim, puan 0-8400)', () => {
-  const o = uretimOzeti(100, 600, i => i * 14, true);
-  console.log('       ' + o.risk + ' risk tozu');
-  assert.strictEqual(o.h, '6a4bf060'); assert.ok(o.risk > 1000);
+const F = ist.f;
+dene('kademe olaylari: her kosuda esik basina bir kez, sirayla, esigi gecen adimda (' + F.kademeOlay + ' olay); rampa tavanlari (en cok hiz ' +
+     F.enCokHiz.toFixed(2) + ', sizinti ' + F.enCokSizinti.toFixed(4) + ')', () => {
+  const k = ist.kusur.filter(x => /kademe olayi|rampa tavani|dilim kademesi/.test(x));
+  assert.strictEqual(k.length, 0, k.slice(0, 5).join(' | '));
+  assert.ok(F.kademeOlay > 0 && F.enCokHiz <= A.zorluk.HIZ_TAVAN && F.enCokSizinti <= A.zorluk.SIZINTI_TAVAN + EPS);
 });
-dene('risk tozu yapisal: guvenli zarf disinda, dikenli dalda, carpmadan alinamaz (' + ist.r.dilim + ' / ' + ist.r.aday + ' aday dilim)', () => {
-  console.log('       toza en kisa carpmasiz uzaklik ' + ist.r.enAzUzak.toFixed(3) + ' (R_TOPLA ' + RT + '), ust ' + ist.r.ust + ' / alt ' + (ist.r.dilim - ist.r.ust) +
-              ', ardisik yan degisimi %' + (100 * ist.r.donusum / Math.max(1, ist.r.ardisik)).toFixed(1));
-  assert.ok(ist.r.dilim > 1000 && ist.r.enAzUzak > RT);
+dene('salinan: yalniz kademe 3+, supurulen zarf boslugu kesmez, her fazda gecit >= bosluk (en az ' + F.gecitEnAz.toFixed(3) + '; ' + F.salinan +
+     ' salinan, kademe 3/4/5: ' + F.salKademe.slice(2).join('/') + ')', () => {
+  const k = ist.kusur.filter(x => /salinan/.test(x));
+  assert.strictEqual(k.length, 0, k.slice(0, 5).join(' | '));
+  assert.ok(F.salinan > 1000 && F.salKademe[0] === 0 && F.salKademe[1] === 0 && F.gecitEnAz >= A.zorluk.BOSLUK_TABAN - A.zorluk.BOSLUK_Z - EPS);
 });
-const roT = riskOzet(rs.T, RISK_ESIK), roA = riskOzet(rs.A, RISK_ESIK), roK = riskOzet(rs.K, RISK_ESIK), ro8 = riskOzet(rs.T, U.RISK_PUAN), roA8 = riskOzet(rs.A, U.RISK_PUAN);
-const riskAl = L => L.reduce((q, r) => q + r.riskAl, 0) + ' / ' + L.reduce((q, r) => q + r.riskVar, 0);
-dene('(a) Bot T (tam toplayici, ' + rs.T.length + ' tohum): puan >= ' + RISK_ESIK + ' sonrasi her ' + RISK_PENCERE + ' dilimde ortalama >= 2 hasar; secici Bot A\'nin >= 3 kati', () => {
-  console.log('       Bot T: >= ' + RISK_ESIK + ': ' + roT.dilim + ' dilim, dilim basina hasar ' + roT.oran.toFixed(3) + ', ' + RISK_PENCERE + ' dilimlik pencere ort ' + roT.penOrt.toFixed(2) +
-              ' (>= 2 hasarli pencere %' + (100 * roT.pen2).toFixed(1) + '); >= ' + U.RISK_PUAN + ': dilim basina ' + ro8.oran.toFixed(3) + '; risk tozu alinan ' + riskAl(rs.T));
-  const kova = [[U.RISK_PUAN, 1600], [1600, 2400], [2400, 3200], [3200, 6400], [6400, Infinity]].map(([lo, hi]) => {
-    const D = [].concat(...rs.T.map(r => r.dilim.filter(x => x.p >= lo && x.p < hi)));
-    return lo + '-' + hi + ': ' + (D.reduce((q, x) => q + x.h, 0) / Math.max(1, D.length)).toFixed(3) + ' (risk %' + (100 * D.reduce((q, x) => q + x.risk, 0) / Math.max(1, D.length)).toFixed(1) + ')';
+dene('isik-engel: dogumda her toz/kivilcim engel zarfina (salinan supurulen) >= ISIK_MARJ ' + A.zorluk.ISIK_MARJ + ', 0 ihlal (en az ' + F.marjEnAz.toFixed(3) +
+     ', ' + F.isik + ' isik); sarmasik istisnasi ayri: ' + F.sarYutulacak + ' sutun hizasi tozu', () => {
+  const k = ist.kusur.filter(x => /isik engel|isik x marji|sarmasik sutun hizasi disinda/.test(x));
+  assert.strictEqual(k.length, 0, k.slice(0, 5).join(' | '));
+  assert.ok(F.marjEnAz >= A.zorluk.ISIK_MARJ - EPS && F.sarYutulacak > 0);
+});
+dene('ulasilamaz isik 0: her toz kinematik ulasilabilir (en az pay ' + F.ulasimEnAz.toFixed(3) + ' birim); duzensiz dilim ' + F.dag + ' (tam ' + F.dag1 +
+     '), yaydan kayan toz ' + F.kayan + ', en buyuk toz boslugu yayin %' + (100 * F.boslukEnCok).toFixed(1), () => {
+  const k = ist.kusur.filter(x => /ulasilamaz|dag /.test(x));
+  assert.strictEqual(k.length, 0, k.slice(0, 5).join(' | '));
+  assert.ok(F.ulasimEnAz >= -1e-9 && F.dag > 1000 && F.kayan > 1000);
+});
+dene('ulasilamaz isik 0 (bagimsiz benzetim, cekirdek kacis islevleri kullanilmaz): ' + UB_TOHUM + ' tohum x ' + UB_MESAFE + ' birim, ' + ub.toz +
+     ' duzensiz toz; frenli bang-bang oyuncu hepsini alip sonraki bosluga giriyor (en az bosluk payi ' + ub.enAzPay.toFixed(3) + ')', () => {
+  const k = ub.kot.toz + ub.kot.bosluk + ub.kot.duvar;
+  assert.strictEqual(k, 0, JSON.stringify(ub.kot) + ' ' + ub.ornek.join(' | '));
+  assert.ok(ub.toz > 10000);
+});
+{
+  const nedenOzet = L => { const o = {}; L.forEach(r => Object.keys(r.neden).forEach(k => { o[k] = (o[k] || 0) + r.neden[k]; })); return o; };
+  [['A', 'Bot A (sabit isik)'], ['B', 'Bot B (isik 0 sabit, T_MIN)'], ['Bg', 'Bot B gercek isikla']].forEach(([ad, ac]) => {
+    const r = ust[ad]; if (!r.length) return;
+    dene('ust hiz kumesi ' + ac + ': ' + r.length + ' tohum x ' + UST_UZUN + ' birim (60000+, hiz 44, kademe 5): 0 olum / 0 haksiz hasar', () => {
+      const no = nedenOzet(r), bit = r.filter(x => x.c > 0 || x.b > 0 || x.s > 0 || x.z > 0 || (x.bitti) || x.m < UST_BAS.mesafe + UST_UZUN);
+      const gecBomba = r.reduce((q, x) => q + x.bomba, 0), gecSar = r.reduce((q, x) => q + x.sarmasik, 0);
+      console.log('       olum/hasar nedenleri ' + JSON.stringify(no) + (ad === 'Bg' ? ', en az isik ' + Math.min(...r.map(x => x.isik)).toFixed(3) : '') +
+                  ', puan ort ' + Math.round(r.reduce((q, x) => q + x.puan, 0) / r.length) + ', gecilen bomba ' + gecBomba + ' (bomba hasari ' + r.reduce((q, x) => q + x.b, 0) + '), sarmasik ' + gecSar);
+      assert.ok(gecBomba > 100, 'ust hizda bomba uretilmiyor: ' + gecBomba);
+      assert.strictEqual(bit.length, 0, bit.length + ' tohum: ' + JSON.stringify(no) + ' ' + kotu(bit, () => true));
+      assert.deepStrictEqual(no, {});
+    });
   });
-  console.log('       Bot T puan kovasi -> dilim basina hasar: ' + kova.join(', '));
-  console.log('       Bot A: >= ' + RISK_ESIK + ' dilim basina hasar ' + roA.oran.toFixed(3) + ', >= ' + U.RISK_PUAN + ' ' + roA8.oran.toFixed(3) + '; risk tozu alinan ' + riskAl(rs.A));
-  assert.ok(roT.dilim > 1000 && roT.penOrt >= 2, 'pencere ort ' + roT.penOrt);
-  assert.ok(roT.oran >= 3 * roA.oran && roT.oran - roA.oran >= 0.2, 'T ' + roT.oran + ' A ' + roA.oran);
-});
-dene('(b) secici botlar yasar: Bot A (sabit isik) ve Bot B (gercek isik) ' + RISK_MESAFE + ' birimi tamamlar, 800 sonrasi 0 hasar, risk tozu almaz', () => {
-  const bg = riskOzet(rs.Bg, U.RISK_PUAN);
-  console.log('       Bot B gercek isik: tamamlanan ' + rs.Bg.filter(r => !r.bitti).length + '/' + rs.Bg.length + ', dilim basina hasar ' + bg.oran.toFixed(3) + ', risk tozu alinan ' + riskAl(rs.Bg));
-  [rs.A, rs.Bg].forEach(L => L.forEach(r => { assert.ok(!r.bitti && r.mesafe >= RISK_MESAFE && r.riskAl === 0 && r.sersem === 0 && r.zemin === 0, 'tohum kosusu'); }));
-  assert.strictEqual(roA8.hasar + bg.hasar, 0);
-});
-dene('Bot T gercek isikla (hepsini toplamaya calisan kaybeder): kosularin cogu biter', () => {
-  const b = rs.Tg.filter(r => r.bitti).length, p = rs.Tg.map(r => r.puan).sort((x, y) => x - y);
-  console.log('       biten ' + b + '/' + rs.Tg.length + ', puan medyan ' + p[p.length >> 1] + ' (secici Bot B gercek isik medyan ' + rs.Bg.map(r => r.puan).sort((x, y) => x - y)[rs.Bg.length >> 1] + ')');
-  assert.ok(b >= 0.9 * rs.Tg.length, b + ' biten');
-});
-dene('miknatis: Bot K (risk tozu tarafindaki kenardan siyirir) risk tozunu carpmadan alamaz', () => {
-  const bd = rs.K.reduce((q, r) => q + r.bedava, 0);
-  console.log('       Bot K: risk tozu alinan ' + riskAl(rs.K) + ', bedava ' + bd + ', dilim basina hasar (>= ' + RISK_ESIK + ') ' + roK.oran.toFixed(3));
-  assert.strictEqual(bd, 0);
-  assert.strictEqual(rs.T.reduce((q, r) => q + r.bedava, 0) + rs.A.reduce((q, r) => q + r.riskAl, 0), 0, 'Bot T bedava / Bot A risk tozu');
-});
-dene('risk tozu ekstra puan vermez: her toz olayi P.TOZ * carpan(zincir) (Bot T/K/A)', () => {
-  assert.strictEqual(['T', 'K', 'A', 'Tg', 'Bg'].reduce((q, k) => q + rs[k].reduce((a, r) => a + r.puanHata, 0), 0), 0);
-});
+}
 dene('Bot B gercek isikla: isik hicbir tohumda 0,25 altina inmez', () => {
   const n = sonuc.Bg.filter(x => x.isik < 0.25 || x.bitti || x.m < MESAFE).length;
   const enAz = Math.min(...sonuc.Bg.map(x => x.isik));

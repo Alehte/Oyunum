@@ -2267,6 +2267,16 @@
     pointer-events:none; font-family:'Fredoka', sans-serif; font-weight:600; font-size:64px; line-height:1;
     color:#FFE9B8; text-shadow:0 2px 12px rgba(0,0,0,.9), 0 0 18px var(--ab-isik, #FFE27A);}
   .ab-gerisayim.show{display:block;}
+  /* kademe gecisi (FAZ B): "Bolge N" kisa yazisi; 1,5 sn'de kendiliginden soner, dokunmayi engellemez, oyunu durdurmaz */
+  .ab-bolge{position:absolute; left:50%; top:16%; transform:translate(-50%, 0); z-index:5; opacity:0; pointer-events:none;
+    font-family:'Fredoka', sans-serif; font-weight:600; font-size:24px; line-height:1.1; letter-spacing:.04em; white-space:nowrap;
+    color:#FFE9A8; text-shadow:0 0 12px rgba(255,226,122,.45), 0 2px 8px rgba(0,0,0,.9);}
+  .ab-bolge.show{animation:abBolgeGoster 1.5s ease both;}
+  @keyframes abBolgeGoster{0%{opacity:0; transform:translate(-50%, 8px);} 15%{opacity:1; transform:translate(-50%, 0);}
+    70%{opacity:1; transform:translate(-50%, 0);} 100%{opacity:0; transform:translate(-50%, -6px);}}
+  @keyframes abBolgeSolma{0%{opacity:0;} 12%, 70%{opacity:1;} 100%{opacity:0;}}
+  .phone.reduced-motion .ab-bolge.show{animation:abBolgeSolma 1.5s linear both;}
+  @media (prefers-reduced-motion: reduce){ .ab-bolge.show{animation:abBolgeSolma 1.5s linear both;} }
 
 /* === REKLAM: SIRALA DUR === */
   /* Sikistin: kapatilabilir bilgi karti, joker cubugunun ustunde durur; tahta acik kalir, oyun kilitlenmez */
