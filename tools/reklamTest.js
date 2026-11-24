@@ -140,11 +140,14 @@ dene('reklamAyar: test modunda Google test kimlikleri', () => {
   assert.deepStrictEqual(Array.from(A.BIRIMLER), ['ipucu_joker', 'ikinci_sans', 'altin_x2', 'gecis']);
 });
 
-dene('reklamAyar: release modunda yer tutuculu birim null, gecis gercek kimlik', () => {
+dene('reklamAyar: release modunda gercek kimlikler', () => {
   const { A } = reklamKur({ release: true });
   assert.strictEqual(A.uygulamaId(), 'ca-app-pub-2250901316269310~9912780818');
-  ['ipucu_joker', 'ikinci_sans', 'altin_x2'].forEach(b => assert.strictEqual(A.birimId(b), null));
+  assert.strictEqual(A.birimId('ipucu_joker'), 'ca-app-pub-2250901316269310/3715164437');
+  assert.strictEqual(A.birimId('ikinci_sans'), 'ca-app-pub-2250901316269310/6421218822');
+  assert.strictEqual(A.birimId('altin_x2'), 'ca-app-pub-2250901316269310/5467229808');
   assert.strictEqual(A.birimId('gecis'), 'ca-app-pub-2250901316269310/5223687222');
+  assert.strictEqual(A.birimId('yok_boyle'), null);
 });
 
 dene('tarayici (sorgu yok): destek yok, her birim gizli, hicbir sey acilmaz', async () => {

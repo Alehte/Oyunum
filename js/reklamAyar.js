@@ -35,9 +35,9 @@ window.ReklamAyar = (function () {
   var GERCEK = {
     uygulama: 'ca-app-pub-2250901316269310~9912780818',
     birimler: {
-      ipucu_joker: YER_TUTUCU,     // kullanici verecek
-      ikinci_sans: YER_TUTUCU,     // kullanici verecek
-      altin_x2:    YER_TUTUCU,     // kullanici verecek
+      ipucu_joker: 'ca-app-pub-2250901316269310/3715164437',
+      ikinci_sans: 'ca-app-pub-2250901316269310/6421218822',
+      altin_x2:    'ca-app-pub-2250901316269310/5467229808',
       gecis:       'ca-app-pub-2250901316269310/5223687222'   // gecis_bolum_arasi
     }
   };
