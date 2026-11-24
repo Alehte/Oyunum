@@ -1,15 +1,51 @@
 // hedef2048.js — tahta secim ekrani + 2048 oyun mantigi
+  // ==== H2048 ACMA SAF BASLANGIC ====
+  // Tahta acma zinciri (TEK tablo). DOM'a dokunmaz; tools/h2048AcmaTest.js bu iki
+  // isaret arasini da kesip node'da dener.
+  //   - 5x5 bastan acik. Bir tahtada hedef karo (birlesme sonucu >= hedef) olusunca
+  //     sonraki tahta acilir. 10x10'da hedef yok (sonsuz).
+  //   - Sahiplik: AppProgress.boards (eski surumde altinla alinanlar da burada; acik kalir).
+  window.H2048Acma = (function(){
+    const ZINCIR = [
+      {size:5,  hedef:2048,  sonraki:6},
+      {size:6,  hedef:4096,  sonraki:7},
+      {size:7,  hedef:8192,  sonraki:8},
+      {size:8,  hedef:16384, sonraki:9},
+      {size:9,  hedef:32768, sonraki:10},
+      {size:10, hedef:0,     sonraki:0}      // hedef yok
+    ];
+    function bul(size){ return ZINCIR.find(z => z.size === size) || null; }
+    function hedef(size){ const z = bul(size); return z ? z.hedef : 0; }
+    function sonraki(size){ const z = bul(size); return z ? z.sonraki : 0; }
+    // Acik tahtalar: kayit yoksa / bozuksa [5]; 5 her zaman acik.
+    function sahipler(p){
+      const o = (p && Array.isArray(p.boards)) ? p.boards.filter(n => typeof n === 'number') : [];
+      if(o.indexOf(5) < 0) o.unshift(5);
+      return o;
+    }
+    // Bu birlesme degeri bir tahta aciyor mu? Aciyorsa acilacak boyut, yoksa 0.
+    // Sonraki tahta zaten acik (or. eskiden altinla alinmis) ise 0: kutlama da yok.
+    function acilacak(p, size, deger){
+      const h = hedef(size), s = sonraki(size);
+      if(!h || !s || !(deger >= h)) return 0;
+      return sahipler(p).indexOf(s) < 0 ? s : 0;
+    }
+    // Kilitli tahta etiketi: onceki tahtanin hedefi
+    function kilitMetni(size){
+      const onceki = ZINCIR.find(z => z.sonraki === size);
+      return onceki ? 'Önceki tahtada ' + onceki.hedef + ' karosuna ulaş' : '';
+    }
+    // Belirtme hali eki (okunusa gore): bes-i, alti-yi, yedi-yi, sekiz-i, dokuz-u, on-u
+    const EK = {5:"'i", 6:"'yı", 7:"'yi", 8:"'i", 9:"'u", 10:"'u"};
+    function boyutEkli(size){ return size + 'x' + size + (EK[size] || "'i"); }
+    return { ZINCIR: ZINCIR, hedef: hedef, sonraki: sonraki, sahipler: sahipler,
+             acilacak: acilacak, kilitMetni: kilitMetni, boyutEkli: boyutEkli };
+  })();
+  // ==== H2048 ACMA SAF SON ====
 // ============ HEDEF 2048 — TAHTA SECIM EKRANI ============
   (function(){
-    // 5x5 bedava; digerleri altinla acilir
-    const BOARDS = [
-      {size:5,  price:0},
-      {size:6,  price:400},
-      {size:7,  price:1200},
-      {size:8,  price:3000},
-      {size:9,  price:7500},
-      {size:10, price:18000}
-    ];
+    // 5x5 bastan acik; digerleri bir onceki tahtada hedef karoya ulasinca acilir (H2048Acma)
+    const BOARDS = window.H2048Acma.ZINCIR;
     const stage = document.getElementById('bdStage');
     const hintEl = document.getElementById('bdHint');
     const backCenter = document.getElementById('bdBackCenter');
@@ -17,15 +53,7 @@
     let tilesEl = {};
 
     function owned(){
-      const o = (window.AppProgress && window.AppProgress.boards) || [5];
-      return new Set(o);
-    }
-    function buy(size, price){
-      if(!window.AppGold || !window.AppGold.harca(price)) return false;
-      const list = Array.from(owned()); list.push(size);
-      window.AppProgress.boards = list;
-      window.AppSaveProgress({boards: list});
-      return true;
+      return new Set(window.H2048Acma.sahipler(window.AppProgress));
     }
 
     function hexPositions(){
@@ -47,7 +75,6 @@
     function render(){
       const pos = hexPositions();
       const own = owned();
-      const gold = window.AppGold ? window.AppGold.get() : 0;
       stage.querySelectorAll('.bd-tile').forEach(el => el.remove());
       tilesEl = {};
 
@@ -72,7 +99,7 @@
         if(!own.has(b.size)){
           lock = '<div class="bd-lock">' +
                  '<svg class="lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
-                 '<span class="bd-price">' + window.CoinSVG(true) + b.price + '</span></div>';
+                 '<span class="bd-kosul">' + window.H2048Acma.kilitMetni(b.size) + '</span></div>';
         }
         el.innerHTML = '<div class="face"><div class="grid" style="' + gridStyle + '">' + cells + '</div>' + lock + '</div>' +
                        '<div class="label">' + b.size + 'x' + b.size + '</div>';
@@ -89,10 +116,7 @@
       } else if(own.has(centered)){
         hintEl.textContent = centered + 'x' + centered + ' — oynamak için tekrar dokun';
       } else {
-        const b = BOARDS.find(x => x.size === centered);
-        hintEl.textContent = gold >= b.price
-          ? centered + 'x' + centered + ' — açmak için tekrar dokun'
-          : 'Yeterli altının yok (' + b.price + ' gerekli)';
+        hintEl.textContent = window.H2048Acma.kilitMetni(centered);
       }
     }
 
@@ -110,14 +134,9 @@
         slideForward('boards2048','game2048');
         if(window.AppGold) window.AppGold.render();
       } else {
-        const b = BOARDS.find(x => x.size === size);
-        if(buy(size, b.price)){
-          if(window.AppFX) window.AppFX.seq([[523,.14,.12,0],[659,.14,.12,80],[880,.26,.14,160]], 'triangle');
-          render();
-        } else {
-          hintEl.textContent = 'Yeterli altının yok (' + b.price + ' gerekli)';
-          if(window.AppFX) window.AppFX.tone(220, 150, 0.18, 'sine', 0.1);
-        }
+        // kilitli: altinla acma yok, yalnizca kosul hatirlatilir
+        hintEl.textContent = window.H2048Acma.kilitMetni(size);
+        if(window.AppFX) window.AppFX.tone(220, 150, 0.18, 'sine', 0.1);
       }
     });
 
@@ -230,6 +249,8 @@
     // IKINCI SANS: kosu basina 1 kez. kosuNo her yeni oyunda / geri yuklemede artar;
     // reklam sonucu geldiginde hala ayni kosuda miyiz diye bakilir.
     let ikinciSansKullanildi = false, kosuNo = 0;
+    // TAHTA ACILDI KUTLAMASI: acikken hamle yapilmaz (klavye, kaydirma, kuyruk).
+    let kutlamaAcik = false, kutlamaTimer = 0;
     function bestKey(){ return 'b' + SIZE; }
     function loadBest(){
       const rec = (window.AppProgress && window.AppProgress.bests) || {};
@@ -391,9 +412,10 @@
       if(window.AppSaveProgress) window.AppSaveProgress({g2048active: null});
     }
     function restoreState(st){
+      kutlamaKapat();
       SIZE = st.size;
       buildBoardCells();
-      tiles = []; domTiles.forEach(el => el.remove()); domTiles.clear();
+      tiles = []; domTiles.forEach(el => el.remove()); domTiles.clear(); parcaTemizle();
       nextId = 1;
       st.tiles.forEach(a => tiles.push({id: nextId++, value: a[2], r: a[0], c: a[1],
                                         lock: a[3] || 0, wild: !!a[4], wall: !!a[5]}));
@@ -408,13 +430,18 @@
       overlayEl.classList.remove('show');
       render();
       liveSession = snapshot();
+      onMesajKontrol();
+      // Hamlesiz kayit (eski surum / kutlama acikken kapanma): oyuncu sikismasin;
+      // kilit cozme, ikinci sans ve kayip mevcut sirayla calisir.
+      if(!canMove()) evaluateAfterMove();
     }
 
     // Yeni oyun DISKE YAZILMAZ: kayit yalnizca ilk hamleyle olusur. Eskiden dosya
     // her yuklendiginde bos bir oyun kaydedilip yarim kalan oyunun ustune
     // yaziliyordu; "kaldigin yerden devam" hic cikmiyordu.
     function newGame(){
-      gamesStarted++; tiles = []; milestonesHit = new Set(); domTiles.forEach(el => el.remove()); domTiles.clear();
+      kutlamaKapat();
+      gamesStarted++; tiles = []; milestonesHit = new Set(); domTiles.forEach(el => el.remove()); domTiles.clear(); parcaTemizle();
       score = 0; recordBroken = false; ikinciSansKullanildi = false; kosuNo++;
       scoreBoxEl.classList.remove('record'); scoreBoxEl.classList.add('normal');
       rozetGizle();
@@ -460,6 +487,7 @@
     }
     let queuedDir = null;
     function move(dir){
+      if(kutlamaAcik) return;                    // tahta acildi kutlamasi: girdi oyunu oynatmaz
       if(animating){ queuedDir = dir; return; }
       const grid = {}; tiles.forEach(t => { grid[t.r+'_'+t.c] = t; });
       const lines = lineOrder(dir); let movedAny = false, scoreGain = 0; const removeIds = new Set();
@@ -511,15 +539,26 @@
       render();
       setTimeout(() => {
         const buyukler = [];
+        let acilan = 0, hedefKaro = null;          // bu hamle yeni bir tahta acti mi
         tiles.forEach(t => {
           if(t.pendingValue){ t.value = t.pendingValue; t.pendingValue = null; t.wild = false; t.justMerged = true;
-            if(t.value >= BUYUK_BIRLESME) buyukler.push(t); }
+            if(t.value >= BUYUK_BIRLESME) buyukler.push(t);
+            if(!acilan){ acilan = window.H2048Acma.acilacak(window.AppProgress, SIZE, t.value); if(acilan) hedefKaro = t; } }
         });
         tiles = tiles.filter(t => !removeIds.has(t.id));
         tiles.forEach(t => { if(t.lock > 0) t.lock--; });   // kilitler sadece basarili hamlede erir
         spawnTile(); render(); animating = false;
         buyukler.forEach(buyukBirlesme);
-        saveState(); evaluateAfterMove();
+        if(acilan){
+          // Hedefte oyun BITMEZ. Tahta acilisi hemen kaydedilir; hamle sonu (rekor disinda)
+          // "devam et"e kadar bekler. Hamle tahtayi tikadiysa durum YAZILMAZ, kayit silinir
+          // (kayip akisindaki gibi): pencere acikken kapanirsa kosu kaybedilmis sayilir.
+          tahtaAc(acilan);
+          if(canMove()) saveState(); else clearActive();
+          rekorGuncelle(true); queuedDir = null; kutlamaGoster(acilan, hedefKaro); return;
+        }
+        saveState();
+        evaluateAfterMove();
         if(queuedDir){ const d = queuedDir; queuedDir = null; move(d); }
       }, 140);
     }
@@ -582,6 +621,17 @@
     }
     function showLoseOverlay(){ overlayMsg.textContent='Hamle kalmadı'; overlaySub.textContent='Skorun: '+score; overlayBtn.style.display='inline-block'; overlayBtn.textContent='Yeniden Başla'; overlayEl.classList.add('show'); }
     function evaluateAfterMove(){
+      rekorGuncelle();
+      if(!canMove()){
+        if(tiles.some(t => t.lock > 0)){        // sadece kilitler yuzunden tikandiysa hepsini coz
+          tiles.forEach(t => t.lock = 0); render();
+          if(canMove()){ if(window.AppFX) window.AppFX.tone(660, 200, 0.14, 'triangle', 0.12); return; }
+        }
+        kayip();
+      }
+    }
+    // sessiz: ayni hamlede tahta da acildiysa rekor sesi calmaz (kutlama sesi tek calar)
+    function rekorGuncelle(sessiz){
       if(score > best){
         best = score; bestValEl.textContent = best;
         if(window.AppSaveProgress){
@@ -589,15 +639,8 @@
           window.AppProgress.bests[bestKey()] = best;
           window.AppSaveProgress({bests: window.AppProgress.bests});
         }
-        if(!recordBroken && gamesStarted > 1){ recordBroken = true; scoreBoxEl.classList.remove('normal'); scoreBoxEl.classList.add('record'); playWinSound(); flashRecord();
+        if(!recordBroken && gamesStarted > 1){ recordBroken = true; scoreBoxEl.classList.remove('normal'); scoreBoxEl.classList.add('record'); if(!sessiz) playWinSound(); flashRecord();
           rozetGoster(); if(window.AppFX) window.AppFX.vibrate([18, 40, 18, 40, 26]); }
-      }
-      if(!canMove()){
-        if(tiles.some(t => t.lock > 0)){        // sadece kilitler yuzunden tikandiysa hepsini coz
-          tiles.forEach(t => t.lock = 0); render();
-          if(canMove()){ if(window.AppFX) window.AppFX.tone(660, 200, 0.14, 'triangle', 0.12); return; }
-        }
-        kayip();
       }
     }
     // Hamle kalmadi. Reklam destekleniyorsa ve bu kosuda kullanilmadiysa once ikinci
@@ -648,6 +691,7 @@
     } 
     window.addEventListener('keydown', (e) => {
       if(!gameVisible()) return;
+      if(resumeAsk.classList.contains('show')) return;   // pencere acikken (soru/kutlama) klavye oynatmaz
       const map = {ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
                    a:'left', d:'right', w:'up', s:'down', A:'left', D:'right', W:'up', S:'down'};
       if(map[e.key]){ e.preventDefault(); move(map[e.key]); }
@@ -693,11 +737,14 @@
     const raNoBtn  = document.getElementById('raNo');
     let onYes = null, onNo = null;
 
-    function askDialog(title, sub, yesLabel, noLabel, yesFn, noFn){
+    // noLabel null: tek dugmeli pencere. sinif: ek gorunum ('kutlama').
+    function askDialog(title, sub, yesLabel, noLabel, yesFn, noFn, sinif){
       raTitleEl.textContent = title;
       raSub.textContent = sub;
       raYesBtn.textContent = yesLabel;
-      raNoBtn.textContent  = noLabel;
+      raNoBtn.textContent  = noLabel || '';
+      raNoBtn.style.display = noLabel ? '' : 'none';
+      resumeAsk.classList.toggle('kutlama', sinif === 'kutlama');
       onYes = yesFn; onNo = noFn;
       resumeAsk.classList.add('show');
     }
@@ -711,11 +758,78 @@
     });
 
     function beginNew(size){
-      SIZE = size; best = loadBest(); buildBoardCells(); newGame();
+      SIZE = size; best = loadBest(); buildBoardCells(); newGame(); onMesajKontrol();
+    }
+
+    // --- tahta acma (zincir: H2048Acma) ---
+    function tahtaAc(size){
+      const list = window.H2048Acma.sahipler(window.AppProgress);
+      if(list.indexOf(size) < 0) list.push(size);
+      window.AppProgress.boards = list;
+      if(window.AppSaveProgress) window.AppSaveProgress({boards: list});
+    }
+    function kutlamaKapat(){
+      clearTimeout(kutlamaTimer); kutlamaTimer = 0; kutlamaAcik = false;
+      resumeAsk.classList.remove('kutlama');
+    }
+    // Hedef karo parlar + konfeti (1.5-2 sn); pencere 1500 ms sonra, animasyon
+    // bitmek uzereyken acilir (azaltilmis harekette hemen). Sonraki tahta zaten
+    // kaydedildi; pencere yalnizca secim icin.
+    const KUTLAMA_GECIKME = 1500;
+    function parcaTemizle(){ tileLayer.querySelectorAll('.tile-parca').forEach(p => p.remove()); }
+    const KONFETI_RENK = ['#2FE07A', '#FBE7AE', '#7FE6DC', '#F0C25C', '#CFFFE2', '#8FF7B8'];
+    function hedefParla(karo){
+      const el = karo && domTiles.get(karo.id);
+      if(!el) return;
+      el.classList.remove('buyuk', 'merged', 'pop'); void el.offsetWidth; el.classList.add('hedef-parla');
+      setTimeout(() => el.classList.remove('hedef-parla'), 1900);
+      const cw = parseFloat(el.style.width) || 40;
+      for(let i = 0; i < 26; i++){
+        const p = document.createElement('i');
+        p.className = 'tile-parca konfeti';
+        const aci = Math.random() * Math.PI * 2, uzak = cw * (1.2 + Math.random() * 2.2);
+        p.style.left = (karo.c * cellStep + cw / 2) + 'px';
+        p.style.top  = (karo.r * cellStep + cw / 2) + 'px';
+        p.style.backgroundColor = KONFETI_RENK[i % KONFETI_RENK.length];
+        p.style.animationDelay = Math.round(Math.random() * 250) + 'ms';
+        p.style.setProperty('--dx', (Math.cos(aci) * uzak).toFixed(0) + 'px');
+        p.style.setProperty('--dy', (Math.sin(aci) * uzak).toFixed(0) + 'px');
+        tileLayer.appendChild(p);
+        setTimeout(() => p.remove(), 2000);
+      }
+    }
+    function kutlamaGoster(acilan, karo){
+      kutlamaAcik = true;
+      const eski = SIZE, A = window.H2048Acma;
+      const azalt = !!document.querySelector('.phone.reduced-motion');
+      if(!azalt) hedefParla(karo);
+      playWinSound();
+      if(window.AppFX) window.AppFX.vibrate([20, 40, 20, 40, 30]);
+      clearTimeout(kutlamaTimer);
+      kutlamaTimer = setTimeout(() => {
+        kutlamaTimer = 0;
+        askDialog('Başardın! ' + acilan + 'x' + acilan + ' tahta açıldı',
+          A.hedef(eski) + ' karosuna ulaştın.',
+          eski + 'x' + eski + ' ile devam et',
+          A.boyutEkli(acilan) + ' dene',
+          // ayni oyun surer; tikali hamlede silinen kayit, oyun surebiliyorsa (kilit cozuldu) geri yazilir
+          () => { kutlamaKapat(); evaluateAfterMove(); if(canMove()) saveState(); },
+          // tek slot: mevcut oyun silinir (rekor kalir), yeni tahtada yeni oyun. Ek onay yok.
+          () => { kutlamaKapat(); clearActive(); beginNew(acilan); },
+          'kutlama');
+      }, azalt ? 0 : KUTLAMA_GECIKME);
+    }
+    // 10x10: ilk baslatmada tek seferlik bilgi (kalici bayrak AppProgress.h2048OnMesaj;
+    // eski kayitta alan yok = gorulmedi).
+    function onMesajKontrol(){
+      if(SIZE !== 10 || !window.AppProgress || window.AppProgress.h2048OnMesaj) return;
+      if(window.AppSaveProgress) window.AppSaveProgress({h2048OnMesaj: 1});
+      askDialog('Bu tahtada hedef yok.', 'Kaybedene kadar oynayacaksın.', 'Anladım', null, null, null);
     }
 
     window.Game2048 = {
       start(size){
+        kutlamaKapat();
         resumeAsk.classList.remove('show');
         onYes = onNo = null;
         // bu oturumda hamle yapilmis oyun varsa o, yoksa diskteki yarim oyun
@@ -746,6 +860,18 @@
             slideBack('game2048','boards2048');
             if(window.Boards2048) window.Boards2048.open();
           });
+      },
+      // TEST KANCASI (tools/h2048AcmaTest.js): yapay karo koymak icin. Oyun akisi kullanmaz.
+      _test: {
+        temizle(){ tiles = []; domTiles.forEach(el => el.remove()); domTiles.clear(); render(); },
+        karoKoy(r, c, deger, kilit){
+          tiles = tiles.filter(t => !(t.r === r && t.c === c));
+          tiles.push({id: nextId++, value: deger, r: r, c: c, lock: kilit || 0, wild: false});
+          render();
+        },
+        hamle(dir){ move(dir); },
+        durum(){ return { size: SIZE, score: score, best: best, kutlamaAcik: kutlamaAcik,
+                          karolar: tiles.map(t => [t.r, t.c, t.value, t.wall ? 1 : 0]) }; }
       }
     };
     SIZE = 5; best = loadBest(); buildBoardCells(); newGame();
