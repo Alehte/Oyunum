@@ -860,19 +860,31 @@
             slideBack('game2048','boards2048');
             if(window.Boards2048) window.Boards2048.open();
           });
-      },
-      // TEST KANCASI (tools/h2048AcmaTest.js): yapay karo koymak icin. Oyun akisi kullanmaz.
-      _test: {
-        temizle(){ tiles = []; domTiles.forEach(el => el.remove()); domTiles.clear(); render(); },
-        karoKoy(r, c, deger, kilit){
-          tiles = tiles.filter(t => !(t.r === r && t.c === c));
-          tiles.push({id: nextId++, value: deger, r: r, c: c, lock: kilit || 0, wild: false});
-          render();
-        },
-        hamle(dir){ move(dir); },
-        durum(){ return { size: SIZE, score: score, best: best, kutlamaAcik: kutlamaAcik,
-                          karolar: tiles.map(t => [t.r, t.c, t.value, t.wall ? 1 : 0]) }; }
       }
+    };
+    // TEST KANCASI (tools/h2048AcmaTest.js): yapay karo koymak icin. Oyun akisi kullanmaz.
+    // Test kancasi yalniz yerel adreste (telefondan yerel ag testi icin ozel IP'ler dahil); yayinda yok.
+    function yerelAdres(){
+      var l = window.location || {};
+      if(l.protocol === 'file:') return true;
+      var h = String(l.hostname || '').toLowerCase();
+      if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(h)) return true;
+      var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+      if(!m) return false;
+      var a = Number(m[1]), b = Number(m[2]);
+      if(Number(m[3]) > 255 || Number(m[4]) > 255) return false;
+      return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    }
+    if(yerelAdres()) window.Game2048._test = {
+      temizle(){ tiles = []; domTiles.forEach(el => el.remove()); domTiles.clear(); render(); },
+      karoKoy(r, c, deger, kilit){
+        tiles = tiles.filter(t => !(t.r === r && t.c === c));
+        tiles.push({id: nextId++, value: deger, r: r, c: c, lock: kilit || 0, wild: false});
+        render();
+      },
+      hamle(dir){ move(dir); },
+      durum(){ return { size: SIZE, score: score, best: best, kutlamaAcik: kutlamaAcik,
+                        karolar: tiles.map(t => [t.r, t.c, t.value, t.wall ? 1 : 0]) }; }
     };
     SIZE = 5; best = loadBest(); buildBoardCells(); newGame();
   })();

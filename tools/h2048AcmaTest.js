@@ -110,6 +110,7 @@ function sahteSes(sesler) {
 // secenek: { azalt: azaltilmis hareket, reklam: ikinci sans taklidi (cagrilar dizisi) }
 function kur(ilerleme, tohum, secenek) {
   secenek = secenek || {};
+  const konum = secenek.konum || { protocol: 'http:', hostname: 'localhost', search: '' };
   const body = new El('body');
   const sesler = [];
   const kayit = {};
@@ -165,7 +166,7 @@ function kur(ilerleme, tohum, secenek) {
   const winDinle = {};
   const gecis = [];
   const win = {
-    document, AppProgress: P, innerWidth: 400,
+    document, AppProgress: P, innerWidth: 400, location: konum,
     AppSaveProgress: patch => { Object.assign(win.AppProgress, patch); yazimlar.push(kopya(patch)); },
     AppGold: { get: () => P.gold, add: n => { P.gold += n; }, harca() { throw new Error('harca cagrilmamali'); }, render() {} },
     CoinSVG: () => '<img class="app-coin">',
@@ -189,7 +190,7 @@ function kur(ilerleme, tohum, secenek) {
     ' var t = Math.imul(n ^ (n >>> 15), 1 | n); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;' +
     ' return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })(' + (tohum || 1) + ');', win);
   vm.runInContext(kaynak, win, { filename: 'hedef2048.js' });
-  const G = win.Game2048, T = G._test;
+  const G = win.Game2048, T = G._test;   // yerel degilse T undefined
   const o = {
     win, P, G, T, zaman, yazimlar, gecis, el: kayit,
     zaferSesi: () => sesler.filter(f => f === 523.25).length,   // playWinSound cagri sayisi
@@ -258,6 +259,20 @@ dene('kaynakta altin fiyati / satin alma kalmadi', () => {
   assert.ok(!/\bbuy\s*\(/.test(kaynak), 'buy( var');
   assert.ok(!/harca\s*\(/.test(kaynak), 'AppGold.harca var');
   assert.ok(!/bd-price/.test(kaynak), 'bd-price var');
+});
+
+dene('test kancasi yalniz yerel adreste: yayin adresinde yok, yerel adreslerde var', () => {
+  const y = kur({}, 1, { konum: { protocol: 'https:', hostname: 'ornek.github.io', search: '' } });
+  assert.strictEqual(y.G._test, undefined, 'yayinda kanca acik');
+  assert.strictEqual(typeof y.G.start, 'function');
+  [{ protocol: 'http:', hostname: '192.168.1.5' }, { protocol: 'http:', hostname: '127.0.0.1' },
+   { protocol: 'file:', hostname: '' }, { protocol: 'http:', hostname: '10.0.0.2' },
+   { protocol: 'http:', hostname: '172.20.1.1' }].forEach(k => {
+    const o = kur({}, 1, { konum: Object.assign({ search: '' }, k) });
+    assert.strictEqual(typeof o.G._test, 'object', k.hostname + ' ' + k.protocol + ' kanca yok');
+  });
+  const d = kur({}, 1, { konum: { protocol: 'http:', hostname: '172.32.0.1', search: '' } });
+  assert.strictEqual(d.G._test, undefined, '172.32 ozel degil');
 });
 
 // ================= oyun akisi =================
