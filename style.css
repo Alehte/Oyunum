@@ -2379,3 +2379,14 @@
   .tp-flas{position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:21; background:rgba(255,236,190,.28);
     opacity:0; animation:tpFlas .16s ease-out;}
   @keyframes tpFlas{0%{opacity:1;} 100%{opacity:0;}}
+
+/* === EFEKTLER (js/efekt.js; docs/PERFORMANS.md) ===
+   Tek tam ekran tuval: .phone icinde, dokunmayi yutmaz, yalniz efekt varken gorunur (bitince gizlenir, rAF durur).
+   Titreme / nabiz / baslik Web Animations ile yalniz transform/opacity canlandirir (CSS'te keyframes yok). */
+  .efekt-tuval{position:absolute; left:0; top:0; width:100%; height:100%; z-index:55; pointer-events:none; display:none;}
+  .efekt-tuval.acik{display:block;}
+  /* kosu ici rekor ani: skor kutusunda kisa "Rekor!" vurgusu (Tempo, Suzul; 2048'de mevcut "Yeni rekor" rozeti) */
+  .tp-box.efekt-rekor, .ab-kutu.efekt-rekor{color:#FFE08A; box-shadow:inset 0 0 0 1.5px rgba(255,224,138,.8);}
+  /* 2048 kayip ekrani: rekor kirildiysa "Yeni Rekor!" basligi (kirilmadiysa gizli, ekran aynen) */
+  .overlay .rekor-baslik{font-family:'Fredoka', sans-serif; font-weight:600; font-size:28px; line-height:1.1; margin-bottom:-6px;}
+  .overlay .rekor-baslik[hidden]{display:none;}

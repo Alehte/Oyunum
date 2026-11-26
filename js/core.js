@@ -55,9 +55,14 @@
     ssHarita:    () => { if(window.SuSiralaOyun) window.SuSiralaOyun.haritaCiz(); },
     ssoHarita:   () => { if(window.SuSiralaOzelOyun) window.SuSiralaOzelOyun.haritaCiz(); }
   };
+  // Ekran degisince ortak efekt tuvali (js/efekt.js, .phone icinde) temizlenir: efekt yeni ekranda surmez.
+  // Oyunlar gecikmeli efekti AppEkran.aktif() ile denetler (ekran disindayken efekt baslatmaz; sonuc / odeme ayni).
+  function efektDur(){ if(window.Efekt){ try{ window.Efekt.dur(); }catch(e){ console.error(e); } } }
+  window.AppEkran = { aktif: function(){ return aktifEkran; } };
   function slideForward(fromKey, toKey){
     const from = screens[fromKey], to = screens[toKey];
     aktifEkran = toKey;
+    efektDur();
     to.classList.remove('offstage');
     to.style.transition = 'none'; to.style.transform = 'translateX(100%)'; void to.offsetWidth; to.style.transition = '';
     requestAnimationFrame(() => { from.style.transform = 'translateX(-100%)'; to.style.transform = 'translateX(0)'; });
@@ -66,6 +71,7 @@
   function slideBack(fromKey, toKey){
     const from = screens[fromKey], to = screens[toKey];
     aktifEkran = toKey;
+    efektDur();
     if(EKRAN_YENILE[toKey]){ try{ EKRAN_YENILE[toKey](); }catch(e){ console.error(e); } }
     to.classList.remove('offstage');
     to.style.transition = 'none'; to.style.transform = 'translateX(-100%)'; void to.offsetWidth; to.style.transition = '';
@@ -81,12 +87,13 @@
   //   - ayni dosya iki kez indirilmez / calistirilmaz; inemeyen dosya bir
   //     sonraki denemede yeniden istenir.
   const OYUN_DOSYALARI = {
-    h2048:    ['js/hedef2048.js'],
+    // js/efekt.js: ortak gorsel efektler (konfeti, titreme, rekor); skor tutan uc oyunda ilk, bir kez calisir
+    h2048:    ['js/efekt.js', 'js/hedef2048.js'],
     kacis:    ['js/bolumler.js', 'js/ozel_bolumler.js', 'js/kacis.js'],
     susirala: ['js/suSirala.js', 'js/suSiralaBolumler.js', 'js/suSiralaOzel.js', 'js/suSiralaJoker.js',
                'js/suSiralaOyun.js', 'js/suSiralaOzelOyun.js'],
-    tempo:    ['js/tempoCekirdek.js', 'js/tempoKup.js'],
-    ates:     ['js/atesBocegi.js', 'js/atesBocegiOyun.js']
+    tempo:    ['js/efekt.js', 'js/tempoCekirdek.js', 'js/tempoKup.js'],
+    ates:     ['js/efekt.js', 'js/atesBocegi.js', 'js/atesBocegiOyun.js']
   };
   const metinSozu = {};     // src -> Promise<kaynak metni>
   const calisti = {};       // src -> true

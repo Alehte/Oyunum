@@ -94,6 +94,9 @@
   var olumTur = '';                   // '' | 'isik' | 'zemin' (cekirdek bitti olayinin sebebi; zeminde dusus animasyonu)
   var basili = false, isaretciler = 0, tusBasili = false;
   var rekor = 0, sonSonuc = null;
+  // REKOR ANI (js/efekt.js; yalniz gorsel): kosu basindaki rekorla kurulur, kosu basina bir kez (rekor 0 ise hic). Ikinci sans
+  // (canlan) ayni kosudur: izci korunur. Efekt yuklu degilse null. Oyun durumu, carpisma ve cizim koordinatlari etkilenmez.
+  var rekorIz = null;
   var hizOnbellek = 24, hizSayac = 0;
   var azHareketOn = false;
   var kanatFaz = 0, adimSayaci = 0;
@@ -1183,13 +1186,38 @@
   // ---------------------------------------------------------------
   function hudYaz() {
     var d = durum, p = Math.floor(d.puan), r = Math.max(rekor, p), c = AB.carpan(d.zincir), isik = Math.round(d.isik * 100);
-    if (p !== sonHud.puan) { sonHud.puan = p; puanEl.textContent = yaz(p); }
+    if (p !== sonHud.puan) { sonHud.puan = p; puanEl.textContent = yaz(p); if (rekorIz && rekorIz.kontrol(p)) rekorAni(); }
     if (r !== sonHud.rekor) { sonHud.rekor = r; rekorEl.textContent = yaz(r); }
     if (c !== sonHud.carpan) {
       sonHud.carpan = c; carpanEl.textContent = '×' + String(c).replace('.', ',');
       carpanEl.parentNode.classList.toggle('aktif', c > 1);
     }
     if (isik !== sonHud.isik) { sonHud.isik = isik; isikEl.style.transform = 'scaleX(' + (isik / 100) + ')'; isikEl.parentNode.setAttribute('aria-valuenow', String(isik)); }
+  }
+  // Kosu ici rekor ani: Puan kutusunda "Rekor!" vurgusu + kutudan patlama, oyun tuvali hafif titrer (yalniz CSS transform:
+  // boyutla() alanin olcusunu okur, tuvalin degil; girdi koordinat kullanmaz). Konfeti yok: oyun alani kapanmasin. Dusukte parlama.
+  // Efekt yalniz oyun ekrani sahnedeyken baslar (teklif sonucu ekran disindayken gelebilir); sonuc / odeme ayni.
+  function efektEkranda() {
+    var A = window.AppEkran;
+    return !(A && A.aktif && A.aktif() !== 'ates') && !ekran.classList.contains('offstage');
+  }
+  function rekorAni() {
+    var E = window.Efekt;
+    if (!E || !efektEkranda()) return;
+    var kutu = puanEl.parentNode, r = kutu.getBoundingClientRect();
+    E.vurgu(kutu, kutu.querySelector('.l'), 'Rekor!', 1800);
+    E.patlama(r.left + r.width / 2, r.top + r.height / 2, { adet: 24, renkler: pal ? [pal.isik, pal.toz, pal.vurgu] : null });
+    E.titre(tuval, 300, 3);
+  }
+  // Sonuc karti, yeni rekorsa (icerik ve odul sonucGoster'de; burasi yalniz gosterir): baslik canlanir, konfeti yagar,
+  // puan sayarak artar, sonra toplam jeton satiri ve altin sayaci kisa nabiz atar.
+  function sonucEfekt(s) {
+    var E = window.Efekt;
+    if (!E || !efektEkranda()) return;
+    var puanYazi = sonAlt.querySelector('.ab-sonpuan'), toplam = sonAlt.querySelector('.ab-kz-toplam'), altin = q('goldPillAtes');
+    E.baslik(sonBaslik);
+    E.konfeti({ adet: 110, sure: 1800, renkler: pal ? [pal.isik, pal.toz, pal.vurgu, '#FFFFFF', '#8FF0B4'] : null, oncelik: true });
+    E.say(puanYazi, s.puan, { bicim: yaz, sure: 900, sonra: function () { if (toplam) { E.nabiz(toplam); E.nabiz(altin); } } });
   }
   function hudSifirla() {
     sonHud.puan = sonHud.rekor = sonHud.carpan = sonHud.isik = -1;
@@ -1292,6 +1320,7 @@
     else if (s.kj.ham > s.kj.jeton) alt += '<div class="ab-not">Günlük sınır aşıldı: ' + s.kj.ham + ' jetonun ' + s.kj.jeton + ' kadarı ödendi.</div>';
     sonAlt.innerHTML = alt;
     sonEl.classList.add('show');
+    if (s.yeniRekor) sonucEfekt(s);
     if (s.yeniRekor) dizi([[523, .15, .13, 0], [659, .15, .13, 90], [784, .15, .13, 180], [1047, .3, .15, 270]], 'triangle');
     else dizi([[440, .16, .13, 0], [349, .16, .13, 170], [262, .5, .15, 340]], 'sine');
   }
@@ -1462,6 +1491,8 @@
     kosuNo++;
     durum = AB.oyunOlustur(tohumUret());
     var kk = kayitOku(); rekor = Math.max(rekor, kk ? kk.rekor : 0);
+    rekorIz = window.Efekt ? window.Efekt.rekorIzci(rekor, 0) : null;
+    if (window.Efekt) window.Efekt.vurguKaldir(puanEl.parentNode, puanEl.parentNode.querySelector('.l'));
     pal = paletOku();
     birikim = 0; sonZaman = 0; kare = 0; basili = false; isaretciler = 0; tusBasili = false;
     bekle = true; duraklatildi = false; bitisIsleniyor = false; sonSonuc = null;

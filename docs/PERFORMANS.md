@@ -50,6 +50,8 @@ Liste büyütülmez; yeni kod istisna eklemez.
    `visibilitychange` (gizli) olunca döngü durur; `setInterval` yalnız ekran açıkken (market sayacı).
    İstisna: `Kalite.olc()` ölçüm süresince (en çok ~3,5 sn, uzun karelerde 10 sn) ikinci, kısa bir rAF döngüsü çalıştırır;
    kare başına yalnız zaman damgası kaydeder (bellek ayırmaz, DOM'a dokunmaz), sayfa gizlenince kendiliğinden biter.
+   İstisna: `js/efekt.js` yalnız efekt sürerken (konfeti/patlama 1-2 sn, sayaç) kendi rAF döngüsünü çalıştırır; son parçacık
+   bitince döngü durur ve tuval gizlenir, sayfa gizlenince her şey hemen biter. Oyunun hesap döngüsüne bağlı değildir.
 10. **Düşük kalitede oyun aynıdır.** Kurallar, skor, üretim, adalet, ödül ve kayıt seviyeye bağlı değildir; yalnız
     çizim değişir. Kalite seçimi `localStorage` içinde ayrı anahtardadır (`ait_kalite`), ilerleme/market kaydına girmez.
 
@@ -74,6 +76,16 @@ Liste büyütülmez; yeni kod istisna eklemez.
 - **API:** `Kalite.seviye()`, `secim()`, `sec(s)`, `parcacikSayisi(taban)`, `parcacikTut(i, taban)`,
   `efektAcikMi(ad)`, `dprTavan()`, `dpr()`, `abone(fn)` (dönüş: aboneliği bırak), `olc()`; ayrıca
   `window` üzerinde `kalitedegisti` olayı (`detail: { seviye, onceki }`).
+
+### Ortak efektler (`js/efekt.js`, Faz 2)
+
+- Tek tam ekran tuval (`.efekt-tuval`, `.phone` içinde, `pointer-events:none`), yalnız efekt varken görünür. Parçacık havuzu
+  `Float32Array` (120 parçacık, bir kez ayrılır); aynı anda canlı parçacık üst sınırı yüksek 120, orta 60, düşük 20
+  (istenen adet önce `Kalite.parcacikSayisi`). DPR `Kalite.dprTavan()`. Yalnız önceki karede boyanan alan silinir.
+- Kendi rastgele üreteci (xorshift32): `Math.random` hiç çağrılmaz, oyun sırası (Tempo parçaları, 2048 karoları) değişmez.
+- Titreme Web Animations ile yalnız `transform` (translate); oyunun dokunma ölçüsü aldığı öğeye verilmez (Tempo: skor
+  çubuğu, Süzül: tuval, 2048: tahta kapsayıcısı). Düşük kalite ve azaltılmış harekette titreme yerine tek parlama; azaltılmış
+  harekette konfeti az ve kısa, sayaç anında. Denetim: `tools/efektTest.js`.
 
 ## 3. Bütçeler (ölçülmüş)
 
@@ -105,6 +117,12 @@ Liste büyütülmez; yeni kod istisna eklemez.
   `--liste` (sahneler), `--sahne market-liste,tempo-temizle`, `--kisma 4`, `--tekrar 3` (süreler koşudan koşuya
   %30-45 oynar; karşılaştırmada en az 3), `--gpu` (GPU yolu), `--kalite dusuk` (adrese `?kalite=dusuk`),
   `--json cikti.json`. Sütunlar dosyanın başında açıklanmıştır.
+- Efekt sahneleri (`efekt-2048`, `efekt-tempo`, `efekt-suzul`): ölçüm yalnız efekt süresince (~2,2 sn). Faz 2 sonucu (GPU yolu, 4x,
+  3 koşunun ortancası): üç kalite seviyesinde üç sahne de medyan 16,7 ms, p95 16,8-17,2 ms. 2048 kutlamasındaki tek uzun görev
+  (~55-75 ms) mevcut hamle işidir (efekt çağrıları boşaltılınca da var; efekt çağrıları 4x'te toplam ~2-10 ms).
+  Yazılım yolunda (bilgi) 2048 ve Tempo yine 16,7 ms; `efekt-suzul` (koşu sürerken tam ekran konfeti, gerçekte olmayan en
+  kötü durum) yüksekte medyan 83 → 100 ms, düşükte 16,7 → 33 ms. Süzül'ün gerçek koşu içi rekor anı konfetisizdir (patlama +
+  titreme / parlama); sonuç kartı konfetisi oyun döngüsü durduktan sonradır.
 - `node tools/perfTest.js` — statik kurallar ve kalite katmanı birim denemeleri; `--butce` ile ek olarak bütçe
   sahnelerini headless ölçer (Chrome yoksa ATLANDI).
 - `?fps=1` — uygulama içi canlı FPS / kare süresi göstergesi (sol üst; `js/fpsGosterge.js`). Yalnız yerel adreste

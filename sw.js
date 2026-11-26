@@ -37,7 +37,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '26';
+var SURUM = '27';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
@@ -66,6 +66,7 @@ var CEKIRDEK = [
 ];
 
 var OYUNLAR = [
+  'js/efekt.js',
   'js/hedef2048.js',
   'js/bolumler.js',
   'js/ozel_bolumler.js',

@@ -253,6 +253,17 @@
     let ikinciSansKullanildi = false, kosuNo = 0;
     // TAHTA ACILDI KUTLAMASI: acikken hamle yapilmaz (klavye, kaydirma, kuyruk).
     let kutlamaAcik = false, kutlamaTimer = 0;
+    // REKOR ANI (js/efekt.js; yalniz gorsel): kosu basinda okunan eski rekorla kurulur, kosu basina bir kez tetiklenir
+    // (eski rekor 0 ise hic). Ikinci sans ayni kosudur: izci korunur. Efekt yuklu degilse null (efekt yok, oyun ayni).
+    let rekorIz = null;
+    // Kosu basindaki rekor, tahta basina YALNIZ BELLEKTE (kayda yazilmaz): yeni oyun yazar, ayni oturumda devam okur.
+    // Diskten devamda (uygulama yeniden acildi) bilinmez: izci eski rekor 0 ile kurulur -> rekor ani / "Yeni Rekor!" yok.
+    let kosuBasiRekor = {};
+    // Efekt yalniz oyun ekrani sahnedeyken baslar (gecikmeli hamle / teklif sonucu ekran disinda gelebilir); oyun mantigi ayni.
+    function efektEkranda(){
+      const A = window.AppEkran;
+      return !(A && A.aktif && A.aktif() !== 'game2048') && !ekran2048.classList.contains('offstage');
+    }
     function bestKey(){ return 'b' + SIZE; }
     function loadBest(){
       const rec = (window.AppProgress && window.AppProgress.bests) || {};
@@ -413,7 +424,8 @@
       liveSession = null;
       if(window.AppSaveProgress) window.AppSaveProgress({g2048active: null});
     }
-    function restoreState(st){
+    // diskten: uygulama yeniden acildi (kosu basi rekor bilinmez); yoksa ayni oturumdaki oyun (liveSession)
+    function restoreState(st, diskten){
       kutlamaKapat();
       SIZE = st.size;
       buildBoardCells();
@@ -423,6 +435,11 @@
                                         lock: a[3] || 0, wild: !!a[4], wall: !!a[5]}));
       score = st.score;
       best = loadBest();
+      // kaldigi yerden: ayni oturumda kosu basi rekor bellekte (skor onu astiysa izci tetiklenmis baslar, tekrar yok);
+      // diskten devamda bilinmez -> 0 (izci hic tetiklenmez, kayip ekraninda "Yeni Rekor!" yok). Skor kutusu isigi ayni.
+      if(diskten) delete kosuBasiRekor[SIZE];
+      const kosuRekor = kosuBasiRekor[SIZE];
+      rekorIz = window.Efekt ? window.Efekt.rekorIzci(kosuRekor === undefined ? 0 : kosuRekor, score) : null;
       milestonesHit = new Set(st.milestones || []);
       ikinciSansKullanildi = !!st.ikinciSans; kosuNo++;
       gamesStarted = Math.max(gamesStarted, 2);   // rekor isigi calissin
@@ -445,6 +462,8 @@
       kutlamaKapat();
       gamesStarted++; tiles = []; milestonesHit = new Set(); domTiles.forEach(el => el.remove()); domTiles.clear(); parcaTemizle();
       score = 0; recordBroken = false; ikinciSansKullanildi = false; kosuNo++;
+      kosuBasiRekor[SIZE] = best;
+      rekorIz = window.Efekt ? window.Efekt.rekorIzci(best, 0) : null;
       scoreBoxEl.classList.remove('record'); scoreBoxEl.classList.add('normal');
       rozetGizle();
       overlayEl.classList.remove('show'); placeWalls(); spawnTile(); spawnTile(); render();
@@ -623,7 +642,28 @@
       recordFxEl.classList.remove('show'); void recordFxEl.offsetWidth; recordFxEl.classList.add('show');
       setTimeout(() => recordFxEl.classList.remove('show'), 1600);
     }
-    function showLoseOverlay(){ overlayMsg.textContent='Hamle kalmadı'; overlaySub.textContent='Skorun: '+score; overlayBtn.style.display='inline-block'; overlayBtn.textContent='Yeniden Başla'; overlayEl.classList.add('show'); }
+    function showLoseOverlay(){ overlayMsg.textContent='Hamle kalmadı'; overlaySub.textContent='Skorun: '+score; overlayBtn.style.display='inline-block'; overlayBtn.textContent='Yeniden Başla'; overlayEl.classList.add('show'); sonucEfekt(); }
+    // Kayip ekrani, bu kosuda rekor kirildiysa: "Yeni Rekor!" basligi + konfeti + skor sayarak artar. Kirilmadiysa ekran aynen.
+    // Yalniz kayip ekraninda (ikinci sans teklifi suresince cagrilmaz: showLoseOverlay teklif reddedilince gelir).
+    const overlayRekorEl = document.getElementById('overlayRekor');
+    function sonucEfekt(){
+      const kirildi = !!(rekorIz && rekorIz.tetiklendi), E = window.Efekt;
+      if(overlayRekorEl) overlayRekorEl.hidden = !kirildi;
+      if(!kirildi || !E || !efektEkranda()) return;
+      E.baslik(overlayRekorEl);
+      E.konfeti({ adet: 100, sure: 1800, renkler: KONFETI_RENK, oncelik: true });
+      E.say(overlaySub, score, { onEk: 'Skorun: ', sure: 900 });
+    }
+    // Kosu ici rekor ani (oyun durmaz): skor kutusundan patlama + hafif konfeti + tahta kapsayicisi titrer (dusukte parlar).
+    // Mevcut rekor isigi / "Yeni rekor" rozeti aynen calisir. Titreme kaydirma olcusunu etkilemez (fark olcusu; ekran ogesi titremez).
+    function rekorAni(){
+      const E = window.Efekt;
+      if(!E || !efektEkranda()) return;
+      const r = scoreBoxEl.getBoundingClientRect();
+      E.patlama(r.left + r.width / 2, r.top + r.height / 2, { adet: 26, renkler: KONFETI_RENK });
+      E.konfeti({ adet: 40, sure: 1300, renkler: KONFETI_RENK });
+      E.titre(wrapEl, 320, 4);
+    }
     function evaluateAfterMove(){
       rekorGuncelle();
       if(!canMove()){
@@ -645,6 +685,8 @@
         }
         if(!recordBroken && gamesStarted > 1){ recordBroken = true; scoreBoxEl.classList.remove('normal'); scoreBoxEl.classList.add('record'); if(!sessiz) playWinSound(); flashRecord();
           rozetGoster(); if(window.AppFX) window.AppFX.vibrate([18, 40, 18, 40, 26]); }
+        // sessiz: ayni hamlede tahta acildi; kutlama efekti tek basina oynar (rekor ani yine "kullanildi" sayilir)
+        if(rekorIz && rekorIz.kontrol(score) && !sessiz) rekorAni();
       }
     }
     // Hamle kalmadi. Reklam destekleniyorsa ve bu kosuda kullanilmadiysa once ikinci
@@ -732,7 +774,7 @@
     // sahne disindayken olcup cizmek bosa is: tahta ekrani her acilista start() -> buildBoardCells -> yerles + render ile yeniden olculur
     window.addEventListener('resize', () => { if(ekran2048.classList.contains('offstage')) return; yerles(); render(); });
     if(window.AppReset){
-      window.AppReset.push(function(){ SIZE = 5; best = 0; liveSession = null; bestValEl.textContent = '0'; gamesStarted = 0; buildBoardCells(); newGame(); });
+      window.AppReset.push(function(){ SIZE = 5; best = 0; liveSession = null; kosuBasiRekor = {}; bestValEl.textContent = '0'; gamesStarted = 0; buildBoardCells(); newGame(); });
     }
     // Tahta secim ekrani buradan baslatir
     const resumeAsk = document.getElementById('resumeAsk');
@@ -805,11 +847,22 @@
         setTimeout(() => p.remove(), 2000);
       }
     }
+    // Ek kutlama (js/efekt.js; yalniz gorsel): karonun ustunde parlama halkasi + kivilcim, ekrana konfeti yagmuru, tahta
+    // kapsayicisi hafif titrer. Karodan sacilan konfeti (hedefParla) mevcut patlamadir; bu efektler onu tekrarlamaz.
+    // Dusuk kalite / azaltilmis hareket: kisa ve az konfeti, titreme yerine tek parlama (js/efekt.js). Pencere zamani degismez.
+    function kutlamaEfekt(karo){
+      const E = window.Efekt, el = karo && domTiles.get(karo.id);
+      if(!E || !efektEkranda()) return;
+      if(el){ const r = el.getBoundingClientRect(); E.patlama(r.left + r.width / 2, r.top + r.height / 2, { adet: 16, renkler: ['#FFFFFF', '#FBE7AE', '#CFFFE2'], yaricap: 90 }); }
+      E.konfeti({ adet: 90, sure: 1700, renkler: KONFETI_RENK });
+      E.titre(wrapEl, 380, 5);
+    }
     function kutlamaGoster(acilan, karo){
       kutlamaAcik = true;
       const eski = SIZE, A = window.H2048Acma;
       const azalt = !!document.querySelector('.phone.reduced-motion');
       if(!azalt) hedefParla(karo);
+      kutlamaEfekt(karo);
       playWinSound();
       if(window.AppFX) window.AppFX.vibrate([20, 40, 20, 40, 30]);
       clearTimeout(kutlamaTimer);
@@ -852,7 +905,7 @@
           askDialog('Kaldığın yerden devam edelim mi?',
             size + 'x' + size + ' tahtada ' + active.score + ' puanlık oyunun duruyor.',
             'Evet', 'Hayır',
-            () => restoreState(active),
+            () => restoreState(active, true),
             () => { clearActive(); beginNew(size); });
           return;
         }

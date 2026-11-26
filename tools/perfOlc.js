@@ -404,7 +404,57 @@ function sahneler(s) {
     { ad: 'suzul-bomba', aciklama: 'Suzul Bolge 5: her 1,2 sn bomba ve patlama (bocek y 47), 7 sn',
       hazirla: suzulHazir(4100, 3000), eylem: suzulEylem('sabit', 'bomba') },
     { ad: 'suzul-orumcek', aciklama: 'Suzul mesafe 9000: dogal + her 1 sn iki salinan orumcek (bocek y 47), 7 sn',
-      hazirla: suzulHazir(9000, 3000), eylem: suzulEylem('sabit', 'orumcek') }
+      hazirla: suzulHazir(9000, 3000), eylem: suzulEylem('sabit', 'orumcek') },
+    // EFEKT SAHNELERI (FAZ 2, js/efekt.js): olcum yalniz efekt suresince (~2,2 sn). 'parcacik': efekt basladiktan ~300 ms sonra canli parcacik.
+    { ad: 'efekt-2048', aciklama: '2048 5x5 hedef karo kutlamasi: karo parlamasi + karo konfetisi (DOM) + ekran konfetisi + patlama + titreme, 2,2 sn',
+      hazirla: async () => {
+        await h2048Hazir(5)();
+        await s.deger('Game2048._test.temizle(); Game2048._test.karoKoy(0,0,1024); Game2048._test.karoKoy(0,1,1024); 1');
+        await sleep(300);
+      },
+      eylem: async () => {
+        await s.deger('Game2048._test.hamle("left"), 1');
+        await sleep(450);
+        const p = await s.deger('Efekt.durum().parcacik');
+        await sleep(1750);
+        return { parcacik: p, kutlama: await s.deger('Game2048._test.durum().kutlamaAcik'), bitti: await s.deger('!Efekt.durum().raf') };
+      } },
+    { ad: 'efekt-tempo', aciklama: 'Tempo rekor ani (eski rekor 1) + ekran konfetisi (110) sirasinda surukleme, 2,2 sn',
+      hazirla: async () => { await s.deger('AppProgress.tempoBest = 1; 1'); await kartAc('cardTempo', 'tempo'); await s.deger(TEMPO_BOT); await sleep(500); },
+      eylem: async () => {
+        const b = await s.deger('__tempoBot()');
+        const yol = []; for (let k = 0; k <= 8; k++) yol.push([b.x0 + (b.x - b.x0) * k / 8, b.y0 + (b.y - b.y0) * k / 8]);
+        await s.surukle(yol, 16);
+        await s.deger('Efekt.konfeti({ adet: 110, sure: 1800 }), 1');
+        await sleep(150);
+        const p = await s.deger('Efekt.durum().parcacik'), ra = await s.deger('document.querySelector(".tp-box.cur").classList.contains("efekt-rekor")');
+        const t = await s.deger('__tempoTahta()'), q = await s.deger('__tempoParca(0) || __tempoParca(1) || __tempoParca(2)');
+        if (q) {
+          const y2 = [[q.x, q.y]];
+          for (let k = 1; k <= 40; k++) { const a = k / 40; y2.push([t.l + t.w * (0.15 + 0.7 * Math.abs(Math.sin(a * Math.PI * 1.5))), t.t + t.h * (0.95 - 0.8 * a) + 60]); }
+          y2.push([q.x, q.y]);
+          await s.surukle(y2, 16);
+        }
+        await sleep(600);
+        return { parcacik: p, rekorAni: ra, bitti: await s.deger('!Efekt.durum().raf') };
+      } },
+    { ad: 'efekt-suzul', aciklama: 'Suzul Bolge 5 kosu surerken rekor ani (patlama + tuval titremesi) + ekran konfetisi (110; en kotu durum), 2,2 sn',
+      hazirla: async () => {
+        await s.deger('AppProgress.atesBocegi = { rekor: 3002, kosu: 2, gun: "", gunJeton: 0 }; 1');
+        await suzulHazir(4100, 3000)();
+      },
+      eylem: async () => {
+        await s.deger('document.getElementById("abTuval").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true,pointerId:1,isPrimary:true,pointerType:"touch"})),' +
+                      'document.getElementById("abTuval").dispatchEvent(new PointerEvent("pointerup",{bubbles:true,pointerId:1,isPrimary:true,pointerType:"touch"})), 1');
+        await s.deger('window.__suzul("kontrol", "")');
+        await s.bekle('Math.floor(window.__durum.puan) > 3002', 5000);
+        await s.deger('Efekt.konfeti({ adet: 110, sure: 1800 }), 1');
+        await sleep(300);
+        const p = await s.deger('Efekt.durum().parcacik'), ra = await s.deger('document.querySelector(".ab-kutu.cur").classList.contains("efekt-rekor")');
+        await sleep(1900);
+        const d = await s.deger('(function(){var d=window.__durum;window.__suzulAcik=false;return {bitti:d.bitti};})()');
+        return Object.assign({ parcacik: p, rekorAni: ra, efektBitti: await s.deger('!Efekt.durum().raf') }, d);
+      } }
   ];
 }
 

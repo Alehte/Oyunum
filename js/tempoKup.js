@@ -74,6 +74,9 @@
   var sonBoya = new Array(N * N);
   var suruk = null;                  // devam eden sürükleme
   var skorGorunen = 0, skorRaf = 0;
+  // REKOR ANI (js/efekt.js; yalniz gorsel): rekorBasta (oyun basindaki rekor) ile kurulur, oyun basina bir kez tetiklenir
+  // (rekorBasta 0 ise hic). Ikinci sans ayni oyundur: izci korunur. Efekt yuklu degilse null (efekt yok, oyun ayni).
+  var rekorIz = null;
 
   // ---------------------------------------------------------------
   // YARDIMCILAR
@@ -396,6 +399,35 @@
     setTimeout(function () { if (kat.parentNode) kat.parentNode.removeChild(kat); }, 3300);
   }
 
+  // Kosu ici rekor ani: skor kutusunda "Rekor!" vurgusu + patlama + hafif konfeti, skor cubugu titrer (dusukte parlar).
+  // Titreme yalniz skor cubugunda: tahta / tepsi olcusu (surukleme hedefi getBoundingClientRect) hic kaymaz, surukleme kopmaz.
+  function rekorIzKur() { rekorIz = window.Efekt ? window.Efekt.rekorIzci(rekorBasta, oyun ? oyun.skor : 0) : null; }
+  // Efekt yalniz oyun ekrani sahnedeyken baslar (oyun sonu 520/760 ms gecikmeli, teklif sonucu gec gelebilir); sonuc / odeme ayni.
+  function efektEkranda() {
+    var A = window.AppEkran;
+    return !(A && A.aktif && A.aktif() !== 'tempo') && !ekran.classList.contains('offstage');
+  }
+  function rekorAni() {
+    var E = window.Efekt;
+    if (!E || !efektEkranda()) return;
+    var kutu = skorEl.parentNode, r = kutu.getBoundingClientRect(), p = palet();
+    E.vurgu(kutu, kutu.querySelector('.l'), 'Rekor!', 1800);
+    E.patlama(r.left + r.width / 2, r.top + r.height / 2, { adet: 26, renkler: p });
+    E.konfeti({ adet: 40, sure: 1300, renkler: p });
+    E.titre(kutu.parentNode, 320, 4);
+  }
+  function rekorVurguKaldir() { if (window.Efekt) window.Efekt.vurguKaldir(skorEl.parentNode, skorEl.parentNode.querySelector('.l')); }
+  // Oyun sonu ekrani, rekor kirildiysa: baslik canlanir, konfeti yagar, skor sayarak artar, sonra kazanc satiri ve altin
+  // sayaci kisa nabiz atar. Kazanc / kayit kazanciOde'de yapildi; burasi yalniz gosterir.
+  function sonucEfekt() {
+    var E = window.Efekt;
+    if (!E || !efektEkranda()) return;
+    var sk = bittiAlt.querySelector('.tp-over-skor'), odul = bittiAlt.querySelector('.tp-over-odul'), altin = q('goldPillTempo');
+    E.baslik(bittiBaslik);
+    E.konfeti({ adet: 110, sure: 1800, renkler: palet(), oncelik: true });
+    E.say(sk, oyun.skor, { bicim: yaz, sure: 900, sonra: function () { if (odul) { E.nabiz(odul); E.nabiz(altin); } } });
+  }
+
   var OVGU = AYAR.ovgu;
   var OTUR_KARE = [{ transform: 'scale(.72)' }, { transform: 'scale(1)' }], OTUR_AYAR = { duration: 200, easing: 'cubic-bezier(.34,1.56,.64,1)' };
 
@@ -465,6 +497,7 @@
     }
 
     if (oyun.skor > rekor) { rekor = oyun.skor; rekorYaz(); }
+    if (rekorIz && rekorIz.kontrol(oyun.skor)) rekorAni();
     skorYaz(false);
     tempoYaz();
 
@@ -567,7 +600,7 @@
     bittiBaslik.innerHTML = rekorKirildi
       ? '<span style="color:#FFE08A">Yeni</span> <span style="color:#8FF0B4">Rekor!</span>'
       : '<span style="color:#FF9A8A">Yer</span> <span style="color:#FFC97A">Kalmadı</span>';
-    var alt = 'Skorun: ' + yaz(oyun.skor);
+    var alt = 'Skorun: ' + (rekorKirildi ? '<span class="tp-over-skor">' + yaz(oyun.skor) + '</span>' : yaz(oyun.skor));
     if (oyun.tamSayisi) alt += '  ·  Tam temizlik: ' + oyun.tamSayisi;
     if (rekorKirildi) alt += '<div class="tp-over-eski">Önceki rekor: ' + yaz(kz.eskiRekor) + '</div>';
     // kazanc dokumu (odeme kazanciOde'de yapildi; burada yalnizca gosterilir)
@@ -584,6 +617,7 @@
     oyunKaydet();
     if (rekorKirildi) dizi([[523, .15, .13, 0], [659, .15, .13, 90], [784, .15, .13, 180], [1047, .3, .15, 270]], 'triangle');
     else dizi([[440, .16, .13, 0], [349, .16, .13, 170], [262, .5, .15, 340]], 'sine');
+    if (rekorKirildi) sonucEfekt();
   }
 
   // ---------------------------------------------------------------
@@ -806,6 +840,7 @@
     rekor = rekorOku(); rekorBasta = rekor;
     temizlikBirikim = 0; sonKazanc = null;
     teklifBekliyor = false;
+    rekorIzKur(); rekorVurguKaldir();
     bittiEl.classList.remove('show');
     if (fxEl) fxEl.innerHTML = '';
     ekranaYaz();
@@ -832,6 +867,7 @@
         tahtaKur();
         rekor = rekorOku(); rekorBasta = rekor;
         if (!oyunYukle()) { yeniOyun(); return; }
+        rekorIzKur();          // yarim oyun: rekorBasta kayittan (rb); skor onu zaten astiysa izci tetiklenmis baslar
       }
       rekor = Math.max(rekor, rekorOku());
       ekranaYaz();           // tema değişmiş olabilir: renkler paletten yeniden okunur
