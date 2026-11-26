@@ -98,6 +98,17 @@ const OLUMLER = [];
 for (let t = 1; t <= 160; t++) OLUMLER.push(Object.assign(olumUret(t * 7919, { dusukIsik: t % 2 === 0, yuksekPuan: t % 3 === 0 }), { tohum: t * 7919 }));
 // 13: kademe 3-5 (salinan engelli) olumler: test kancasiyla 1700-9000 birimden baslayan kosular (hiz rampasi dahil)
 for (let t = 1; t <= 80; t++) OLUMLER.push(Object.assign(olumUret(t * 104729, { dusukIsik: t % 2 === 0, bas: { mesafe: 1700 + (t % 8) * 1000, puan: 2600 + t * 40 } }), { tohum: t * 104729, salinanli: 1 }));
+// 14 (FAZ 3): Bolge 5 derece kumeleri (ayni tohum ailesi kademe 3-5 kumesiyle de kullanilir). 16000+: d = D_MAX platosu (hiz tavanda, tAra D_TARA_MIN'e yakin; on kenar payi en dar);
+// 60000+: uzun kosu (plato + hiz tavani). Her kume ayri tohum ailesi.
+// d8 kumesi denetim ornegini icerir (tohum 5760095 = 55 * 104729, 26500'den: on kenarsiz varis salinan 3,167 < 3,2 sn).
+for (let t = 1; t <= 80; t++) OLUMLER.push(Object.assign(olumUret(t * 104729, { dusukIsik: t % 2 === 0, bas: { mesafe: 16000 + (t % 8) * 1500, puan: 12000 + t * 40 } }), { tohum: t * 104729, salinanli: 1, kume: 'd8' }));
+for (let t = 1; t <= 40; t++) OLUMLER.push(Object.assign(olumUret(t * 155921, { dusukIsik: t % 2 === 0, bas: { mesafe: 60000 + (t % 8) * 2500, puan: 45000 + t * 40 } }), { tohum: t * 155921, salinanli: 1, kume: 'uzak' }));
+// Bocegin ON KENARI (bx + R_CARPMA) x'e kac sn'de varir: adim() ile ayni ilerleme (adim basina zorluk(mesafe).hiz * DT)
+const varis = (d, x) => {
+  let m = d.mesafe, t = 0;
+  while (m + D.X_BOCEK + M.R_CARPMA < x && t < 60) { m += AB.zorluk(m).hiz * D.DT; t += D.DT; }
+  return t;
+};
 
 dene('olum ornekleri: isik (hasar + sizinti) ve zemin olumleri, bomba/sarmasikli dilimler kapsanir', () => {
   const sebep = {}, tur = {};
@@ -120,7 +131,9 @@ dene('dogma: y bant icinde, temiz dilimlerde engel/bomba/sarmasik yok, ilk kalan
     const bx = d.mesafe + D.X_BOCEK, hiz = AB.zorluk(d.mesafe).hiz;
     for (const i of sec.temiz) { const s = d.dilimler[i]; assert.ok(!s.engeller.length && !s.bomba && !s.sarmasik, 'temiz dilim ' + s.no); }
     const ilk = d.dilimler[sec.ilk];
-    assert.ok(ilk.x >= bx + hiz * S.TEMIZ_SN - 1e-9 && !ilk.bomba && !ilk.sarmasik);
+    // kesin: ilk kalan dilime bocegin on kenari TEMIZ_SN'den once varmaz (R_CARPMA ve hiz rampasi dahil)
+    assert.ok(ilk.x > bx + M.R_CARPMA + hiz * S.TEMIZ_SN && !ilk.bomba && !ilk.sarmasik, 'tohum ' + o.tohum + ' ilk dilim siniri');
+    assert.ok(varis(d, ilk.x) >= S.TEMIZ_SN - 1e-9, 'tohum ' + o.tohum + ' ilk dilim ' + varis(d, ilk.x).toFixed(4) + ' sn');
     for (let i = 0; i < sec.ilk; i++) {        // ilk kalandan once kalan her sey geride
       const s = d.dilimler[i];
       if (sec.temiz.indexOf(i) < 0) assert.ok(s.x + s.w < bx - M.R_CARPMA, 'geride olmayan temizlenmemis dilim ' + s.no);
@@ -162,8 +175,8 @@ dene('carpan korunur: olumcul hasar zinciri sifirlasa da canlaninca olumden once
   console.log('       olumcul hasarla sifirlanip geri gelen zincir: ' + hasarli + ' ornek');
 });
 
-dene('ilk N adim (N = TEMIZ_SN - 0,1 sn) hicbir politikada tehlike carpismasi yok; havada/gecikmeli politika olmez', () => {
-  const N = Math.floor((S.TEMIZ_SN - 0.1) * ADIM_SN);
+dene('ilk N adim (N = TEMIZ_SN, toleranssiz) hicbir politikada tehlike carpismasi yok; havada/gecikmeli politika olmez', () => {
+  const N = Math.round(S.TEMIZ_SN * ADIM_SN);
   let enKucukZemin = Infinity, enKucukTavan = Infinity;
   for (const o of OLUMLER) {
     const t0 = kopya(o.d); AB.ikinciSans(t0, { zincir: o.zincirOnce });
@@ -183,12 +196,9 @@ dene('ilk N adim (N = TEMIZ_SN - 0,1 sn) hicbir politikada tehlike carpismasi yo
 
 dene('salinan (13): canlaninca en yakin salinan engelin gercek varisi >= TEMIZ_SN + tAra (hiz rampasi dahil); temizlik gercekten calisti', () => {
   let temizlenen = 0, kalan = 0, enAz = Infinity, ornek = 0, pencere = 0;   // pencere: canlanmadan once TEMIZ_SN + tAra icinde varacak salinanli dilim
-  const varis = (d, x) => {                       // bocegin on kenari x'e kac sn'de varir (adim() ile ayni ilerleme)
-    let m = d.mesafe, t = 0;
-    while (m + D.X_BOCEK + M.R_CARPMA < x && t < 60) { m += AB.zorluk(m).hiz * D.DT; t += D.DT; }
-    return t;
-  };
+  const kumeAz = {};                              // 14: kume basina en az pay (salinan ve ilk kalan dilim)
   for (const o of OLUMLER.filter(q => q.salinanli)) {
+    const k = o.kume || 'k3-5', ka = kumeAz[k] || (kumeAz[k] = { sal: Infinity, ilk: Infinity, n: 0 }); ka.n++;
     const d = kopya(o.d), bx = d.mesafe + D.X_BOCEK;
     const once = d.dilimler.filter(s => s.x + s.w >= bx - M.R_CARPMA && s.engeller.some(e => e.tur === 'salinan') && varis(d, s.x) < S.TEMIZ_SN + s.tAra).length;
     if (d.dilimler.some(s => s.engeller.some(e => e.tur === 'salinan'))) ornek++;
@@ -197,11 +207,14 @@ dene('salinan (13): canlaninca en yakin salinan engelin gercek varisi >= TEMIZ_S
     for (const s of d.dilimler) {
       if (s.x + s.w < bx - M.R_CARPMA || !s.engeller.some(e => e.tur === 'salinan')) continue;
       kalan++;
-      const v = varis(d, s.x); enAz = Math.min(enAz, v - (S.TEMIZ_SN + s.tAra));
+      const v = varis(d, s.x); enAz = Math.min(enAz, v - (S.TEMIZ_SN + s.tAra)); ka.sal = Math.min(ka.sal, v - (S.TEMIZ_SN + s.tAra));
       assert.ok(v >= S.TEMIZ_SN + s.tAra - 1e-9, 'tohum ' + o.tohum + ' dilim ' + s.no + ': salinan ' + v.toFixed(3) + ' sn');
     }
     pencere += once;
+    ka.ilk = Math.min(ka.ilk, varis(d, d.dilimler[sec.ilk].x) - S.TEMIZ_SN);
   }
+  for (const k of Object.keys(kumeAz)) console.log('       kume ' + k + ' (' + kumeAz[k].n + ' olum): en az pay salinan ' + kumeAz[k].sal.toFixed(3) + ' sn, ilk kalan dilim ' + kumeAz[k].ilk.toFixed(3) + ' sn');
+  assert.ok(kumeAz.d8 && kumeAz.uzak && kumeAz.d8.sal < Infinity && kumeAz.uzak.sal < Infinity, 'derece kumelerinde kalan salinan yok');
   console.log('       ' + ornek + ' salinanli olum; once pencerede ' + pencere + ' salinanli dilim, ilk kalan ve sonrasindan temizlenen ' + temizlenen +
               ' (TEMIZ_SN icindekiler engelleriyle silinir), kalan ' + kalan + ', en az pay ' + enAz.toFixed(3) + ' sn');
   assert.ok(ornek > 30 && pencere > 10 && temizlenen > 5 && kalan > 10);

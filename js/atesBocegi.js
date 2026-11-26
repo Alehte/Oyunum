@@ -17,6 +17,8 @@
 // TASARIM 13 (FAZ B): kademe (ekranda "Bolge N", mesafe esikli; gorsel biyom 'bolge'den ayri), hiz/sizinti rampasi,
 //           salinan engel ({tur: 'salinan', x, y, w, h, yc, gen, om, faz}: y = yc + gen * sin(om * t + faz)), dilimde
 //           dag (duzensiz isik katsayisi 0-1) ve kademe. Olay: kademe (kademe). 12.2 risk tozu kaldirildi.
+// TASARIM 14 (FAZ 3): Bolge 5'te zorluk derecesi d = derece(mesafe) (0..D_MAX, gosterilmez): sik engel, dar bosluk, bomba/
+//           sarmasik/orumcek sikligi, orumcek genligi/hizi, duzensiz isik ve sizinti d ile artar; d = 0'da uretim aynen.
 (function (kok, fabrika) {
   if (typeof module === 'object' && module.exports) module.exports = fabrika();
   else kok.AtesBocegi = fabrika();
@@ -126,7 +128,27 @@
       // arasi (asil x'lerle) yayin (b - a) en cok DAG_BOSLUK'u olur (olcum: sinirsiz dusmede isik 0 Bot B %1,5 tohumda carpar).
       DAG_BOSLUK: 0.34,
       // Isik (toz/kivilcim) dogumda her engel zarfindan (salinan: supurulen zarf) en az bu kadar uzak (B.1): R_CARPMA + R_TOPLA.
-      ISIK_MARJ: 5.8
+      ISIK_MARJ: 5.8,
+      // ---- FAZ 3 (tasarim 14): Bolge 5'te surekli zorluk derecesi d (oyuncuya gosterilmez; ekranda Bolge 5 kalir).
+      // d = 0 (mesafe < KADEME[4] + D_ADIM), sonra her D_ADIM birimde +1, en cok D_MAX (plato). Dilimin derecesi varis
+      // mesafesinden (x - X_BOCEK), isik sizintisi bocegin mesafesinden. Asagidaki D_* degerleri d = D_MAX'taki TOPLAM
+      // degisimdir; arasi dogrusal (d / D_MAX). d = 0'da hicbiri uygulanmaz: uretim Bolge 5 ile birebir (adalet testi ozeti).
+      // Butun sinirlar ayarDogrula'da; adalet testi en yuksek d'de olcer (tools/atesBocegiAdaletTest.js, tools/atesBocegiDikkatliBot.js).
+      D_ADIM: 1500, D_MAX: 8,
+      // tAra'dan cikar (sik engel); alt sinir: degismezler T_MIN + T_IVME (0,84) ustu ve serit/nefes icin >= 1,09 ister. Olcum (FAZ 3):
+      // 1,10'da kivilcim (bacak siniri) hic yerlesmez, 1,20'de %0,4 (HEAD 16000+ %2,0); bu yuzden 1,20.
+      D_TARA: 0.20, D_TARA_MIN: 1.20,
+      D_BOSLUK: 1.5,                       // bosluk'tan cikar; alt sinir BOSLUK_TABAN - BOSLUK_Z (16 = orumcek sonrasi gecit)
+      D_SIZINTI: 0.006,                    // isik sizintisina eklenir (SIZINTI_TAVAN'in ustune; tozsuz isik ekonomisi degismezi)
+      // BOMBA_OLASILIK / SARMASIK_OLASILIK'a eklenir; yerlesim yine kacis modeliyle (bombaSec/sarmasikSec). Olcum d = 8, 16000-30000:
+      // bomba %10,9 (HEAD) -> %27,5; olasilik 1'de (D_BOMBA 0,6) modelin ust siniri ~%35. Sarmasik sik engelde zor yerlesir: 0,08 ile ~%3.
+      D_BOMBA: 0.35, D_SARMASIK: 0.08,
+      D_SAL_AGIRLIK: 3,                    // kademe 5 salinan (orumcek) agirligina eklenir
+      D_SAL_GENLIK: 1, D_SAL_PERIYOT: 0.1, // orumcek genligine eklenir / periyodundan cikar (tepe hiz < bocek dikey hizi; gecit = bosluk)
+      D_DAG_Y: 0.5, D_DAG_X: 0.1, D_DAG_ATLA: 0.15,   // duzensiz isik eklentileri (kinematik kistirma ve ISIK_MARJ aynen)
+      // Kombinasyon: bomba/sarmasik diliminden hemen sonraki dilimde salinan agirligina ek (bomba -> orumcek); salinanli
+      // dilimden hemen sonraki dilimde bomba olasiligina ek (orumcek -> bomba). Toparlanma kacis modelindedir (xe >= a + R_CARPMA).
+      D_KOMBO_SAL: 4, D_KOMBO_BOMBA: 0.20
     },
     isik: { BASLANGIC: 1, TOZ: 0.035, KIVILCIM: 0.25, HASAR: 0.34, AG_HASAR: 0.17, DOKUNULMAZ: 1.0,
             DAL_HASAR: 0.50, BOMBA_HASAR: 0.25, SARMASIK_HASAR: 0.20 },   // HASAR: kus ve dusen dal (11.4)
@@ -285,6 +307,33 @@
     // kadar araliklarla) marji uclarda saglamali (en kucuk aralik iki uctan biri; ara degerler adalet testinde olculur)
     var arMin = Math.min(z.HIZ_TABAN * z.TARA_TABAN, z.HIZ_TAVAN * taMin) - enGenis;
     if (!(z.ISIK_MARJ >= m.R_CARPMA && arMin / (u.TOZ_MAX + 1) >= z.ISIK_MARJ)) h.push('ISIK_MARJ < R_CARPMA ya da yay tozu marja sigmiyor');
+    // ---- FAZ 3 (tasarim 14): zorluk derecesi d. Degerler d = D_MAX'ta (en uc); ara dereceler dogrusal (d / D_MAX).
+    var dSay = ['D_ADIM', 'D_TARA', 'D_TARA_MIN', 'D_BOSLUK', 'D_SIZINTI', 'D_BOMBA', 'D_SARMASIK', 'D_SAL_AGIRLIK', 'D_SAL_GENLIK',
+                'D_SAL_PERIYOT', 'D_DAG_Y', 'D_DAG_X', 'D_DAG_ATLA', 'D_KOMBO_SAL', 'D_KOMBO_BOMBA'];
+    if (!(Number.isInteger(z.D_MAX) && z.D_MAX >= 0 && z.D_ADIM > 0 && dSay.every(function (q) { return z[q] >= 0; }))) h.push('derece ayarlari gecersiz (D_MAX tamsayi >= 0, D_* >= 0)');
+    // derece bolgesindeki (d >= 1) en kucuk hiz: hiz mesafeyle artar, d = 1'in basinda (KADEME[4] + D_ADIM) en kucuk
+    var m1 = K[4] + z.D_ADIM, z1 = 1 - Math.exp(-m1 / z.Z_OLCEK), r1 = Math.max(0, Math.min(1, (m1 - K[1]) / (z.RAMPA_SON - K[1])));
+    var hiz1 = Math.min(z.HIZ_TAVAN, z.HIZ_TABAN + z.HIZ_Z * z1 + z.HIZ_LOG * Math.log2(1 + m1 / z.HIZ_LOG_OLCEK) + z.HIZ_EK * r1);
+    // en kucuk tAra (d dahil): tAra = min(eski, max(D_TARA_MIN, eski - D_TARA)); kural 2-3 bu degerle de calismali
+    var taD = Math.min(taMin, Math.max(z.D_TARA_MIN, taMin - z.D_TARA));
+    if (!(taD > ad.T_MIN + ad.T_IVME)) h.push('derece: en kucuk tAra <= T_MIN + T_IVME');
+    var dcD = ad.V_GUVENLI * (taD - ad.T_MIN - ad.T_IVME);
+    if (!((u.SERIT_UST + z.BOSLUK_TABAN / 2) - u.MERKEZ_MIN <= dcD && u.MERKEZ_MAX - (u.SERIT_ALT - z.BOSLUK_TABAN / 2) <= dcD))
+      h.push('derece: serit yedegi kural 3 ile ulasilamiyor');
+    if (!(2 * taD - enGenis / hiz1 >= u.NEFES_SURE)) h.push('derece: nefes engelsiz suresi < NEFES_SURE');
+    // yay tozu: derece bolgesinde aralik (hiz * tAra) >= hiz1 * taD (hiz >= hiz1, tAra >= taD; ikisi de bolgenin alt siniri)
+    if (!((hiz1 * taD - enGenis) / (u.TOZ_MAX + 1) >= z.ISIK_MARJ)) h.push('derece: yay tozu ISIK_MARJ\'a sigmiyor');
+    // kivilcim (kural 7) platoda sigmali: uzun kosuda hiz HIZ_TAVAN, tAra taP; en iyi durumda (dc = 0, onceki dilim en dar engel)
+    // bacak = V_GUVENLI * ((HIZ_TAVAN * taP - enDar) / 2 - R_CARPMA) / HIZ_TAVAN >= KIVILCIM_UZAK_MIN olmali, yoksa kivilcim hic
+    // yerlesmez (olcum FAZ 3: D_TARA_MIN 1,10'da bacak 9,14 < 10, platoda %0; 1,20'de 10,14, ~%0,5). Gerekli kosul; oran adalet testinde.
+    var enDar = Math.min(u.DAL_GEN, u.AG_GEN, u.KUS_GEN, u.DUSEN_GEN, z.SAL_GEN), taP = z.D_MAX > 0 ? taD : taMin;
+    if (!(ad.V_GUVENLI * ((z.HIZ_TAVAN * taP - enDar) / 2 - m.R_CARPMA) / z.HIZ_TAVAN >= u.KIVILCIM_UZAK_MIN)) h.push('derece: platoda kivilcim sigmiyor (D_TARA_MIN cok kucuk)');
+    // isik ekonomisi: d >= 1'de en buyuk tAra (z(m1)'de) x en buyuk sizinti (tavan + D_SIZINTI)
+    if (!(u.TOZSUZ_MAX * (z.TARA_TABAN - z.TARA_Z * z1) * (z.SIZINTI_TAVAN + z.D_SIZINTI) < u.TOZSUZ_ISIK_MAX)) h.push('derece: tozsuz pencerede isik kaybi TOZSUZ_ISIK_MAX ustunde');
+    if (!(u.BOMBA_OLASILIK + z.D_BOMBA + z.D_KOMBO_BOMBA <= 1 && u.SARMASIK_OLASILIK + z.D_SARMASIK <= 1)) h.push('derece: olasilik > 1');
+    var gD = z.SAL_GENLIK[1] + z.D_SAL_GENLIK, pD = z.SAL_PERIYOT[1] - z.D_SAL_PERIYOT;
+    if (!(pD > 0 && 2 * Math.PI * gD / pD < Math.min(m.VY_ASAGI, m.VY_YUKARI))) h.push('derece: salinan tepe hizi >= bocek dikey hizi');
+    if (!(z.DAG_X + z.D_DAG_X < 0.5 && z.DAG_ATLA + z.D_DAG_ATLA < 1)) h.push('derece: duzensiz isik ayarlari gecersiz');
     return h;
   }
 
@@ -353,15 +402,26 @@
   // 13: hiz ve sizinti kademe 2'den rampayla artar (tavanli); kademe 1'de (mesafe <= KADEME[1]) deger eskisiyle bit bit ayni.
   // tAra / bosluk eski z egrisinde kalir: aralik (hiz * tAra) ve butun adalet sureleri saniye cinsinden olcektir.
   function rampa(mesafe) { return kistir((mesafe - Z.KADEME[1]) / (Z.RAMPA_SON - Z.KADEME[1]), 0, 1); }
+  // 14 (FAZ 3): zorluk derecesi. Bolge 5 basindan (KADEME[4]) itibaren her D_ADIM birimde +1, en cok D_MAX; oncesi 0.
+  function derece(mesafe) { return mesafe < Z.KADEME[4] ? 0 : Math.min(Z.D_MAX, Math.floor((mesafe - Z.KADEME[4]) / Z.D_ADIM)); }
+  // Derece orani d / D_MAX (0..1): D_* ekleri bununla carpilir.
+  function dereceOran(mesafe) { var dr = derece(mesafe); return dr > 0 ? dr / Z.D_MAX : 0; }
   function zorluk(mesafe) {
-    var z = 1 - Math.exp(-mesafe / Z.Z_OLCEK), r = rampa(mesafe);
-    return {
+    var z = 1 - Math.exp(-mesafe / Z.Z_OLCEK), r = rampa(mesafe), dn = dereceOran(mesafe);
+    var o = {
       z: z,
       hiz: Math.min(Z.HIZ_TAVAN, Z.HIZ_TABAN + Z.HIZ_Z * z + Z.HIZ_LOG * Math.log2(1 + mesafe / Z.HIZ_LOG_OLCEK) + Z.HIZ_EK * r),
       tAra: Z.TARA_TABAN - Z.TARA_Z * z,
       bosluk: Z.BOSLUK_TABAN - Z.BOSLUK_Z * z,
       sizinti: Math.min(Z.SIZINTI_TAVAN, Z.SIZINTI_TABAN + Z.SIZINTI_Z * z + Z.SIZINTI_EK * r)
     };
+    // 14: d > 0'da sik engel (tAra, alt sinirli, hic artmaz), dar bosluk (en az 16) ve hafif ek sizinti. d = 0'da deger aynen.
+    if (dn > 0) {
+      o.tAra = Math.min(o.tAra, Math.max(Z.D_TARA_MIN, o.tAra - Z.D_TARA * dn));
+      o.bosluk = Math.min(o.bosluk, Math.max(Z.BOSLUK_TABAN - Z.BOSLUK_Z, o.bosluk - Z.D_BOSLUK * dn));
+      o.sizinti += Z.D_SIZINTI * dn;
+    }
+    return o;
   }
   // Kademe (13): 1..KADEME.length; mesafe >= KADEME[k - 1] olan en buyuk k. Ekranda "Bolge k".
   function kademeNo(mesafe) { var k = 1; while (k < Z.KADEME.length && mesafe >= Z.KADEME[k]) k++; return k; }
@@ -410,9 +470,10 @@
     // ilk kalan dilimin bosluk merkezi [MERKEZ_MIN, MERKEZ_MAX]; banda kistirilinca kalan fark kural 3 hiziyla kapanmali
     if (!(Math.max(S.Y_MIN - U.MERKEZ_MIN, U.MERKEZ_MAX - S.Y_MAX, 0) <= AD.V_GUVENLI * (S.TEMIZ_SN - AD.T_MIN - AD.T_IVME)))
       h.push('kistirilan dogma yuksekligi bosluga yetismiyor');
-    if (!(Z.HIZ_TAVAN * S.TEMIZ_SN + enGenis < U.UFUK)) h.push('temizlik uretim ufkunun otesinde (ilk kalan dilim yok)');
+    // 14: siniri on kenardan (R_CARPMA) olculur (dogmaSec)
+    if (!(M.R_CARPMA + Z.HIZ_TAVAN * S.TEMIZ_SN + enGenis < U.UFUK)) h.push('temizlik uretim ufkunun otesinde (ilk kalan dilim yok)');
     // 13: salinan temizligi TEMIZ_SN + tAra'ya kadar (en buyuk tAra ile) ufuk icinde
-    if (!(Z.HIZ_TAVAN * (S.TEMIZ_SN + Z.TARA_TABAN) + enGenis < U.UFUK)) h.push('salinan temizligi uretim ufkunun otesinde');
+    if (!(M.R_CARPMA + Z.HIZ_TAVAN * (S.TEMIZ_SN + Z.TARA_TABAN) + enGenis < U.UFUK)) h.push('salinan temizligi uretim ufkunun otesinde');
     if (h.length) throw new Error('AtesBocegi.IKINCI_SANS gecersiz: ' + h.join('; '));
   })();
 
@@ -609,11 +670,12 @@
     var g2 = (tC > 2 * AD.T_IVME ? Math.max(0, kacisMesafesi(tC - 2 * AD.T_IVME, 0, 0)) : 0) + M.R_TOPLA + (k.g2 / 2 - M.R_CARPMA - AD.PAY_KACIS);
     return { lo: Math.max(k.c1 - g1, k.c2 - g2, U.KIVILCIM_Y_MIN), hi: Math.min(k.c1 + g1, k.c2 + g2, U.KIVILCIM_Y_MAX) };
   }
-  function dagit(toz, k, j, r) {
+  // dg: {x, y, atla} = DAG_X / DAG_Y / DAG_ATLA (14: derece ekleriyle; d = 0'da aynen AYAR degerleri)
+  function dagit(toz, k, j, r, dg) {
     var n = toz.length, ara = (k.b - k.a) / (n + 1), kalan = n, sonuc = [], once = k.a, dustu = false, i, t, q, dx, dy, x, y, u;
     for (i = 0; i < n - 1; i++) {
-      t = toz[i]; q = r(); dx = (2 * r() - 1) * Z.DAG_X * j * ara; dy = (2 * r() - 1) * Z.DAG_Y * j;
-      if (q < Z.DAG_ATLA * j && kalan > 2 && !dustu && toz[i + 1].x - once <= Z.DAG_BOSLUK * (k.b - k.a)) { kalan--; dustu = true; continue; }
+      t = toz[i]; q = r(); dx = (2 * r() - 1) * dg.x * j * ara; dy = (2 * r() - 1) * dg.y * j;
+      if (q < dg.atla * j && kalan > 2 && !dustu && toz[i + 1].x - once <= Z.DAG_BOSLUK * (k.b - k.a)) { kalan--; dustu = true; continue; }
       dustu = false; once = t.x;
       x = kistir(t.x + dx, k.a + Z.ISIK_MARJ, k.b - Z.ISIK_MARJ); u = ulasimSiniri(x, k);
       if (u.lo <= u.hi) { y = kistir(t.y + dy, u.lo, u.hi); t.x = x; t.y = y; }
@@ -630,10 +692,15 @@
     bolge = bolge | 0; puan = +puan || 0;
     var x = ur.x + aralik(ur.x - D.X_BOCEK);
     var zr = zorluk(x - D.X_BOCEK), kd = kademeNo(x - D.X_BOCEK);   // 13: dilimin kademesi varis mesafesinden
-    var kdOran = kademeOran(x - D.X_BOCEK, 3, 5), salK = {
-      gen: Z.SAL_GENLIK[0] + (Z.SAL_GENLIK[1] - Z.SAL_GENLIK[0]) * kdOran,
-      om: 2 * Math.PI / (Z.SAL_PERIYOT[0] + (Z.SAL_PERIYOT[1] - Z.SAL_PERIYOT[0]) * kdOran) };
-    var satir = kd >= 3 ? U.AGIRLIK[bolge].concat([Z.SAL_AGIRLIK[kd - 1]]) : U.AGIRLIK[bolge];
+    // 14: derece orani (d / D_MAX); 0 iken her deger ve rastgele sayi tuketimi Bolge 5 ile birebir
+    var dn = dereceOran(x - D.X_BOCEK);
+    var kdOran = kademeOran(x - D.X_BOCEK, 3, 5), salP = Z.SAL_PERIYOT[0] + (Z.SAL_PERIYOT[1] - Z.SAL_PERIYOT[0]) * kdOran;
+    var salK = { gen: Z.SAL_GENLIK[0] + (Z.SAL_GENLIK[1] - Z.SAL_GENLIK[0]) * kdOran, om: 0 };
+    if (dn > 0) { salK.gen += Z.D_SAL_GENLIK * dn; salP -= Z.D_SAL_PERIYOT * dn; }
+    salK.om = 2 * Math.PI / salP;
+    var salAg = kd >= 3 ? Z.SAL_AGIRLIK[kd - 1] : 0;
+    if (dn > 0) salAg += (Z.D_SAL_AGIRLIK + (ur.tehlikeOnce ? Z.D_KOMBO_SAL : 0)) * dn;   // kombinasyon: bomba/sarmasik -> orumcek
+    var satir = kd >= 3 ? U.AGIRLIK[bolge].concat([salAg]) : U.AGIRLIK[bolge];
     var maxDc = AD.V_GUVENLI * (zr.tAra - AD.T_MIN - AD.T_IVME);
     var nefes = ur.n >= U.ACILIS_DILIM && bolge !== ur.bolge, acilis = ur.n < U.ACILIS_DILIM;
     ur.bolge = bolge;
@@ -701,7 +768,7 @@
     // tepki aninda aleyhte hiz birakir, kacis modeli bunu varsaymaz)
     var ozel = !acilis && !nefes && !tozsuz && !ur.tehlikeOnce;
     var saAday = ozel && puan >= U.SARMASIK_PUAN && (puan >= U.CAKISMA_SERBEST || ur.n - ur.tzSon >= U.CAKISMA_ARA) &&
-                 r() < U.SARMASIK_OLASILIK;
+                 r() < U.SARMASIK_OLASILIK + Z.D_SARMASIK * dn;   // 14: d = 0'da + 0 (aynen)
     if (saAday) n = U.TOZ_MAX;                   // sutunlar ic tozlarda; en cok toz = daha gec sutun secenegi (kacis suresi)
     for (i = 1; i <= n && !tozsuz; i++) {
       f = i / (n + 1);
@@ -710,7 +777,8 @@
     var gk = { a: a, b: b, c1: ur.c, c2: c, g2: g, hiz: zr.hiz, tA: ur.tA, tU: ur.tU, Y: [] }, sa = null, bomba = null;
     if (saAday) sa = sarmasikSec(toz, gk, r);
     if (sa) { ur.saNo = ur.n; ur.saPuan = puan; }
-    if (ozel && !sa && puan >= U.BOMBA_PUAN && r() < U.BOMBA_OLASILIK) bomba = bombaSec(toz, gk, r);
+    // 14: derece ve kombinasyon (onceki dilimde salinan: orumcek -> bomba) eki; yerlesim yine kacis modeliyle (bombaSec)
+    if (ozel && !sa && puan >= U.BOMBA_PUAN && r() < U.BOMBA_OLASILIK + (Z.D_BOMBA + (ur.salOnce ? Z.D_KOMBO_BOMBA : 0)) * dn) bomba = bombaSec(toz, gk, r);
     // Kivilcim (kural 7): aralik ortasinda, yoldan 10-16 uzakta. Uzaktan gorunur (T_MIN yok):
     // her bacak ayri ayri |ys - c1|, |c2 - ys| <= V_GUVENLI * tBacak; tBacak = onceki boslugu
     // terk etmekten (a + R_CARPMA) kivilcima / kivilcimdan sonraki boslugun onune (b - R_CARPMA)
@@ -731,7 +799,7 @@
     }
     // Duzensiz isik (13, kademe 4+): siradan dilimde; son toz kaymaz. Rng yalniz j > 0 iken cekilir (kademe 1-3 aynen).
     var dag = kd >= 4 && !acilis && !nefes && !tozsuz && !sa && !bomba && toz.length >= 2 ? kademeOran(x - D.X_BOCEK, 4, 5) : 0;
-    if (dag > 0) toz = dagit(toz, gk, dag, r);
+    if (dag > 0) toz = dagit(toz, gk, dag, r, { x: Z.DAG_X + Z.D_DAG_X * dn, y: Z.DAG_Y + Z.D_DAG_Y * dn, atla: Z.DAG_ATLA + Z.D_DAG_ATLA * dn });
     var dl = {
       no: ur.n, x: x, w: w, tur: tur, nefes: nefes ? 1 : 0, bolge: bolge,
       z: zr.z, hiz: zr.hiz, tAra: zr.tAra, bosluk: zr.bosluk,
@@ -746,12 +814,13 @@
     else if (toz.length) { yy = toz[toz.length - 1].y; tA = Math.min(tA, yy); tU = Math.max(tU, yy); }
     for (i = 0; i < gk.Y.length; i++) { yy = kistir(gk.Y[i], c - g / 2 + ic, c + g / 2 - ic); tA = Math.min(tA, yy); tU = Math.max(tU, yy); }
     ur.n++; ur.x = x; ur.w = w; ur.c = c; ur.tA = tA; ur.tU = tU; ur.tehlikeOnce = sa || bomba ? 1 : 0;
+    for (ur.salOnce = 0, i = 0; i < e.length; i++) if (e[i].tur === 'salinan') ur.salOnce = 1;   // 14: kombinasyon icin
     return dl;
   }
   // Uretici durumu duz veridir (rng durumu dahil sayi): durum JSON gidis-donusunden sonra aynen devam eder.
   function ureticiVerisi(tohum) {
     return { s: tohum >>> 0, n: 0, x: D.X_BOCEK, w: 0, c: D.Y_BASLA, bolge: 0, ustSay: 0, altSay: 0,
-             tzKalan: 0, tzSon: -1000, saNo: -1000, saPuan: 0, tA: D.Y_BASLA, tU: D.Y_BASLA, tehlikeOnce: 0 };
+             tzKalan: 0, tzSon: -1000, saNo: -1000, saPuan: 0, tA: D.Y_BASLA, tU: D.Y_BASLA, tehlikeOnce: 0, salOnce: 0 };
   }
   function ureticiOlustur(tohum) {
     var v = ureticiVerisi(tohum);
@@ -997,14 +1066,18 @@
   //          salinan: [dilim indeksi] }.
   // 13: salinan (hareketli) engeli: varisi TEMIZ_SN + tAra'dan erken olabilecek her dilimin salinani da silinir. Hiz mesafeyle
   // azalmadigi icin varis suresi >= (s.x - bx) / s.hiz (dilimin hizi yol boyunca en buyuk); bu alt sinir esige gore secilir.
+  // 14 (FAZ 3 duzeltme): varis bocegin ON KENARININ (bx + R_CARPMA; kus da on kenara sabit engelle ayni anda varir, adayKur)
+  // dilime degmesidir. Temizlik siniri yol boyunca hizin ust siniriyla: TEMIZ_SN'de alinan yol <= TEMIZ_SN * hiz(mesafe +
+  // HIZ_TAVAN * TEMIZ_SN) (hiz mesafeyle azalmaz, yol <= HIZ_TAVAN * TEMIZ_SN). Sinirdaki dilim de temizlenir (s.x <= sinir).
   function dogmaSec(d) {
-    var S = IKINCI_SANS, bx = d.mesafe + D.X_BOCEK, sinir = bx + zorluk(d.mesafe).hiz * S.TEMIZ_SN, temiz = [], ilk = -1, sal = [], i, j, s;
+    var S = IKINCI_SANS, bx = d.mesafe + D.X_BOCEK, temiz = [], ilk = -1, sal = [], i, j, s;
+    var sinir = bx + M.R_CARPMA + zorluk(d.mesafe + Z.HIZ_TAVAN * S.TEMIZ_SN).hiz * S.TEMIZ_SN;
     for (i = 0; i < d.dilimler.length; i++) {
       s = d.dilimler[i];
       if (s.x + s.w < bx - M.R_CARPMA) continue;          // geride: bocege bir daha degmez (kusu da geride, daha hizli uzaklasir)
-      if (ilk < 0) { if (s.x < sinir) temiz.push(i); else ilk = i; }
+      if (ilk < 0) { if (s.x <= sinir) temiz.push(i); else ilk = i; }
       if (ilk >= 0) {
-        if ((s.x - bx) / s.hiz >= S.TEMIZ_SN + s.tAra) break;
+        if ((s.x - bx - M.R_CARPMA) / s.hiz >= S.TEMIZ_SN + s.tAra) break;
         for (j = 0; j < s.engeller.length; j++) if (s.engeller[j].tur === 'salinan') { sal.push(i); break; }
       }
     }
@@ -1052,7 +1125,7 @@
 
   return {
     AYAR: AYAR, ayarDogrula: ayarDogrula, rngOlustur: rngOlustur,
-    zorluk: zorluk, minYaricap: minYaricap, isikYaricapi: isikYaricapi, kademeNo: kademeNo,
+    zorluk: zorluk, minYaricap: minYaricap, isikYaricapi: isikYaricapi, kademeNo: kademeNo, derece: derece,
     kacisSuresi: kacisSuresi, kacisMesafesi: kacisMesafesi, cikisSuresi: cikisSuresi,
     uyanmaY: Y_UYAN, frenMesafesi: function (yon) { return frenMesafesi(M, D.DT, yon); },
     uyanmaDususu: function (tepki) { return uyanmaDususu(M, D.DT, tepki); },

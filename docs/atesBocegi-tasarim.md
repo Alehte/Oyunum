@@ -781,3 +781,115 @@ Kararlar (kullanıcı, koordinatör aracılığıyla): eşik birimi mesafe; ekra
 
 - Ulaşılabilirlik bağımsız benzetimle denetlenir (adalet testi; çekirdeğin kaçış işlevlerini kullanmayan, `adim()` ile aynı bütünlemeli frenli bang-bang oyuncu). Eski `isikUlasir` (yalnız testte kullanılan totoloji) kaldırıldı.
 - Alt yandaki (zemin tarafı) örümcek ipsiz çizilir; üst yandaki tavandan ipe asılıdır.
+
+---
+## 14. FAZ 3: Bölge 5'te sürekli zorlaşma (docs/gorev-performans-efekt-suzul.md, 2026-11-26)
+
+Sorun: Bölge 5'ten (4000 birim) sonra zorluk sabitti; hız zaten tavanda (44). Zorluk artık yoğunluk ve desenden artar. Bütün sayılar `AtesBocegi.AYAR.zorluk`'ta (`D_*`), sınırlar `ayarDogrula`'da.
+
+### 14.1 Zorluk derecesi
+`d = derece(mesafe)`: 4000'den önce 0; sonra `floor((mesafe − KADEME[4]) / D_ADIM)`, en çok `D_MAX` (plato). `D_ADIM` 1500, `D_MAX` 8: d = 1 5500'de, d = 8 16000'de. Dilimin derecesi varış mesafesinden (`x − X_BOCEK`), ışık sızıntısı böceğin mesafesinden. Ekranda gösterilmez; yazı "Bölge 5" kalır.
+
+Her `D_*` değeri d = `D_MAX`'taki toplam değişimdir; arası doğrusal (`d / D_MAX`). d = 0'da hiçbir ek uygulanmaz (`if (dn > 0)`): 4000–5500 üretimi Bölge 5 ile bayt bayt aynı. `D_MAX` 0 FAZ 3'ü kapatır.
+
+| Parametre | Ayar | d = 0 | d = 8 (`D_MAX`) |
+|---|---|---|---|
+| Engel arası `tAra` | `D_TARA` 0,20, alt sınır `D_TARA_MIN` 1,20 | z eğrisi (16000'de 1,36; uzakta 1,25) | 1,20 sn (hiç artmaz) |
+| Boşluk | `D_BOSLUK` 1,5, alt sınır 16 | 16000'de 17,35 | 16 |
+| Işık sızıntısı | `D_SIZINTI` 0,006 | en çok 0,060 /sn | en çok 0,066 /sn |
+| Bomba olasılığı | `D_BOMBA` 0,35 (+ `D_KOMBO_BOMBA` 0,20 örümcekten sonra) | 0,20 | 0,55 (örümcekten sonra 0,75) |
+| Sarmaşık olasılığı | `D_SARMASIK` 0,08 | 0,12 | 0,20 |
+| Örümcek ağırlığı (kademe 5) | `D_SAL_AGIRLIK` 3 (+ `D_KOMBO_SAL` 4 bomba/sarmaşıktan sonra) | 5 | 8 (sonra 12) |
+| Örümcek genliği / periyodu | `D_SAL_GENLIK` 1, `D_SAL_PERIYOT` 0,1 | 5 / 1,4 sn (tepe 22,4 b/sn) | 6 / 1,3 sn (tepe 29,0 < 30) |
+| Düzensiz ışık y / x / düşme | `D_DAG_Y` 0,5, `D_DAG_X` 0,1, `D_DAG_ATLA` 0,15 | 3 / 0,35 / 0,25 | 3,5 / 0,45 / 0,40 |
+
+- Kombinasyon: bomba/sarmaşık diliminden hemen sonra örümcek ağırlığı artar (bomba → örümcek); örümcekli dilimden hemen sonra bomba olasılığı artar (örümcek → bomba). Ardışık iki bomba/sarmaşık dilimi yine yok. Toparlanma kaçış modelindedir: oyuncu önceki dilimin zarfından (`a + R_CARPMA`) önce kaçamaz.
+- Yerleşim yine aynı kurallarla: bomba `bombaSec` (iki yönlü kaçış), sarmaşık `sarmasikSec`, örümcek süpürülen zarfı boşluğun dışında, ışık `ulasimSiniri` ve `ISIK_MARJ` ile kıstırılır. Olasılık artışı yalnız deneme sıklığını artırır; model reddederse o dilim normal kalır.
+- Rastgele sayı tüketimi değişmez (eşik karşılaştırmaları ve ağırlıklar değişir). Üretici verisine `salOnce` (önceki dilimde örümcek) eklendi; kayıtta tutulmaz.
+
+### 14.2 Neden `D_TARA_MIN` 1,20
+Değişmezler 0,84'ün (`T_MIN + T_IVME`) üstünü, şerit yedeği ve nefes 1,09'u ister. Ölçüm (üretici, 16000–30000, d = 8): `tAra` 1,10'da kıvılcım (kural 7 bacak sınırı) hiç yerleşmez; 1,15'te %0,1, 1,20'de %0,4, FAZ 3 öncesi %2,0. Kısa aralık bombayı da zorlaştırır ama olasılık artışı bunu fazlasıyla karşılar.
+
+Koruma (`ayarDogrula`, "derece: platoda kıvılcım sığmıyor"): platoda (hız `HIZ_TAVAN`, `tAra` en küçük değerinde) en iyi durumda (|dc| = 0, önceki dilim en dar engel 5) kıvılcım bacağı `V_GUVENLI · ((HIZ_TAVAN · tAra − 5) / 2 − R_CARPMA) / HIZ_TAVAN` en az `KIVILCIM_UZAK_MIN` (10) olmalı. 1,20'de 10,14; 1,19'da 10,04 (geçer); 1,15'te 9,64 ve 1,10'da 9,14 (çekirdek yüklenmez). Bu gerekli koşuldur; oranın kendisi adalet testinde plato kovasında ölçülür (§14.4).
+
+### 14.3 Ölçüm (üretici, puan ≈ 0,75 · mesafe)
+| Aralık | Bomba | Sarmaşık | Örümcek | Ort. aralık | Ort. boşluk | Kıvılcım | Örümcek→bomba | Tehlike→örümcek |
+|---|---|---|---|---|---|---|---|---|
+| FAZ 3 öncesi, 16000–30000 | %10,9 | %3,4 | %30,3 | 1,305 sn | 16,67 | %2,0 | %3,0 | %4,0 |
+| d = 0, 4000–5500 | %13,3 | %5,5 | %29,7 | 1,630 sn | 20,68 | %4,8 | %3,2 | %4,6 |
+| d = 8, 16000–30000 | %27,5 | %3,2 | %42,4 | 1,200 sn | 16,00 | %0,4 | %12,6 | %14,0 |
+
+Modelin bomba üst sınırı (olasılık 1, `D_BOMBA` 0,6): %35.
+
+### 14.4 Adalet
+`tools/atesBocegiAdaletTest.js` (1000 tohum × 20000, uzun 100 × 60000, üst hız 200 × 6000; 34/34, 429 sn). Ek olarak:
+- D_MAX başı kümesi: kanca ile 16000'den (puan 12000), 200 tohum × 6000 birim, Bot A / B (ışık 0, `T_MIN`) / Bg: 0 ölüm, 0 hasar. 60000 kümesi de d = 8'dir.
+- Derece kovaları (d başına; yapısal bütün koşular, zaman Bot A):
+
+| Ölçüm (d = 8) | Değer | Sınır |
+|---|---|---|
+| En kısa yeni engel → varış (ışık 0) | 0,6073 sn | ≥ 0,60 |
+| Bomba ön işaret → çarpma mesafesi | 1,0182 sn | ≥ 0,9583 |
+| Örümcek fazlarında en dar geçit | 16,000 | ≥ 16 |
+| Kinematik ulaşılamaz ışık | 0 (en az pay −0,000) | 0 |
+| Bağımsız benzetim (d = 8: 68970 toz) | 0 ulaşılamaz, en az boşluk payı 3,864 | 0 |
+| Doğumda ışık–engel marjı | 5,800 | ≥ 5,8 |
+| En kısa ölçülen varış arası | 1,2000 sn | ≥ `D_TARA_MIN` |
+
+- Kıvılcım ölçütü (kullanıcı onaylı gevşeme): derece öncesi (d = 0) ≥ %3 (ölçülen %5,09); eşik plato kovasına uygulanır: d = `D_MAX` ≥ %0,25 (ölçülen %0,48, 552200 dilim). Uzun koşuların çoğu platoda geçer. Toplu d > 0 oranı (%1,30) yalnız raporlanır, çünkü erken d'lerin yüksek oranı platodaki kaybı gizlerdi. d başına: d1 %3,93, d2 %3,37, d3 %2,81, d4 %2,32, d5 %1,65, d6 %0,94, d7 %0,44, d8 %0,48. Eski "tüm dilimler ≥ %3" artık %2,12 (sık engelde bacak sınırı).
+- 4000 öncesi (özet `191e77ce`, 14600 dilim) ve d = 0 (5500 öncesi, `6a0e834a`, 19200 dilim) üretim HEAD 5bb9227 ile bayt bayt aynı. Ayrıca kanca 4000 ile başlayan 30 koşu 5200'e kadar HEAD ile aynı durumda (geçici betik).
+- Kalıcı test (`tools/atesBocegiTest.js`, "D_MAX 0 kopyası HEAD ile birebir"): çekirdek kaynağında yalnız `D_MAX` 0 yapılıp vm'de yüklenen kopya, HEAD 5bb9227 ile bütün mesafede aynıdır: üretici 0–40000 (8 tohum × 2 puan rejimi, 5464'er dilim) ve `oyunOlustur` + `adim` (korumalı bot, 60 sn; kancasız, kanca 4000, kanca 16000; her adımın olayları ve durum JSON'u, `uretici.salOnce` hariç). Özetler gömülüdür; `AB_HEAD=<HEAD dosyası>` ile canlı karşılaştırılır. İkinci şans kapsam dışıdır (§14.8'de bilerek değişti).
+
+### 14.5 Dikkatli oyuncu botu (`tools/atesBocegiDikkatliBot.js`)
+Bot B'nin gördüğünü görür (gerçek ışık, bomba ön işareti, sarmaşık uyarısı); her nesneyi 250–350 ms (nesne başına rastgele) sonra kullanır; hedefine Ornstein-Uhlenbeck nişan hatası ekler (σ 2,2 birim, τ 0,5 sn). Hata 0 iken aynı bot kontrol koşusudur. Sabit derece ölçümü çekirdeğin `derece()`'si sabitlenmiş bellek kopyasıyla yapılır (dosya değişmez); 200 tohum, 16000'den, en çok 30000 birim (tavana ulaşan sayısı ayrı).
+
+| d | Ort. | Medyan | p10 | p90 | 30000'e ulaşan | Hasar / 1000 birim | Ölüm (son hasar) |
+|---|---|---|---|---|---|---|---|
+| 0 | 26616 | 30000 | 9702 | 30000 | 161 | 0,62 | dal 23, bomba 12, kuş 2, zemin 2 |
+| 1 | 26423 | 30000 | 12822 | 30000 | 157 | 0,72 | dal 30, bomba 12, kuş 1 |
+| 2 | 22940 | 30000 | 5563 | 30000 | 115 | 0,84 | dal 53, bomba 18, sarmaşık 6, diğer 8 |
+| 4 | 17892 | 18793 | 3554 | 30000 | 61 | 1,05 | dal 84, bomba 40, diğer 15 |
+| 6 | 11801 | 9404 | 2424 | 26728 | 13 | 1,25 | dal 96, bomba 67, diğer 24 |
+| 8 | 8169 | 5859 | 1182 | 19585 | 2 | 1,41 | dal 99, bomba 80, diğer 19 |
+
+Gerçek ilerleme (kanca 4000'den, puan 3000): FAZ 3 öncesi (`D_MAX` 0) ort. 26880, medyan 30000, 157/200 tavana; FAZ 3 ort. 15335, medyan 14297, 9/200 tavana.
+Haksız ölüm yok: botun geçtiği her dilimde değişmezler bağımsız ölçüldü, 0 ihlal (en kısa tepki 0,607 sn, adım içi ara değerlemeyle ve toleranssız `≥ T_MIN`; bomba 1,018 sn, geçit 16,00, ışık marjı ≥ 6,82); hata 0 kontrolünde d = 8'de 100 tohum 0 hasar. Hasar anında ortalama |nişan hatası| 2,4 birim. Ölçüm ~220 sn.
+"Ortalama düştü" kararı argümandan bağımsız sabit kümede verilir (200 tohum, σ 2,2, tavan 30000; tohumlar ve botun rastgele üreteci sabit): argümanlar varsayılansa tablodaki ölçümler kullanılır, değilse karar kümesi ayrıca koşulur. Her koşuda aynı sonuç: sabit d 0 → 8 ort. 26616 → 8169; gerçek ilerleme 26880 → 15335.
+
+### 14.6 Ayar önerisi
+- `D_MAX` 8, `D_ADIM` 1500 kalsın: d = 8'e ~16000 birimde (Bölge 5 başından ~4,5 dk) varılır; dikkatli botta ortalama mesafe d ile tekdüze düşer (26600 → 8200).
+- Daha erken sertlik için önce `D_ADIM`'ı küçültün (1000: plato 12000'de). Sertlik tavanı için `D_BOMBA` (en çok 0,6: `BOMBA_OLASILIK + D_BOMBA + D_KOMBO_BOMBA ≤ 1`; model üst sınırı ~%35 bomba) ve `D_SAL_AGIRLIK`. `D_TARA_MIN` 1,20'nin altı kıvılcımı kaldırır (1,15 ve altını `ayarDogrula` reddeder, §14.2).
+- Yumuşatmak için `D_BOMBA` 0,2 ve `D_TARA` 0,1 ilk adaylardır. Her değişiklikten sonra `node tools/atesBocegiTest.js` (ayar değişmezleri) ve adalet testi.
+- Bilinen yan etki: sarmaşık sık engelde zor yerleşir (d = 8'de %2,8, FAZ 3 öncesi 16000+ %3,4); kıvılcım nadirleşir.
+
+### 14.7 Işık ekonomisi: birleşik etki (bilinçli denge kararı)
+Kıvılcım kaybı, ek sızıntı ve sık dilim birlikte ışığın toparlanmasını yavaşlatır. Ölçüm (üretici, 300 tohum, 16000–30000, puan ≈ 0,75 · mesafe; her toz ve kıvılcım alınırsa; zaman = dilim başına `tAra`):
+
+| Akış (ışık / sn) | FAZ 3 öncesi | FAZ 3 (d = 8) | Fark |
+|---|---|---|---|
+| Toz (`TOZ` 0,035) | +0,0893 | +0,0944 | +0,0051 (sık dilim: saniyede daha çok dilim) |
+| Kıvılcım (`KIVILCIM` 0,25; oran %2,13 → %0,47) | +0,0041 | +0,0010 | −0,0031 (≈ 0,003/sn ek sızıntı gibi) |
+| Sızıntı | −0,0597 | −0,0657 | −0,0060 (`D_SIZINTI`) |
+| Net | +0,0337 | +0,0296 | −0,0041 |
+
+Hasarın geri gelmesi (0,5 ışık, ör. bir dal hasarı) toz alma oranına göre:
+
+| Alınan toz/kıvılcım | FAZ 3 öncesi | FAZ 3 (d = 8) | Toparlanma yavaşlığı |
+|---|---|---|---|
+| %100 | 14,8 sn | 16,8 sn | %12 |
+| %90 | 20,5 sn | 24,8 sn | %17 (süre %21 uzar) |
+| %80 | 33,3 sn | 47,1 sn | %29 (süre %41 uzar) |
+
+Kusursuz toplayıcıda fark küçüktür; sık dilimin getirdiği ek toz kaybın bir kısmını karşılar. Tozun %90'ını alan oyuncuda toparlanma süresi ~%21 uzar: d = 8'de 0,5 hasar ~25 sn'de geri gelir (FAZ 3 öncesi ~20 sn). Oyuncu ne kadar çok toz kaçırırsa fark o kadar büyür. Ödül formülü (puan, jeton, eşik ödülleri, rekor) değişmez; puan yine mesafe ve tozla kazanılır. Ama d = 8'de koşular kısalır (dikkatli bot ort. 26616 → 8169, §14.5). Bu yüzden üst eşik ödüllerine ve rekora ulaşmak zorlaşır. Bu bilinçli bir denge kararıdır; kullanıcı onayladı (kıvılcım ölçütünün d > 0'da gevşetilmesi dahil, §14.4).
+
+### 14.8 İkinci şans: ön kenar düzeltmesi (FAZ 3 denetimi)
+`dogmaSec` varışı böceğin merkezinden (`(s.x − bx) / hiz`) ölçüyordu. Çarpma ise ön kenarda (`bx + R_CARPMA`, 1,6) olur. Kuş da ön kenara sabit engelle aynı anda varır (`adayKur`). Hız sabit 44 iken fark 0,036 sn'dir. Örnek: d = 8'de `tAra` 1,20 iken salınan dilim 3,167 sn'de (< `TEMIZ_SN + tAra` 3,2) varıyordu (tohum 5760095, 26500'den). Düşük mesafede de "ilk kalan" dilim TEMIZ_SN'den önce varabiliyordu (tohum 174218: 237. adımda dal hasarı, 1,975 sn).
+
+Düzeltme bütün mesafelerde geçerlidir:
+- Temizlik sınırı `bx + R_CARPMA + hiz(mesafe + HIZ_TAVAN · TEMIZ_SN) · TEMIZ_SN` olur. Hız mesafeyle azalmaz ve yol en çok `HIZ_TAVAN · TEMIZ_SN` olur; bu yüzden bu, rampada da yolun üst sınırıdır. Sınırdaki dilim de temizlenir (`s.x ≤ sinir`).
+- Salınan eşiği `(s.x − bx − R_CARPMA) / s.hiz ≥ TEMIZ_SN + s.tAra` olur.
+- `IKINCI_SANS` ufuk doğrulamaları `R_CARPMA`'yı da sayar.
+
+Normal üretim değişmez (yalnız canlanma anında hangi dilimlerin temizleneceği değişir).
+
+Test (`tools/atesBocegiIkinciSansTest.js`) artık kesindir. İlk N = `TEMIZ_SN` adım (240) toleranssız koşulur; eskiden `TEMIZ_SN − 0,1` idi. İlk kalan dilime ön kenarın adım adım benzetilmiş varışı en az `TEMIZ_SN`'dir. Kümeler: kademe 3–5 (1700–9000), d = 8 (16000–26500, 80 ölüm, denetim örneği dahil), uzak (60000–77500, 40 ölüm). En az paylar: salınan 0,178 / 0,117 / 0,283 sn, ilk kalan dilim 0,033 / 0,117 / 0,008 sn. Eski `dogmaSec` bu testte üç denemede düşer.

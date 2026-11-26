@@ -2,6 +2,10 @@
 // Calistirma:  node tools/atesBocegiAdaletTest.js [tohumSayisi=1000] [mesafe=20000] [uzunTohum=100] [uzunMesafe=60000] [sersemTohum=60] [ustTohum=200]
 // FAZ B (tasarim 13): kademe olaylari, salinan engel (supurulen zarf, her fazda gecit), dogumda isik-engel marji, kinematik
 // ulasilabilirlik, duzensiz isik; ust hiz kumesi (60000 birimden, puan 6000: hiz 44, en dar bosluk, kademe 5) olum nedenleri.
+// FAZ 3 (tasarim 14): zorluk derecesi d (Bolge 5'te her D_ADIM birimde +1, en cok D_MAX). Beklenen degerler AYAR'dan bagimsiz
+// hesaplanir (dT); derece kovalari (dKova) en kisa tepki, bomba on isaret -> carpma, en dar gecit, ulasim payi ve sikliklari
+// d basina raporlar; ust hiz kumesine ek olarak D_MAX basi kumesi (KADEME[4] + D_ADIM * D_MAX'tan) kosulur. 4000 oncesi ve
+// d = 0 (KADEME[4] + D_ADIM oncesi) uretim HEAD (5bb9227) ile bayt bayt ayni (ozet).
 // Botlar yalniz cekirdek API'sini (oyunOlustur, adim, dilimZarfi, zorluk, isikYaricapi, minYaricap,
 // kosuJetonu, kacisSuresi, kacisMesafesi, frenMesafesi, uyanmaY, uyanmaDususu, rngOlustur) ve durum/dilim alanlarini okur. Bot A ve Bot D (ideal) dilimin butun
 // alanlarini bilir. Bot B yalniz gorebildigini bilir: isik cemberine giren engel/toz, ekrandaki bomba, uyarisi
@@ -59,7 +63,9 @@ const ist = { bolgeOlay: 0, dilim: 0, nefes: 0, kivilcim: 0, uzakDilim: 0, uzakK
               z: { sarmasik: 0, enAzUyari: Infinity, enAzUyariVaris: Infinity, bomba: 0, enAzBombaGorVaris: Infinity },
               // FAZ B (tasarim 13): yapisal denetim (butun denetlenen kosular)
               f: { kademe: [0, 0, 0, 0, 0], salinan: 0, salKademe: [0, 0, 0, 0, 0], gecitEnAz: Infinity, marjEnAz: Infinity, isik: 0,
-                   sarYutulacak: 0, ulasimEnAz: Infinity, dag: 0, dag1: 0, kayan: 0, boslukEnCok: 0, kademeOlay: 0, enCokHiz: 0, enCokSizinti: 0 } };
+                   sarYutulacak: 0, ulasimEnAz: Infinity, dag: 0, dag1: 0, kayan: 0, boslukEnCok: 0, kademeOlay: 0, enCokHiz: 0, enCokSizinti: 0 },
+              // FAZ 3 (tasarim 14): derece basina olcumler (indeks d)
+              dKova: {} };
 function kusur(tohum, s, msg) { ist.kusur.push('tohum ' + tohum + ' dilim ' + (s ? s.no : '-') + ': ' + msg); }
 
 // En kotu durum zarfi (3.4 tablosu), ham engel verisinden; dilimin varis anindaki x araligi.
@@ -153,6 +159,13 @@ function tutmaGuncelle(dn, s, c, zf, Ylist) {
 // ---- FAZ B (tasarim 13): kademe, rampa, salinan, isik-engel marji, kinematik ulasilabilirlik, duzensiz isik.
 // Bagimsiz: yalniz AYAR, AB.kademeNo, AB.zorluk ve AB.kacisMesafesi (gercek butunleme) kullanilir.
 const Z13 = A.zorluk, KAD = Z13.KADEME, MARJ = Z13.ISIK_MARJ;
+// 14: derece, cekirdekten bagimsiz (AYAR'dan): d = 0 (mesafe < KADEME[4]), sonra floor((m - KADEME[4]) / D_ADIM), en cok D_MAX
+const dT = m => m < KAD[4] ? 0 : Math.min(Z13.D_MAX, Math.floor((m - KAD[4]) / Z13.D_ADIM)), dnT = m => Z13.D_MAX > 0 ? dT(m) / Z13.D_MAX : 0;
+function dKova(m) {
+  const d = m < KAD[4] ? 'once' : dT(m);                     // 'once': Bolge 5 oncesi; 0..D_MAX: Bolge 5'te derece
+  return ist.dKova[d] || (ist.dKova[d] = { dilim: 0, bomba: 0, sarmasik: 0, salinan: 0, tozsuz: 0, kombo: 0, enAzPay: Infinity, enAzBomba: Infinity, gecit: Infinity,
+                                           ulasim: Infinity, marj: Infinity, enAzAra: Infinity, enAzTara: Infinity, enAzBosluk: Infinity, enCokSiz: 0 });
+}
 const ulas = t => t > 0 ? Math.max(0, AB.kacisMesafesi(t, 0, 0)) : 0;
 // Kinematik ulasilabilirlik: tam bilgili oyuncu onceki boslugun merkezinde (x = a + R_CARPMA'da durgun) tam girdiyle tozun
 // R_TOPLA'sina varir; durup donerek (2 * T_IVME) sonraki boslugun serbest bandina (R_CARPMA + PAY_KACIS icerisi) b - R_CARPMA'da
@@ -164,12 +177,19 @@ function ulasimPayi(tz, a, b, c1, c2, g2, hiz) {
 }
 const noktaZarf = (x, y, z) => Math.hypot(Math.max(0, z.x1 - x, x - z.x2), Math.max(0, z.y1 - y, y - z.y2));
 function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
-  const t = dn.t, m = s.x - XB, F = ist.f, kd = AB.kademeNo(m);
+  const t = dn.t, m = s.x - XB, F = ist.f, kd = AB.kademeNo(m), dn14 = dnT(m), DK = dKova(m);
   if (s.kademe !== kd) kusur(t, s, 'dilim kademesi ' + s.kademe + ' != ' + kd);
+  if (AB.derece(m) !== dT(m)) kusur(t, s, 'derece ' + AB.derece(m) + ' != ' + dT(m));
+  DK.dilim++; if (s.bomba) DK.bomba++; if (s.sarmasik) DK.sarmasik++; if (s.tozsuz) DK.tozsuz++;
+  if (s.engeller.some(e => e.tur === 'salinan')) { DK.salinan++; if (dn.son && dn.son.tehlike) DK.kombo++; }
+  if (s.bomba && dn.son && dn.son.engeller.some(e => e.tur === 'salinan')) DK.kombo++;
+  DK.enAzTara = Math.min(DK.enAzTara, zr.tAra); DK.enAzBosluk = Math.min(DK.enAzBosluk, zf.alt - zf.ust); DK.enCokSiz = Math.max(DK.enCokSiz, zr.sizinti);
+  // 14: derece eklerinin sinirlari (AYAR'dan): tAra >= D_TARA_MIN (ya da eski deger), bosluk >= 16, sizinti <= tavan + D_SIZINTI
+  if (dn14 > 0 && (zr.tAra < Math.min(Z13.TARA_TABAN - Z13.TARA_Z * s.z, Z13.D_TARA_MIN) - EPS || zr.bosluk < Z13.BOSLUK_TABAN - Z13.BOSLUK_Z - EPS)) kusur(t, s, 'derece tAra/bosluk alt siniri');
   F.kademe[kd - 1]++;
   // rampa tavanlari
   F.enCokHiz = Math.max(F.enCokHiz, s.hiz); F.enCokSizinti = Math.max(F.enCokSizinti, zr.sizinti);
-  if (s.hiz > Z13.HIZ_TAVAN + EPS || zr.sizinti > Z13.SIZINTI_TAVAN + EPS) kusur(t, s, 'rampa tavani asildi');
+  if (s.hiz > Z13.HIZ_TAVAN + EPS || zr.sizinti > Z13.SIZINTI_TAVAN + Z13.D_SIZINTI * dn14 + EPS) kusur(t, s, 'rampa tavani asildi');
   // salinan: kademe 3+, supurulen zarf boslugun disinda (zarflar() + kural 1 'zarf boslugu kesiyor' da yakalar), duvar payi,
   // genlik/periyot kademe ilerlemesiyle, her fazda (64 ornek) gecit = bosluktaki serbest en buyuk aralik >= bosluk(z)
   const fo = Math.max(0, Math.min(1, (m - KAD[2]) / (KAD[4] - KAD[2])));
@@ -181,12 +201,13 @@ function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
     const y1 = e.yc - e.gen, y2 = e.yc + e.gen + e.h;
     if (y1 < Z13.SAL_KENAR - EPS || y2 > H - Z13.SAL_KENAR + EPS) kusur(t, s, 'salinan duvara SAL_KENAR\'dan yakin');
     if (!(y2 <= zf.ust + EPS || y1 >= zf.alt - EPS)) kusur(t, s, 'salinan supurulen zarfi boslugu kesiyor');
-    if (Math.abs(e.gen - (Z13.SAL_GENLIK[0] + (Z13.SAL_GENLIK[1] - Z13.SAL_GENLIK[0]) * fo)) > 1e-9 ||
-        Math.abs(2 * Math.PI / e.om - (Z13.SAL_PERIYOT[0] + (Z13.SAL_PERIYOT[1] - Z13.SAL_PERIYOT[0]) * fo)) > 1e-9) kusur(t, s, 'salinan genlik/periyot kademeyle uyumsuz');
+    if (Math.abs(e.gen - (Z13.SAL_GENLIK[0] + (Z13.SAL_GENLIK[1] - Z13.SAL_GENLIK[0]) * fo + Z13.D_SAL_GENLIK * dn14)) > 1e-9 ||
+        Math.abs(2 * Math.PI / e.om - (Z13.SAL_PERIYOT[0] + (Z13.SAL_PERIYOT[1] - Z13.SAL_PERIYOT[0]) * fo - Z13.D_SAL_PERIYOT * dn14)) > 1e-9) kusur(t, s, 'salinan genlik/periyot kademe/dereceyle uyumsuz');
+    if (e.gen * e.om >= Math.min(A.hareket.VY_ASAGI, A.hareket.VY_YUKARI)) kusur(t, s, 'salinan tepe hizi >= bocek dikey hizi');
     for (let k = 0; k < 64; k++) {
       const y = e.yc + e.gen * Math.sin(2 * Math.PI * k / 64), lo = Math.max(zf.ust, Math.min(zf.alt, y)), hi = Math.max(zf.ust, Math.min(zf.alt, y + e.h));
       const gecit = Math.max(lo - zf.ust, zf.alt - hi);
-      F.gecitEnAz = Math.min(F.gecitEnAz, gecit);
+      F.gecitEnAz = Math.min(F.gecitEnAz, gecit); DK.gecit = Math.min(DK.gecit, gecit);
       if (gecit < zr.bosluk - EPS) { kusur(t, s, 'salinan fazinda gecit ' + gecit.toFixed(3) + ' < bosluk'); break; }
     }
   });
@@ -197,7 +218,7 @@ function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
   isiklar.forEach(tz => {
     F.isik++;
     let en = Infinity; zarfTum.forEach(z => { en = Math.min(en, noktaZarf(tz.x, tz.y, z)); });
-    F.marjEnAz = Math.min(F.marjEnAz, en, tz.x - a, b - tz.x);
+    F.marjEnAz = Math.min(F.marjEnAz, en, tz.x - a, b - tz.x); DK.marj = Math.min(DK.marj, en, tz.x - a, b - tz.x);
     if (en < MARJ - EPS) kusur(t, s, 'isik engel zarfina ' + en.toFixed(3) + ' < ISIK_MARJ');
     if (tz.x < a + MARJ - EPS || tz.x > b - MARJ + EPS) kusur(t, s, 'isik x marji disinda');
   });
@@ -210,7 +231,7 @@ function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
   // kinematik ulasilabilirlik: her toz (kivilcim: kural 7 bacak denetimi)
   s.toz.forEach(tz => {
     const pay = ulasimPayi(tz, a, b, pc, c, zf.alt - zf.ust, s.hiz);
-    F.ulasimEnAz = Math.min(F.ulasimEnAz, pay);
+    F.ulasimEnAz = Math.min(F.ulasimEnAz, pay); DK.ulasim = Math.min(DK.ulasim, pay);
     if (pay < -1e-9) kusur(t, s, 'ulasilamaz toz (pay ' + pay.toFixed(4) + ')');
   });
   // duzensiz isik: kademe 4+, siradan dilim, dag = kademe 4 -> 5 ilerlemesi, son toz yayda (kural 6 denetimi)
@@ -220,7 +241,7 @@ function fazBDenetle(dn, s, zf, zr, a, b, pc, c, zarfTum, ozel) {
     F.dag++; if (s.dag === 1) F.dag1++;
     s.toz.forEach(tz => { if (Math.abs(tz.y - yol(pc, c, (tz.x - a) / (b - a))) > U.TOZ_SAPMA + 1e-6) F.kayan++; });
     // dusen toz bilgi boslugu: komsu noktalar (a, tozlar) arasi <= (DAG_BOSLUK + kayma payi 2 * DAG_X / (TOZ_MIN + 1)) * (b - a)
-    const sinir = (Z13.DAG_BOSLUK + 2 * Z13.DAG_X / (U.TOZ_MIN + 1)) * (b - a);
+    const sinir = (Z13.DAG_BOSLUK + 2 * (Z13.DAG_X + Z13.D_DAG_X * dn14) / (U.TOZ_MIN + 1)) * (b - a);   // 14: DAG_X derece ekiyle
     let once = a, enCok = 0; s.toz.forEach(tz => { enCok = Math.max(enCok, tz.x - once); once = tz.x; });
     F.boslukEnCok = Math.max(F.boslukEnCok, enCok / (b - a));
     if (enCok > sinir + 1e-9) kusur(t, s, 'dag toz boslugu ' + (enCok / (b - a)).toFixed(3) + ' > sinir');
@@ -234,6 +255,8 @@ function dilimDenetle(dn, s, gorPuan) {
   const zr = AB.zorluk(s.x - XB), zs = zarflar(s);
   ist.dilim++; if (s.nefes) ist.nefes++; if (s.kivilcim) ist.kivilcim++;
   if (s.x - XB > 10000) { ist.uzakDilim++; if (s.kivilcim) ist.uzakKivilcim++; }
+  const kq = dT(s.x - XB) ? 'kivD' : 'kiv0'; ist[kq] = ist[kq] || [0, 0]; ist[kq][0]++; if (s.kivilcim) ist[kq][1]++;   // 14: derece oncesi / derece bolgesi
+  const kk = (ist.kivK = ist.kivK || {})[dT(s.x - XB)] || (ist.kivK[dT(s.x - XB)] = [0, 0]); kk[0]++; if (s.kivilcim) kk[1]++;   // 14: d basina (plato kovasi)
   s.engeller.forEach(e => { ist.tur[e.tur]++; });
   if (s.no !== dn.sonNo + 1) kusur(t, s, 'dilim sirasi atladi');
   // kural 9: acilis
@@ -428,7 +451,7 @@ function tehlikeZamanDenetle(dn, d, bx0, t0) {
       if (bx >= bo.x - RB) {
         ist.z.bomba++;
         const gv = ara(bo.x - RB) - k.gor;
-        ist.z.enAzBombaGorVaris = Math.min(ist.z.enAzBombaGorVaris, gv);
+        ist.z.enAzBombaGorVaris = Math.min(ist.z.enAzBombaGorVaris, gv); const DKb = dKova(s.x - XB); DKb.enAzBomba = Math.min(DKb.enAzBomba, gv);
         if (!(gv >= BOMBA_KACIS_SN - 1e-9)) kusur(dn.t, s, 'bomba carpma mesafesine ' + gv.toFixed(4) + ' sn kala gorundu (< ' + BOMBA_KACIS_SN.toFixed(4) + ')');
         dn.tehlike.splice(i--, 1);
       }
@@ -455,7 +478,7 @@ function zamanDenetle(dn, d) {
         const v = k.t[j] + DT * (k.g[j] - RC) / (k.g[j] - g);
         if (e !== s) {
           const pay = v - k.gor[j];
-          ist.enAzPay = Math.min(ist.enAzPay, pay);
+          ist.enAzPay = Math.min(ist.enAzPay, pay); const DKz = dKova(s.x - XB); DKz.enAzPay = Math.min(DKz.enAzPay, pay);
           if (!(pay >= T_MIN - EPS)) kusur(dn.t, s, 'engel varisa ' + pay.toFixed(4) + ' sn kala gorundu');
         }
         k.bitti[j] = true; k.kalan--; if (v < k.v) k.v = v;
@@ -470,7 +493,7 @@ function zamanDenetle(dn, d) {
     if (dn.sonVaris) {
       const ara = k.v - dn.sonVaris.v;
       if (s.no !== dn.sonVaris.no + 1) kusur(dn.t, s, 'varis sirasi');
-      ist.enAzAra = Math.min(ist.enAzAra, ara - s.tAra);
+      ist.enAzAra = Math.min(ist.enAzAra, ara - s.tAra); const DKa = dKova(s.x - XB); DKa.enAzAra = Math.min(DKa.enAzAra, ara);
       if (ara < s.tAra - 1e-6) kusur(dn.t, s, 'olculen varis arasi ' + ara + ' < tAra');
     }
     dn.sonVaris = { no: s.no, v: k.v };
@@ -795,17 +818,25 @@ for (let i = 0; i < SERSEM_TOHUM; i++) {
 // Ust hiz kumesi (13, B.3): kosu 60000 birimden ve puan 6000 ile baslar (hiz 44 tavanda, tAra ~1,25, bosluk ~16, kademe 5:
 // salinan en sik ve en genis, isik tam duzensiz; bomba/sarmasik/tozsuz esikleri gecilmis). Bot A (sabit isik, zaman denetimi),
 // Bot B (isik 0 sabit, T_MIN gecikmeli) ve Bot B gercek isikla; yapisal denetim her kosuda. Olum nedenleri raporlanir (hedef 0).
-const UST_TOHUM = process.argv[7] !== undefined ? +process.argv[7] : 200, UST_BAS = { mesafe: 60000, puan: 6000 }, UST_UZUN = 6000;
-const ust = { A: [], B: [], Bg: [] };
-for (let i = 0; i < UST_TOHUM; i++) {
-  const t = tohum(500000 + i), sec = o => Object.assign({ bas: UST_BAS, mesafe: UST_BAS.mesafe + UST_UZUN }, o);
-  const ua = kos(t, botA(), sec({ isikSabit: true, zaman: true }));
-  ust.A.push(Object.assign(ozet(Object.assign(ua, { t: t })), { neden: ua.neden }));
-  const ub = kos(t, botB(true), sec({ isikSabit: true, yapi: true }));
-  ust.B.push(Object.assign(ozet(Object.assign(ub, { t: t })), { neden: ub.neden }));
-  const ug = kos(t, botB(false), sec({ yapi: true }));
-  ust.Bg.push(Object.assign(ozet(Object.assign(ug, { t: t })), { neden: ug.neden, isik: ug.enAzIsik, bitti: ug.d.bitti, hiz: AB.zorluk(ug.d.mesafe).hiz }));
-}
+// 14: 60000'de derece D_MAX (plato, tAra D_TARA_MIN'de). Ek olarak D_MAX basi kumesi: KADEME[4] + D_ADIM * D_MAX'tan (puan 0,75 * mesafe),
+// ayni tohum sayisi ve botlarla (test kancasi mesafe >= 4000 ile baslar; d ilk dilimden D_MAX).
+const UST_TOHUM = process.argv[7] !== undefined ? +process.argv[7] : 200, UST_UZUN = 6000;
+const D_BAS_M = KAD[4] + Z13.D_ADIM * Z13.D_MAX;
+const UST_KUME = [['ust', { mesafe: 60000, puan: 6000 }, 500000, '60000+, hiz 44, kademe 5, d ' + dT(60000)],
+                  ['dmax', { mesafe: D_BAS_M, puan: Math.round(0.75 * D_BAS_M) }, 700000, D_BAS_M + '+, d ' + dT(D_BAS_M) + ' (D_MAX basi)']];
+const ust = {};
+UST_KUME.forEach(([ad, UST_BAS, t0]) => {
+  const q = ust[ad] = { A: [], B: [], Bg: [], bas: UST_BAS };
+  for (let i = 0; i < UST_TOHUM; i++) {
+    const t = tohum(t0 + i), sec = o => Object.assign({ bas: UST_BAS, mesafe: UST_BAS.mesafe + UST_UZUN }, o);
+    const ua = kos(t, botA(), sec({ isikSabit: true, zaman: true }));
+    q.A.push(Object.assign(ozet(Object.assign(ua, { t: t })), { neden: ua.neden }));
+    const ub = kos(t, botB(true), sec({ isikSabit: true, yapi: true }));
+    q.B.push(Object.assign(ozet(Object.assign(ub, { t: t })), { neden: ub.neden }));
+    const ug = kos(t, botB(false), sec({ yapi: true }));
+    q.Bg.push(Object.assign(ozet(Object.assign(ug, { t: t })), { neden: ug.neden, isik: ug.enAzIsik, bitti: ug.d.bitti, hiz: AB.zorluk(ug.d.mesafe).hiz }));
+  }
+});
 // Bagimsiz ulasilabilirlik benzetimi (13, denetci): cekirdegin isikUlasir / kacisMesafesi / benzet'ini KULLANMAZ. adim()
 // butunlemesinin aynisi (ivme rampasi, hiz siniri), gercek A_YUKSEL / G_SUZUL; frenli bang-bang oyuncu. Onceki boslugun
 // merkezinde (x = a + R_CARPMA, durgun) baslar; 1. bacak tozun R_TOPLA'sina, 2. bacak sonraki boslugun serbest bandina
@@ -830,14 +861,15 @@ function ubDene(a, b, c1, c2, g2, hiz, tz) {
   const ic = g2 / 2 - RC, pay = ic - Math.abs(s.y - c2);
   return { ok: pay >= -1e-9, neden: pay >= -1e-9 ? '' : 'bosluk', pay: pay };
 }
-const ub = { toz: 0, kot: { toz: 0, bosluk: 0, duvar: 0 }, ornek: [], enAzPay: Infinity };
+const ub = { toz: 0, kot: { toz: 0, bosluk: 0, duvar: 0 }, ornek: [], enAzPay: Infinity, dmax: 0, dmaxPay: Infinity };   // 14: d = D_MAX tozlari ayrica
 for (let t = 1; t <= UB_TOHUM; t++) {
   const u = AB.ureticiOlustur(t); let p = null;
   for (let i = 0; ; i++) {
     const pu = 2500 + i * 3, s = u.sonraki(AB.bolgeNo(pu), pu); if (s.x - XB > UB_MESAFE) break;
     if (p && s.dag > 0) s.toz.forEach(tz => {
-      ub.toz++; const r = ubDene(p.x + p.w, s.x, p.c, s.c, s.alt - s.ust, s.hiz, tz);
-      if (r.ok) ub.enAzPay = Math.min(ub.enAzPay, r.pay);
+      ub.toz++; const r = ubDene(p.x + p.w, s.x, p.c, s.c, s.alt - s.ust, s.hiz, tz), dm = dT(s.x - XB) === Z13.D_MAX;
+      if (dm) ub.dmax++;
+      if (r.ok) { ub.enAzPay = Math.min(ub.enAzPay, r.pay); if (dm) ub.dmaxPay = Math.min(ub.dmaxPay, r.pay); }
       else { ub.kot[r.neden]++; if (ub.ornek.length < 3) ub.ornek.push('tohum ' + t + ' dilim ' + s.no + ' ' + r.neden + ' ' + r.pay.toFixed(3)); }
     });
     p = s;
@@ -845,10 +877,20 @@ for (let t = 1; t <= UB_TOHUM; t++) {
 }
 const sure = ((Date.now() - bas) / 1000).toFixed(1);
 
-dene('kivilcim orani: tum dilimler >= %3, d > 10000 dilimleri > %1', () => {
-  const tum = ist.kivilcim / ist.dilim, uzak = ist.uzakKivilcim / ist.uzakDilim;
-  console.log('       tum %' + (100 * tum).toFixed(2) + ', d>10000 %' + (100 * uzak).toFixed(2) + ' (' + ist.uzakDilim + ' dilim)');
-  assert.ok(tum >= 0.03, 'tum ' + tum); assert.ok(uzak > 0.01, 'uzak ' + uzak);
+// 14: derece bolgesinde (d > 0) tAra kisaldigi icin kivilcim bacak siniri (kural 7) cogu dilimde saglanmaz: oran olculur (kullanici
+// onayli gevseme). Esik plato kovasinda (d = D_MAX; uzun kosularin cogu burada): >= %0,25 (olcum FAZ 3: ~%0,49; D_TARA_MIN 1,10'da %0).
+// Toplu d > 0 orani yalniz raporlanir (erken d'lerin yuksek orani platodaki kaybi gizlemesin). Derece oncesi (d = 0, uretim HEAD
+// ile ayni) eski olcut (>= %3). D_MAX 0 iken plato kovasi d = 0 kovasidir (>= %3).
+const KIV_DMAX = 0.0025;
+dene('kivilcim orani: derece oncesi (d = 0) dilimler >= %3, plato (d = D_MAX = ' + Z13.D_MAX + ') >= %' + (Z13.D_MAX > 0 ? 100 * KIV_DMAX : 3), () => {
+  const tum = ist.kivilcim / ist.dilim, uzak = ist.uzakKivilcim / ist.uzakDilim, k0 = ist.kiv0[1] / ist.kiv0[0], kD = ist.kivD ? ist.kivD[1] / ist.kivD[0] : 0;
+  console.log('       tum %' + (100 * tum).toFixed(2) + ', d>10000 birim %' + (100 * uzak).toFixed(2) + ' (' + ist.uzakDilim + ' dilim); derece 0 %' + (100 * k0).toFixed(2) +
+              ' (' + ist.kiv0[0] + ' dilim), derece > 0 %' + (100 * kD).toFixed(2) + ' (' + (ist.kivD ? ist.kivD[0] : 0) + ' dilim)');
+  console.log('       d basina: ' + Object.keys(ist.kivK).map(d => 'd' + d + ' %' + (100 * ist.kivK[d][1] / ist.kivK[d][0]).toFixed(2) + ' (' + ist.kivK[d][0] + ')').join(', '));
+  const kp = ist.kivK[Z13.D_MAX];
+  assert.ok(k0 >= 0.03, 'derece 0 ' + k0);
+  assert.ok(kp && kp[0] > 10000, 'plato kovasi bos/az: ' + (kp ? kp[0] : 0));
+  assert.ok(kp[1] / kp[0] >= (Z13.D_MAX > 0 ? KIV_DMAX : 0.03), 'd = D_MAX kivilcim %' + (100 * kp[1] / kp[0]).toFixed(3));
 });
 const kotu = (dizi, f) => dizi.filter(f).slice(0, 5).map(x => x.t).join(',');
 dene('yapisal kurallar 1-9 + T_MIN gorunurluk (' + ist.dilim + ' dilim)', () => {
@@ -932,12 +974,55 @@ dene('Bolge 2 oncesi (varis mesafesi <= KADEME[1]) uretim HEAD ile ayni (risk to
   console.log('       ' + n + ' dilim ' + JSON.stringify(tur));
   assert.deepStrictEqual([h.toString(16), n], ['c40d01b6', 3000]);
 });
+// 14: Bolge 5 derecesi oncesi uretim HEAD (5bb9227, FAZ 3 oncesi) ile bayt bayt ayni. Ozetler HEAD cekirdegiyle hesaplandi
+// (200 tohum, puan = 0,75 * uretici x: bomba/sarmasik/tozsuz esikleri ve kademe 3-5 dahil). (a) varis mesafesi < KADEME[4] (4000);
+// (b) d = 0 bolgesi, varis < KADEME[4] + D_ADIM (5500; yalniz D_ADIM 1500 iken: baska D_ADIM'da d = 1 daha erken baslar).
+function hesOzet(sinir) {
+  let h = 0x811C9DC5, n = 0;
+  for (let t = 1; t <= 200; t++) {
+    const u = AB.ureticiOlustur(t);
+    for (;;) {
+      const p = Math.round((u.veri.x - XB) * 0.75), s = u.sonraki(AB.bolgeNo(p), p);
+      if (s.x - XB >= sinir) break;
+      h = fnv(0x811C9DC5, h.toString(16) + JSON.stringify(s)); n++;
+    }
+  }
+  return [h.toString(16), n];
+}
+dene('derece oncesi uretim HEAD (5bb9227) ile ayni: varis < 4000 ozet 191e77ce (14600 dilim)' + (Z13.D_ADIM === 1500 ? '; d = 0 (varis < 5500) ozet 6a0e834a (19200 dilim)' : ' (D_ADIM 1500 degil: d = 0 ozeti atlandi)'), () => {
+  assert.deepStrictEqual(hesOzet(KAD[4]), ['191e77ce', 14600]);
+  if (Z13.D_ADIM === 1500) assert.deepStrictEqual(hesOzet(KAD[4] + Z13.D_ADIM), ['6a0e834a', 19200]);
+});
+{
+  // derece kovalari: her d'de olculen degismezler (yapisal: Bot A/B/Bg/uzun/ust kosulari; zaman: Bot A kosulari)
+  const sat = [], q = ist.dKova;
+  for (const d of ['once'].concat(Array.from({ length: Z13.D_MAX + 1 }, (_, i) => i))) {
+    const k = q[d] || { dilim: 0 }, yz = (a, b) => k.dilim ? (100 * a / k.dilim).toFixed(1) : '-';
+    sat.push('       ' + (d === 'once' ? 'Bolge 5 oncesi' : 'd ' + d) + ': ' + k.dilim + ' dilim, bomba %' + yz(k.bomba) + ', orumcek %' + yz(k.salinan) + ', sarmasik %' + yz(k.sarmasik) + ', kombinasyon %' + yz(k.kombo) +
+             '; en kisa tepki ' + (k.enAzPay || Infinity).toFixed(4) + ' sn, bomba on isaret -> carpma ' + (k.enAzBomba || Infinity).toFixed(4) + ' sn, en dar gecit ' + (k.gecit || Infinity).toFixed(3) +
+             ', ulasim payi ' + (k.ulasim === undefined ? '-' : k.ulasim.toFixed(3)) + ', isik marji ' + (k.marj === undefined ? '-' : k.marj.toFixed(3)) +
+             ', en kisa varis arasi ' + (k.enAzAra || Infinity).toFixed(4) + ' sn (tAra en az ' + (k.enAzTara || Infinity).toFixed(4) + '), en dar bosluk ' + (k.enAzBosluk || Infinity).toFixed(3) + ', en cok sizinti ' + (k.enCokSiz || 0).toFixed(4));
+  }
+  dene('derece (14): her d = 0..' + Z13.D_MAX + ' kovasinda en kisa tepki >= T_MIN, bomba on isaret -> carpma >= ' + BOMBA_KACIS_SN.toFixed(4) + ' sn, gecit >= 16, ulasilamaz isik 0, isik marji >= ' + MARJ, () => {
+    console.log(sat.join('\n'));
+    const kk = ist.kusur.filter(x => /derece/.test(x));
+    assert.strictEqual(kk.length, 0, kk.slice(0, 5).join(' | '));
+    for (const d of ['once'].concat(Array.from({ length: Z13.D_MAX + 1 }, (_, i) => i))) {
+      const k = q[d];
+      assert.ok(k && k.dilim > 500, 'd ' + d + ' kovasi bos/az');
+      assert.ok(k.enAzPay >= T_MIN - EPS, 'd ' + d + ' tepki ' + k.enAzPay);
+      assert.ok(k.enAzBomba < Infinity && k.enAzBomba >= BOMBA_KACIS_SN - 1e-9, 'd ' + d + ' bomba ' + k.enAzBomba);
+      assert.ok(k.gecit >= Z13.BOSLUK_TABAN - Z13.BOSLUK_Z - EPS && k.ulasim >= -1e-9 && k.marj >= MARJ - EPS, 'd ' + d);
+      assert.ok(k.enAzBosluk >= Z13.BOSLUK_TABAN - Z13.BOSLUK_Z - EPS && k.enAzAra >= Math.min(Z13.D_TARA_MIN, Z13.TARA_TABAN - Z13.TARA_Z) - 1e-6, 'd ' + d + ' aralik/bosluk');
+    }
+  });
+}
 const F = ist.f;
 dene('kademe olaylari: her kosuda esik basina bir kez, sirayla, esigi gecen adimda (' + F.kademeOlay + ' olay); rampa tavanlari (en cok hiz ' +
      F.enCokHiz.toFixed(2) + ', sizinti ' + F.enCokSizinti.toFixed(4) + ')', () => {
   const k = ist.kusur.filter(x => /kademe olayi|rampa tavani|dilim kademesi/.test(x));
   assert.strictEqual(k.length, 0, k.slice(0, 5).join(' | '));
-  assert.ok(F.kademeOlay > 0 && F.enCokHiz <= A.zorluk.HIZ_TAVAN && F.enCokSizinti <= A.zorluk.SIZINTI_TAVAN + EPS);
+  assert.ok(F.kademeOlay > 0 && F.enCokHiz <= A.zorluk.HIZ_TAVAN && F.enCokSizinti <= A.zorluk.SIZINTI_TAVAN + A.zorluk.D_SIZINTI + EPS);
 });
 dene('salinan: yalniz kademe 3+, supurulen zarf boslugu kesmez, her fazda gecit >= bosluk (en az ' + F.gecitEnAz.toFixed(3) + '; ' + F.salinan +
      ' salinan, kademe 3/4/5: ' + F.salKademe.slice(2).join('/') + ')', () => {
@@ -962,12 +1047,14 @@ dene('ulasilamaz isik 0 (bagimsiz benzetim, cekirdek kacis islevleri kullanilmaz
   const k = ub.kot.toz + ub.kot.bosluk + ub.kot.duvar;
   assert.strictEqual(k, 0, JSON.stringify(ub.kot) + ' ' + ub.ornek.join(' | '));
   assert.ok(ub.toz > 10000);
+  console.log('       d = D_MAX (' + Z13.D_MAX + '): ' + ub.dmax + ' duzensiz toz, en az bosluk payi ' + ub.dmaxPay.toFixed(3));
+  assert.ok(ub.dmax > 5000, 'd = D_MAX tozu az: ' + ub.dmax);
 });
 {
   const nedenOzet = L => { const o = {}; L.forEach(r => Object.keys(r.neden).forEach(k => { o[k] = (o[k] || 0) + r.neden[k]; })); return o; };
-  [['A', 'Bot A (sabit isik)'], ['B', 'Bot B (isik 0 sabit, T_MIN)'], ['Bg', 'Bot B gercek isikla']].forEach(([ad, ac]) => {
-    const r = ust[ad]; if (!r.length) return;
-    dene('ust hiz kumesi ' + ac + ': ' + r.length + ' tohum x ' + UST_UZUN + ' birim (60000+, hiz 44, kademe 5): 0 olum / 0 haksiz hasar', () => {
+  UST_KUME.forEach(([kad, UST_BAS, , kac]) => [['A', 'Bot A (sabit isik)'], ['B', 'Bot B (isik 0 sabit, T_MIN)'], ['Bg', 'Bot B gercek isikla']].forEach(([ad, ac]) => {
+    const r = ust[kad][ad]; if (!r.length) return;
+    dene((kad === 'ust' ? 'ust hiz kumesi ' : 'D_MAX basi kumesi ') + ac + ': ' + r.length + ' tohum x ' + UST_UZUN + ' birim (' + kac + '): 0 olum / 0 haksiz hasar', () => {
       const no = nedenOzet(r), bit = r.filter(x => x.c > 0 || x.b > 0 || x.s > 0 || x.z > 0 || (x.bitti) || x.m < UST_BAS.mesafe + UST_UZUN);
       const gecBomba = r.reduce((q, x) => q + x.bomba, 0), gecSar = r.reduce((q, x) => q + x.sarmasik, 0);
       console.log('       olum/hasar nedenleri ' + JSON.stringify(no) + (ad === 'Bg' ? ', en az isik ' + Math.min(...r.map(x => x.isik)).toFixed(3) : '') +
@@ -976,7 +1063,7 @@ dene('ulasilamaz isik 0 (bagimsiz benzetim, cekirdek kacis islevleri kullanilmaz
       assert.strictEqual(bit.length, 0, bit.length + ' tohum: ' + JSON.stringify(no) + ' ' + kotu(bit, () => true));
       assert.deepStrictEqual(no, {});
     });
-  });
+  }));
 }
 dene('Bot B gercek isikla: isik hicbir tohumda 0,25 altina inmez', () => {
   const n = sonuc.Bg.filter(x => x.isik < 0.25 || x.bitti || x.m < MESAFE).length;

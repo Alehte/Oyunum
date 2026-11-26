@@ -69,3 +69,18 @@ Cihazda bakılacak:
 - Örümceğin ışıkta okunurluğu (9 tema).
 - "Bölge N" yazısının yeri (HUD'un altı, %16).
 - Düzensiz ışığın görünür olup olmadığı.
+
+## 2026-11-26 oturumu (docs/gorev-performans-efekt-suzul.md FAZ 3; commit koordinatörde)
+Yapıldı (sw.js SURUM 27 → 28; ayrıntı tasarım §14):
+- Bölge 5'te zorluk derecesi d: 4000'den sonra her 1500 birimde +1, en çok 8 (16000'de plato). Gösterilmez. Ayarlar `AYAR.zorluk` `D_*` (js/atesBocegi.js).
+- d ile: engel arası 1,20 sn'ye kadar kısalır, boşluk 16'ya iner, bomba olasılığı 0,20 → 0,55, sarmaşık 0,12 → 0,20, örümcek ağırlığı 5 → 8, örümcek genliği 5 → 6 ve periyodu 1,4 → 1,3 sn, düzensiz ışık artar, sızıntı en çok +0,006/sn. Örümcek → bomba ve bomba → örümcek kombinasyonları sıklaşır.
+- 4000 öncesi ve d = 0 (5500 öncesi) üretim HEAD (5bb9227) ile bayt bayt aynı (adalet testi özetleri).
+- Yeni araç tools/atesBocegiDikkatliBot.js: 250-350 ms tepki + küçük nişan hatası; d arttıkça hayatta kalma mesafesi düşer, değişmez ihlali 0.
+- Adalet testi 34/34 (429 sn): üç bot d = 8'de 0 hasar (60000 ve yeni 16000 kümesi, 200'er tohum). En kısa tepki 0,6073 sn, bomba ön işaret 1,0182 sn, örümcek geçidi 16,000, ulaşılamaz ışık 0.
+- Dikkatli bot (200 tohum, 16000'den): ortalama mesafe d 0 26616 → d 8 8169; Bölge 5 başından gerçek ilerlemede 26880 → 15335.
+- Kıvılcım testi: derece öncesi ≥ %3; eşik plato kovasında (d = 8) ≥ %0,25 (ölçülen %0,48). Sık engelde kıvılcım bacak sınırına sığmıyor. `ayarDogrula` platoda kıvılcımın sığmadığı `D_TARA_MIN`'i (1,15 ve altı) reddeder.
+- Denetim düzeltmeleri: ikinci şans varışı ön kenardan (`R_CARPMA`) ve rampada hızın üst sınırıyla ölçülüyor (§14.8; test kesin, d = 8 ve 60000+ kümeleri). Işık ekonomisinin birleşik etkisi §14.7'de. Kalıcı test eklendi: `D_MAX` 0 kopyası HEAD ile birebir (atesBocegiTest). Dikkatli botta tepki ölçümü toleranssız; "ortalama düştü" kararı sabit kümede.
+Cihazda bakılacak:
+- Zorluk hissi 16000'den sonra (yaklaşık 7 dk oyun). Çok sertse `D_BOMBA` / `D_TARA` küçült ya da `D_ADIM` büyüt; yumuşaksa `D_MAX` artırma yerine `D_*` uç değerlerini büyüt (sınırlar `ayarDogrula`'da).
+- Kıvılcım yüksek d'de nadir (%0,4); ışık dengesi.
+- Örümcek + bomba arka arkaya geldiğinde okunurluk.
