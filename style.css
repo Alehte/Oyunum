@@ -53,7 +53,11 @@
 
   .screens-wrap{position:relative; flex:1; overflow:hidden;}
   .app-screen{position:absolute; inset:0; display:flex; flex-direction:column; transition:transform .28s cubic-bezier(.22,.61,.36,1); transform:translateX(100%);}
-  .app-screen.offstage{visibility:hidden; pointer-events:none;}
+  /* content-visibility:hidden: sahne disindaki ekranin alt agaci stil/yerlesim/boyama hesabindan cikar (Kacis'a bir kez
+     girilince belge ~7000 ogeye cikiyor; her global stil degisikliginde hepsi yeniden hesaplaniyordu). Betik olcumleri
+     (getBoundingClientRect, offsetWidth) gizli agacta da zorunlu yerlesimle dogru deger verir; ekranin kendi kutusu
+     inset:0 ile verildigi icin boyut kapsamasi gorunumu degistirmez. */
+  .app-screen.offstage{visibility:hidden; pointer-events:none; content-visibility:hidden;}
   /* Sahne disindaki ekranlar gorunmuyor ama DOM'da duruyor: icerideki sonsuz
      animasyonlar (yagmur, yildiz, nabiz, tema isigi) bosa donmesin. Ekran
      geri gelince kaldiklari yerden surer. */
@@ -448,9 +452,10 @@
   #screen-2048-boards.focused .bd-screen-dim{background:rgba(4,10,20,.66);}
   #screen-2048-boards .bd-hint{position:relative; z-index:8;}
 
-  .bd-tile{position:absolute; transform:translate(-50%,-50%); cursor:pointer; z-index:2;
-    display:flex; flex-direction:column; align-items:center; gap:6px;
-    transition:left .42s cubic-bezier(.3,.9,.35,1), top .42s cubic-bezier(.3,.9,.35,1), width .42s ease;}
+  /* konum yalniz transform ile (js/hedef2048.js Boards2048 render: translate(x,y) translate(-50%,-50%)); kareler her
+     render'da yeniden kuruldugu icin eski left/top/width gecisi hic calismiyordu, kaldirildi (gorunum ayni). */
+  .bd-tile{position:absolute; left:0; top:0; transform:translate(-50%,-50%); cursor:pointer; z-index:2;
+    display:flex; flex-direction:column; align-items:center; gap:6px;}
   .bd-tile .face{width:100%; aspect-ratio:1/1; border-radius:16px; position:relative; overflow:hidden;
     background:linear-gradient(155deg, #2C3B57 0%, #162034 100%);
     border:2.5px solid #7FE6DC; box-shadow:0 8px 20px -8px rgba(0,0,0,.7), 0 0 12px rgba(127,230,220,.3);
@@ -471,10 +476,18 @@
   .bd-tile.center .bd-kosul{font-size:12.5px;}
   .bd-stage.focused .bd-tile:not(.center){opacity:.4; pointer-events:none;}
   .bd-tile.center{z-index:5;}
-  .bd-tile.center .face{animation:bdBreathe 1.7s ease-in-out infinite; border-width:3px;}
-  @keyframes bdBreathe{0%,100%{transform:scale(1); box-shadow:0 10px 26px -8px rgba(0,0,0,.75), 0 0 16px rgba(127,230,220,.4);}
-    50%{transform:scale(1.055); box-shadow:0 12px 30px -8px rgba(0,0,0,.75), 0 0 30px rgba(127,230,220,.85);}}
-  .phone.reduced-motion .bd-tile.center .face{animation:none;}
+  /* nefes: yuz yalniz transform ile olceklenir; parlama artisi ayri sozde ogede opacity ile (box-shadow canlandirmasi her
+     karede yeniden boyatiyordu). Sabit golge eski animasyonun 0% karesi; sozde oge tepede (50%) aradaki farki ekler. */
+  .bd-tile.center .face{animation:bdBreathe 1.7s ease-in-out infinite; border-width:3px;
+    box-shadow:0 10px 26px -8px rgba(0,0,0,.75), 0 0 16px rgba(127,230,220,.4);}
+  .bd-tile.center::before{content:''; position:absolute; left:0; top:0; width:100%; aspect-ratio:1/1; border-radius:16px;
+    z-index:-1; pointer-events:none; opacity:0; box-shadow:0 2px 14px -8px rgba(0,0,0,.4), 0 0 30px rgba(127,230,220,.62);
+    animation:bdBreatheHale 1.7s ease-in-out infinite;}
+  @keyframes bdBreathe{0%,100%{transform:scale(1);} 50%{transform:scale(1.055);}}
+  @keyframes bdBreatheHale{0%,100%{opacity:0; transform:scale(1);} 50%{opacity:1; transform:scale(1.055);}}
+  .phone.reduced-motion .bd-tile.center .face{animation:none; box-shadow:0 8px 20px -8px rgba(0,0,0,.7), 0 0 12px rgba(127,230,220,.3);}
+  .phone.reduced-motion .bd-tile.center::before{animation:none; display:none;}
+  .phone.reduced-motion .bd-tile.center.locked .face{box-shadow:0 8px 20px -8px rgba(0,0,0,.7);}
   .bd-back{position:absolute; left:16px; top:30px; z-index:9; width:42px; height:42px; border-radius:14px;
     background:rgba(127,230,220,.16); border:2px solid #7FE6DC; color:#BFF5EE;
     display:none; align-items:center; justify-content:center; cursor:pointer;
@@ -1776,6 +1789,8 @@
   .mk-kart.secili{border-color:#2FE07A; box-shadow:0 0 18px -5px rgba(47,224,122,.8);}
   .mk-kart.kilitli .mk-onizleme{filter:saturate(.5) brightness(.72);}
   .mk-kart.kilitli .mk-ad{color:var(--ink-soft);}
+  /* uzun envanter listesi: ekran disindaki kartlar boyanmaz/yerlesmez (kart kendi golgesini yine cizer; ici zaten overflow:hidden) */
+  .mk-izgara .mk-kart{content-visibility:auto; contain-intrinsic-size:auto 165px;}
 
   .mk-kart-alt{display:flex; align-items:center; gap:10px; padding:10px 12px 12px;}
   .mk-kart-bilgi{flex:1; min-width:0;}
@@ -1807,7 +1822,7 @@
     height:100px; padding:10px 8px; overflow:hidden; background:#0C1322;
     box-shadow:inset 0 -10px 16px -10px rgba(0,0,0,.6);}
   /* ana ekran + market renk tonu kartin zemininde gorunur */
-  .mk-onizleme.ton-var::before{content:''; position:absolute; inset:0; background:var(--tema-ton); pointer-events:none;}
+  .mk-onizleme.ton-var::before{content:''; position:absolute; inset:0; --tema-ton:inherit; background:var(--tema-ton); pointer-events:none;}
   .mo-sahne{position:relative; z-index:1; flex:1; height:100%; display:flex; align-items:center;
     justify-content:center; pointer-events:none;}
 
@@ -1909,10 +1924,14 @@
      Sise sablonu Sirala Dur bolumunun icindedir.
      ======================================================= */
 
-  /* --- ana ekran + market renk tonu: yari saydam gradyan, gorsel dosyasi yok --- */
-  .phone.ton-var #screen-home::before,
-  .phone.ton-var #screen-market::before{
-    content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--tema-ton);}
+  /* --- ana ekran + market renk tonu: yari saydam gradyan, gorsel dosyasi yok ---
+     --tema-ton KALITIMSIZ kayitli ozellik (@property): market.js tonYaz onu yalniz iki ekranin kendisine (ve onizleme
+     kutusuna) yazar, ::before acikca "inherit" ile alir. Boylece tema degisince alt agacin tamami degil, yalniz o oge
+     ve sozde ogesi yeniden hesaplanir (eskiden .phone'a yaziliyor, butun ekranlar yeniden hesaplaniyordu). */
+  @property --tema-ton{syntax:'*'; inherits:false;}
+  #screen-home.ton-var::before,
+  #screen-market.ton-var::before{
+    content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; --tema-ton:inherit; background:var(--tema-ton);}
 
   /* --- Hedef 2048 karolari --- */
   .board.temali{background:var(--tema-zemin); --cell-empty:var(--tema-bos, rgba(255,255,255,.055));}
@@ -2300,3 +2319,63 @@
   .ss-sikisti-btn:disabled{opacity:.38; cursor:default;}
   .phone.reduced-motion .ss-sikisti{animation:none;}
   @media (prefers-reduced-motion: reduce){ .ss-sikisti{animation:none;} }
+
+/* === GELISTIRME: FPS GOSTERGESI (js/fpsGosterge.js; yalniz yerel adreste ?fps=1) === */
+  .fps-gosterge{position:fixed; left:calc(4px + env(safe-area-inset-left, 0px)); top:calc(4px + env(safe-area-inset-top, 0px));
+    z-index:2147483000; pointer-events:none; padding:3px 7px; border-radius:6px; background:rgba(0,0,0,.72); color:#7CFC9A;
+    font:600 11px/1.3 ui-monospace, Consolas, monospace; white-space:pre; contain:layout paint;}
+  .fps-gosterge.kotu{color:#FF8A8A;}
+
+/* === AYARLAR: GRAFIK KALITESI SECIMI (js/kalite.js; index.html #kaliteSec) === */
+  .kalite-sec{display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; padding:2px 0 6px;}
+  .kalite-sec button{min-height:36px; border-radius:11px; border:1px solid var(--line); background:rgba(255,255,255,.06);
+    color:var(--ink-on-navy); font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; padding:6px 2px;
+    transition:background .15s ease, border-color .15s ease;}
+  .kalite-sec button.secili{background:var(--accent); border-color:transparent; color:#04222A;}
+
+/* =======================================================
+   KALITE KATMANI (js/kalite.js yazar: html[data-kalite="yuksek|orta|dusuk"]; docs/PERFORMANS.md)
+   yuksek: bu bolumde HICBIR kural yok (mevcut gorunum birebir).
+   orta  : backdrop-filter ve suruklenen/cok sayidaki ogelerin drop-shadow filtresi kapali, buyuk parlama golgeleri sade.
+   dusuk : ortadakiler + sonsuz dekor animasyonlari durur, buyuk golgeler kalkar, ekran gecisi kisalir.
+   Yalniz gorunum: dokunma alanlari, yerlesim olculeri ve oyun davranisi hicbir seviyede degismez.
+   ======================================================= */
+  /* --- orta + dusuk --- */
+  html:is([data-kalite="orta"], [data-kalite="dusuk"]) :is(.ss-mode-card, .sso-sonuc, .sso-tanitim, .sso-diyagram){
+    -webkit-backdrop-filter:none; backdrop-filter:none;}
+  html:is([data-kalite="orta"], [data-kalite="dusuk"]) :is(.kc-govde, .tp-ghost, .mk-sandik-svg){filter:none;}
+  html:is([data-kalite="orta"], [data-kalite="dusuk"]) .mk-kart.kilitli .mk-onizleme{filter:none; opacity:.6;}
+  html[data-kalite="orta"] .mk-kart,
+  html[data-kalite="orta"] .mk-kart[data-nadirlik="ender"],
+  html[data-kalite="orta"] .mk-kart[data-nadirlik="efsanevi"]{box-shadow:0 0 8px -5px var(--kart-renk);}
+  html[data-kalite="orta"] .mk-kart.secili{box-shadow:0 0 8px -4px rgba(47,224,122,.8);}
+  html:is([data-kalite="orta"], [data-kalite="dusuk"]) .tp-blok{
+    box-shadow:inset 0 -3px 0 rgba(0,0,0,.26), inset 0 0 0 1px var(--blok-kenar, rgba(255,255,255,.14));}
+  html:is([data-kalite="orta"], [data-kalite="dusuk"]) .mk-sonuc-kart{box-shadow:0 0 20px -8px var(--kart-renk);}
+  /* --- yalniz dusuk --- */
+  html[data-kalite="dusuk"] :is(.mk-kart, .mk-kart[data-nadirlik], .mk-kart.secili, .mk-sandik, .mk-sonuc-kart){box-shadow:none;}
+  html[data-kalite="dusuk"] .tp-blok{background-image:none;}
+  html[data-kalite="dusuk"] .tile:not(.locked):not([data-v="wall"]):not([data-v="wild"]){
+    box-shadow:inset 0 0 0 1.5px rgb(var(--t-glow) / min(calc(var(--g) + .25), 1)); text-shadow:none;}
+  html[data-kalite="dusuk"] .tile[data-v="wild"]{box-shadow:inset 0 0 0 2px rgb(255 220 130 / .95); animation:none;}
+  html[data-kalite="dusuk"] .bd-tile .face{box-shadow:0 6px 12px -8px rgba(0,0,0,.7);}
+  html[data-kalite="dusuk"] .tp-edge{box-shadow:inset 0 0 14px 3px rgba(255,209,102,.5);}
+  /* sonsuz dekor animasyonlari durur (islevsel olanlar: ipucu, ok, kilit sallama, dokum akisi, karistirma calisir) */
+  html[data-kalite="dusuk"] :is(.word, .settings-row .gear-wrap, .settings-row .set-word, .market-row .bag-wrap, .market-row .set-word,
+    .kc-path-glow, .ss-yol-serit, .ss-cel i, .mo-ates-iz.lav, .hediye-al .hediye-ikon, .bd-tile.center .face, .bd-tile.center::before){animation:none;}
+  html[data-kalite="dusuk"] .kc-drop{display:none;}
+  html[data-kalite="dusuk"] .sso-karistir.hazir{animation:none;}
+  html[data-kalite="dusuk"] .kc-govde-kor{animation:none; opacity:.35;}
+  html[data-kalite="dusuk"] :is(.mk-kart, .mk-sonuc-kart)[data-nadirlik="efsanevi"] .mk-onizleme::after{animation:none; opacity:0;}
+  html[data-kalite="dusuk"] #screen-tempo.tempo-on .tp-edge{animation:none; opacity:.6;}
+  html[data-kalite="dusuk"] :is(.board.temali, .tp-board.temali)[data-tema-anim]::after{animation:none; opacity:.55;}
+  html[data-kalite="dusuk"] .board.temali .tile::after,
+  html[data-kalite="dusuk"] .temali[data-tema-anim] .tp-cell.filled:not(.tp-patlar)::after{animation:none !important; opacity:0;}
+  html[data-kalite="dusuk"] [data-sise-tema] .ss-kapak::after{animation:none !important; opacity:.4;}
+  /* agir gecisler kisalir */
+  html[data-kalite="dusuk"] .app-screen{transition-duration:.18s;}
+  html[data-kalite="dusuk"] .sheet{transition-duration:.2s;}
+  /* titreme yerine tek kare parlama (Kalite.efektAcikMi('titreme') false iken Tempo efekt katmanina eklenir) */
+  .tp-flas{position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:21; background:rgba(255,236,190,.28);
+    opacity:0; animation:tpFlas .16s ease-out;}
+  @keyframes tpFlas{0%{opacity:1;} 100%{opacity:0;}}

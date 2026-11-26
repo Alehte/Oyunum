@@ -88,8 +88,8 @@
         const el = document.createElement('div');
         el.className = 'bd-tile' + (own.has(b.size) ? '' : ' locked') + (isCenter ? ' center' : '');
         el.style.width = (isCenter ? big : small) + 'px';
-        el.style.left = slot.x + 'px';
-        el.style.top  = slot.y + 'px';
+        // konum transform ile (yerlesim tetiklemez); style.css .bd-tile left/top 0
+        el.style.transform = 'translate(' + slot.x + 'px,' + slot.y + 'px) translate(-50%,-50%)';
         el.dataset.size = b.size;
 
         let cells = '';
@@ -141,7 +141,9 @@
     });
 
     backCenter.addEventListener('click', () => { centered = null; render(); });
-    window.addEventListener('resize', () => { if(screens.boards2048) render(); });
+    // sahne disindayken yeniden kurulmaz (eskiden her resize'da ~360 hucreli 6 kare bastan kuruluyordu);
+    // ekrana her giriste ve geri donuste Boards2048.open() zaten render eder
+    window.addEventListener('resize', () => { if(screens.boards2048 && !screens.boards2048.classList.contains('offstage')) render(); });
 
     window.Boards2048 = {
       open(){ centered = null; render(); if(window.AppGold) window.AppGold.render(); },
@@ -458,7 +460,7 @@
       tiles.forEach(t => {
         let el = domTiles.get(t.id); const isNewEl = !el;
         if(isNewEl){ el = document.createElement('div'); el.className = 'tile pop'; tileLayer.appendChild(el); domTiles.set(t.id, el); el.addEventListener('animationend', () => el.classList.remove('pop','merged'), {once:true}); }
-        el.style.width = cw + 'px'; el.style.height = cw + 'px';
+        if(el._cw !== cw){ el.style.width = cw + 'px'; el.style.height = cw + 'px'; el._cw = cw; }   // degismeyen olcu yazilmaz
         const key = t.wall ? 'X' : (t.wild ? 'w' : (t.value + '|' + t.lock));
         if(sizeChanged || el.dataset.k !== key){
           el.dataset.k = key;
@@ -576,9 +578,11 @@
       const renk = getComputedStyle(el).backgroundColor;
       const adet = Math.min(16, 6 + 2 * (Math.log2(t.value) - 7));
       for(let i = 0; i < adet; i++){
+        // rastgele sayilar her seviyede ayni sayida cekilir (Math.random sirasi oyunla ortak); kalite yalniz dugum sayisini kisar
+        const aci = (i / adet) * Math.PI * 2 + Math.random() * 0.5, uzak = cw * (0.7 + Math.random() * 0.6);
+        if(window.Kalite && !window.Kalite.parcacikTut(i, adet)) continue;
         const p = document.createElement('i');
         p.className = 'tile-parca';
-        const aci = (i / adet) * Math.PI * 2 + Math.random() * 0.5, uzak = cw * (0.7 + Math.random() * 0.6);
         p.style.left = (t.c * cellStep + cw / 2) + 'px';
         p.style.top  = (t.r * cellStep + cw / 2) + 'px';
         p.style.backgroundColor = renk;
@@ -725,7 +729,8 @@
     gameScreenEl.addEventListener('touchcancel', () => { touchGecerli = false; }, {passive:true});
     restartBtn.addEventListener('click', yenidenBasla);
     overlayBtn.addEventListener('click', yenidenBasla);
-    window.addEventListener('resize', () => { yerles(); render(); });
+    // sahne disindayken olcup cizmek bosa is: tahta ekrani her acilista start() -> buildBoardCells -> yerles + render ile yeniden olculur
+    window.addEventListener('resize', () => { if(ekran2048.classList.contains('offstage')) return; yerles(); render(); });
     if(window.AppReset){
       window.AppReset.push(function(){ SIZE = 5; best = 0; liveSession = null; bestValEl.textContent = '0'; gamesStarted = 0; buildBoardCells(); newGame(); });
     }
@@ -785,13 +790,15 @@
       setTimeout(() => el.classList.remove('hedef-parla'), 1900);
       const cw = parseFloat(el.style.width) || 40;
       for(let i = 0; i < 26; i++){
+        // rastgele sayilar her seviyede ayni sirayla cekilir; kalite yalniz dugum sayisini kisar
+        const aci = Math.random() * Math.PI * 2, uzak = cw * (1.2 + Math.random() * 2.2), gecikme = Math.round(Math.random() * 250);
+        if(window.Kalite && !window.Kalite.parcacikTut(i, 26)) continue;
         const p = document.createElement('i');
         p.className = 'tile-parca konfeti';
-        const aci = Math.random() * Math.PI * 2, uzak = cw * (1.2 + Math.random() * 2.2);
         p.style.left = (karo.c * cellStep + cw / 2) + 'px';
         p.style.top  = (karo.r * cellStep + cw / 2) + 'px';
         p.style.backgroundColor = KONFETI_RENK[i % KONFETI_RENK.length];
-        p.style.animationDelay = Math.round(Math.random() * 250) + 'ms';
+        p.style.animationDelay = gecikme + 'ms';
         p.style.setProperty('--dx', (Math.cos(aci) * uzak).toFixed(0) + 'px');
         p.style.setProperty('--dy', (Math.sin(aci) * uzak).toFixed(0) + 'px');
         tileLayer.appendChild(p);

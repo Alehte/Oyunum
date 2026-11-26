@@ -220,8 +220,14 @@ window.MarketEkran = (function () {
     atesGovdeCiz(cv, p);
   }
   // 58x58 birim sahnenin koyu katmani; p = M.isikCoz(...) sonucu. getContext yoksa (testlerdeki sahte DOM) sessizce atlar.
+  // Cozunurluk: Kalite yoksa eskisi gibi en az 2, cihaz DPR'inin ust tam sayisi; yuksek kalitede bu deger js/kalite.js DPR
+  // tavaniyla (2) sinirli (DPR 3'te 3x cizilmez; docs/PERFORMANS.md); orta/dusukte DPR tavani (1,5 / 1). Fonksiyon kendi basina
+  // calisir (tools/atesBocegiTemaTest.js metnini ayri sayfaya koyar).
   function atesGovdeCiz(cv, p) {
-    var g = p.govde, k = Math.max(2, Math.ceil(window.devicePixelRatio || 1)), x, i, dikenler = [[6, 8.5, 11], [14, 16.5, 19]];
+    var KL = window.Kalite, yuksek = !KL || !KL.seviye || KL.seviye() === 'yuksek';
+    var k = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
+    if (KL && KL.dprTavan) k = yuksek ? Math.min(k, KL.dprTavan()) : KL.dpr();
+    var g = p.govde, x, i, dikenler = [[6, 8.5, 11], [14, 16.5, 19]];
     if (!cv.getContext) return;
     cv.width = 58 * k; cv.height = 58 * k;
     x = cv.getContext('2d');
@@ -330,20 +336,24 @@ window.MarketEkran = (function () {
   var KONFETI_RENK = ['#7FE6DC', '#B78BFF', '#FFD166', '#4FE39A', '#FF7F92', '#6FD3FF'];
   function konfeti(nadirlik) {
     if (document.querySelector('.phone.reduced-motion')) return;
-    var adet = { siradan: 28, nadir: 36, ender: 46, efsanevi: 60 }[nadirlik] || 28, i, e, aci, uzak;
-    var kat = document.createElement('div');
+    var adet = { siradan: 28, nadir: 36, ender: 46, efsanevi: 60 }[nadirlik] || 28, i, e, aci, uzak, don, gecikme;
+    var kat = document.createElement('div'), parca = document.createDocumentFragment();
     kat.className = 'mk-konfeti-kat';
-    el.sonuc.appendChild(kat);
     for (i = 0; i < adet; i++) {
-      e = document.createElement('i');
+      // rastgele sayilar her kalitede ayni sirayla cekilir (Math.random kutu secimiyle ortak); kalite yalniz dugum sayisini kisar
       aci = Math.random() * Math.PI * 2; uzak = 90 + Math.random() * 190;
+      don = Math.round(Math.random() * 720 - 360); gecikme = Math.round(Math.random() * 160);
+      if (window.Kalite && !window.Kalite.parcacikTut(i, adet)) continue;
+      e = document.createElement('i');
       e.style.backgroundColor = KONFETI_RENK[i % KONFETI_RENK.length];
       e.style.setProperty('--dx', (Math.cos(aci) * uzak).toFixed(0) + 'px');
       e.style.setProperty('--dy', (Math.sin(aci) * uzak + 60).toFixed(0) + 'px');
-      e.style.setProperty('--don', Math.round(Math.random() * 720 - 360) + 'deg');
-      e.style.animationDelay = Math.round(Math.random() * 160) + 'ms';
-      kat.appendChild(e);
+      e.style.setProperty('--don', don + 'deg');
+      e.style.animationDelay = gecikme + 'ms';
+      parca.appendChild(e);
     }
+    kat.appendChild(parca);
+    el.sonuc.appendChild(kat);
     setTimeout(function () { if (kat.parentNode) kat.parentNode.removeChild(kat); }, 1700);
   }
 
@@ -510,6 +520,66 @@ window.MarketEkran = (function () {
   }
 
   // ---------------------------------------------------------------
+  // YERINDE GUNCELLEME (docs/PERFORMANS.md: liste yeniden kurulmaz)
+  // Kart listesi kart() metniyle anahtarlanir: metni degismeyen kartin dugumu aynen kalir; degisen kart (secim, sahiplik,
+  // fiyat) yeniden kurulur ama onizlemesi (kartin en pahali parcasi: 5 sahne + canvas) eski karttan tasinir. Sira degisince
+  // (kullanilan tema en uste) yalniz yeri degisen dugum tasinir. Onizleme yalniz temaya baglidir (secime/fiyata degil).
+  // ---------------------------------------------------------------
+  var sablon = null, kartDamga = 0;
+  // Onizleme tembel kurulur: listenin ilk ILK_ONIZLEME karti hemen (acilista gorunenler), gerisi kaydirma alanina 400 px
+  // yaklasinca (IntersectionObserver). Yer tutucunun yuksekligi CSS'te sabit (100 px): kurulunca yerlesim kaymaz.
+  // Envanter acilisi 10 kart x (5 sahne + canvas) yerine 4 kartla baslar; kalanlar kaydirdikca birer birer kurulur.
+  var ILK_ONIZLEME = 4, gozcu = null;
+  function onizlemeBekle(yer, t) {
+    if (!gozcu) {
+      if (!window.IntersectionObserver) { onizlemeKur(yer, t); yer.removeAttribute('data-tema'); return; }
+      gozcu = new IntersectionObserver(function (girdiler) {
+        for (var i = 0; i < girdiler.length; i++) {
+          var e = girdiler[i].target;
+          if (!girdiler[i].isIntersecting || !e._tema) continue;
+          gozcu.unobserve(e);
+          onizlemeKur(e, e._tema); e._tema = null; e.removeAttribute('data-tema');
+        }
+      }, { root: el.govde || null, rootMargin: '400px 0px' });
+    }
+    yer._tema = t;
+    gozcu.observe(yer);
+  }
+  // DOM'dan kalkan dugumun altinda kurulmamis (gozcunun izledigi) onizleme varsa izleme birakilir (kopuk dugum tutulmasin)
+  function gozcudenCikar(d) {
+    if (!gozcu || !d || !d.querySelectorAll) return;
+    var b = d.querySelectorAll('.mk-onizleme[data-tema]'), i;
+    for (i = 0; i < b.length; i++) if (b[i]._tema) { gozcu.unobserve(b[i]); b[i]._tema = null; }
+  }
+  function kartlariYerlestir(kap, liste) {           // liste: [{ tema, satilik }]
+    var eski = kap._kartlar || {}, yeni = {}, sira = [], i, t, h, k, d, yer, oz, damga = ++kartDamga;
+    if (!sablon) sablon = document.createElement('div');
+    for (i = 0; i < liste.length; i++) {
+      t = liste[i].tema; h = kart(t, liste[i].satilik); k = eski[t.id];
+      if (k && k.html === h) d = k.el;
+      else {
+        sablon.innerHTML = h; d = sablon.firstChild; sablon.removeChild(d);
+        yer = d.querySelector('.mk-onizleme[data-tema]');
+        oz = k ? k.el.querySelector('.mk-onizleme') : null;
+        if (yer && oz) yer.parentNode.replaceChild(oz, yer);       // kurulmamis (bekleyen) onizleme de tasinir; gozcu onu izlemeye devam eder
+        else if (yer && i < ILK_ONIZLEME) { onizlemeKur(yer, t); yer.removeAttribute('data-tema'); }
+        else if (yer) onizlemeBekle(yer, t);
+      }
+      yeni[t.id] = { el: d, html: h };
+      d._damga = damga;
+      sira.push(d);
+    }
+    // listede artik olmayan her sey (eski kartlar, bos-liste yazisi) kalkar
+    // (yeniden kurulan kartin eski dugumu de; tasinan onizleme artik yeni kartta oldugundan izlenmeye devam eder)
+    for (i = kap.childNodes.length - 1; i >= 0; i--) if (kap.childNodes[i]._damga !== damga) { gozcudenCikar(kap.childNodes[i]); kap.removeChild(kap.childNodes[i]); }
+    for (i = 0; i < sira.length; i++) if (kap.childNodes[i] !== sira[i]) kap.insertBefore(sira[i], kap.childNodes[i] || null);
+    kap._kartlar = yeni;
+  }
+  function kartlariBosalt(kap, html) { gozcudenCikar(kap); kap._kartlar = {}; kap.innerHTML = html; }
+  // metni degismeyen kutu yeniden kurulmaz (kutu acinca ve her ciz()'de butun magaza bastan yaziliyordu)
+  function htmlYaz(e, h) { if (e._html === h) return; e._html = h; e.innerHTML = h; }
+
+  // ---------------------------------------------------------------
   // MAGAZA
   // ---------------------------------------------------------------
   function noAdsCiz() {
@@ -590,37 +660,35 @@ window.MarketEkran = (function () {
              : '<span>' + (durum === 'tamam' ? 'Koleksiyon tamam' : 'Bu kutudan çıkacak tema kalmadı') + '</span>') +
            '</button></div>';
     }
-    el.sandiklar.innerHTML = s;
+    htmlYaz(el.sandiklar, s);
   }
 
   function vitrinCiz() {
     // sahip olunan tema seckide gosterilmez (satin alinca / kutudan cikinca duser)
-    var v = M.vitrin().filter(function (id) { return !M.sahipMi(id); }), i, h = '';
+    var v = M.vitrin().filter(function (id) { return !M.sahipMi(id); }), i, liste = [];
     if (!v.length) {
-      h = '<div class="mk-vitrin-bos">' + (M.kalanVarMi()
+      kartlariBosalt(el.vitrin, '<div class="mk-vitrin-bos">' + (M.kalanVarMi()
         ? 'Bu seçkideki her şey sende. Yeni seçki sayaç bitince gelir; kutuları da deneyebilirsin.'
-        : 'Bütün temalar sende. Koleksiyon tamam!') + '</div>';
-    } else {
-      for (i = 0; i < v.length; i++) h += kart(M.bul(v[i]), true);
+        : 'Bütün temalar sende. Koleksiyon tamam!') + '</div>');
+      return;
     }
-    el.vitrin.innerHTML = h;
-    onizlemeleriDoldur(el.vitrin);
+    for (i = 0; i < v.length; i++) liste.push({ tema: M.bul(v[i]), satilik: true });
+    kartlariYerlestir(el.vitrin, liste);
   }
 
   // ---------------------------------------------------------------
   // ENVANTER — once sahip olunanlar, sonra kilitliler
   // ---------------------------------------------------------------
   function envanterCiz() {
-    var hepsi = M.temalar(), t = M.toplama(), h = '', i;
+    var hepsi = M.temalar(), t = M.toplama(), liste = [], i;
     var secili = M.seciliId();
     var sahipler = hepsi.filter(function (x) { return M.sahipMi(x.id); })
       .sort(function (a, b) { return (b.id === secili) - (a.id === secili); });   // kullanilan tema en ustte
     var kilitliler = hepsi.filter(function (x) { return !M.sahipMi(x.id); });
-    el.koleksiyon.innerHTML = '<span>Koleksiyon</span><em>' + t.sahip + ' / ' + t.toplam + ' tema</em>';
-    for (i = 0; i < sahipler.length; i++) h += kart(sahipler[i], false);
-    for (i = 0; i < kilitliler.length; i++) h += kart(kilitliler[i], false);
-    el.izgara.innerHTML = h;
-    onizlemeleriDoldur(el.izgara);
+    htmlYaz(el.koleksiyon, '<span>Koleksiyon</span><em>' + t.sahip + ' / ' + t.toplam + ' tema</em>');
+    for (i = 0; i < sahipler.length; i++) liste.push({ tema: sahipler[i], satilik: false });
+    for (i = 0; i < kilitliler.length; i++) liste.push({ tema: kilitliler[i], satilik: false });
+    kartlariYerlestir(el.izgara, liste);
   }
 
   // ---------------------------------------------------------------
@@ -678,6 +746,7 @@ window.MarketEkran = (function () {
     clearInterval(sayacId);
     sayacId = setInterval(sayacYaz, 1000);
     if (typeof slideForward === 'function') slideForward('home', 'market');
+    if (window.Kalite) window.Kalite.olc();   // otomatik kalitede market acikken 3 sn kare olcumu (yalniz dusurur; js/kalite.js)
   }
 
   function sayaciDurdur() { clearInterval(sayacId); sayacId = null; }

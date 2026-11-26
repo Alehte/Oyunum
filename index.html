@@ -17,6 +17,8 @@
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/fredoka-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
+<!-- grafik kalitesi (yuksek/orta/dusuk): html[data-kalite] ilk boyamadan once yazilsin diye head icinde; js/kalite.js -->
+<script src="js/kalite.js"></script>
 </head>
 <body>
 
@@ -100,6 +102,17 @@
               <div class="txt"><div class="t">Animasyonları azalt</div><div class="d">Yağmur, süzülme ve geçiş efektlerini kapatır</div></div>
               <button class="switch" id="motionSwitch" role="switch" aria-checked="false" aria-label="Animasyonları azalt"></button>
             </div>
+          </div>
+
+          <div class="set-block">
+            <div class="set-block-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Grafik kalitesi</div>
+            <div class="kalite-sec" id="kaliteSec" role="radiogroup" aria-label="Grafik kalitesi">
+              <button type="button" role="radio" aria-checked="true" data-kalite-sec="oto">Otomatik</button>
+              <button type="button" role="radio" aria-checked="false" data-kalite-sec="yuksek">Yüksek</button>
+              <button type="button" role="radio" aria-checked="false" data-kalite-sec="orta">Orta</button>
+              <button type="button" role="radio" aria-checked="false" data-kalite-sec="dusuk">Düşük</button>
+            </div>
+            <div class="sheet-note" id="kaliteNot">Düşük kalite efektleri ve arka plan animasyonlarını sadeleştirir; oyun aynı kalır.</div>
           </div>
 
           <div class="set-block">
@@ -581,6 +594,8 @@
 <script src="js/marketKatalog.js"></script>
 <script src="js/market.js"></script>
 <script src="js/marketEkran.js"></script>
+<!-- gelistirme: canli FPS gostergesi, yalniz yerel adreste ?fps=1 ile acilir (yayinda hicbir sey yapmaz) -->
+<script src="js/fpsGosterge.js"></script>
 <script>
 // Servis calisani: cevrimdisi calisma + onbellek (ayrintilar sw.js'in basinda).
 // Yollar goreli; site bir alt yolda yayinlansa da calisir.

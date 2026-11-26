@@ -732,7 +732,11 @@ window.AppMarket = (function () {
   // kendi uygulayicisini cagirir; burada kalici DOM dugumleri guncellenir.
   // ---------------------------------------------------------------
   function temayiYay() {
-    tonYaz(document.querySelector('.phone'), aktif('genel', 'ton'));
+    // ton yalniz ana ekran ve market zemininde gorunur: degisken iki ekranin kendisine yazilir (kalitimsiz, style.css
+    // @property --tema-ton); .phone'a yazmak butun ekranlarin alt agacini yeniden hesaplatiyordu (docs/PERFORMANS.md).
+    var tonV = aktif('genel', 'ton');
+    tonYaz(document.getElementById('screen-home'), tonV);
+    tonYaz(document.getElementById('screen-market'), tonV);
     karoTemasiUygula(document.getElementById('board'));
     siseTemasiUygula(document.getElementById('ssTahta'));
     siseTemasiUygula(document.getElementById('ssoSiseler'));

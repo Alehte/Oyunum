@@ -12,8 +12,8 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), assert = r
 const AB = require(path.join(__dirname, '..', 'js', 'atesBocegi.js'));
 const KAYNAK = fs.readFileSync(path.join(__dirname, '..', 'js', 'atesBocegiOyun.js'), 'utf8');
 
-function ortam() {
-  const o = { oyuk: 0, rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0, sesLog: [], titresim: [], log: null };
+function ortam(se) {
+  const o = { tuvaller: [], oyuk: 0, rafF: null, zamanlayicilar: [], goldAdd: [], yazim: 0, durum: null, t: 0, basili: false, ses: 0, sesLog: [], titresim: [], log: null };
   const proxyCtx = () => new Proxy({}, {
     get(h, k) { if (k in h) return h[k]; return (...a) => { if (o.log) o.log.push([k, a]); return /Gradient/.test(k) ? { addColorStop() {} } : undefined; }; },
     set(h, k, v) { if (k === 'globalAlpha' && o.alfaAc && o.log) o.log.push(['alpha', [v]]); if ((k === 'fillStyle' || k === 'strokeStyle') && o.stilAc && o.log) o.log.push([k, [v]]); if (k === 'globalCompositeOperation' && v === 'destination-out') o.oyuk++; h[k] = v; return true; }
@@ -34,7 +34,7 @@ function ortam() {
   const AB2 = Object.assign({}, AB, { oyunOlustur(t) { o.durum = AB.oyunOlustur(t); return o.durum; } });
   const sb = {
     console, Math, Date, Float32Array, Array, Number, String, JSON, parseInt, isFinite, Object, Promise,
-    document: { getElementById: el, createElement: () => el('c' + Math.random()), querySelector: () => null, addEventListener() {}, hidden: false },
+    document: { getElementById: el, createElement: () => { const c = el('c' + Math.random()); o.tuvaller.push(c); return c; }, querySelector: () => null, addEventListener() {}, hidden: false },
     AtesBocegi: AB2, devicePixelRatio: 2, addEventListener() {},
     requestAnimationFrame: f => { o.rafF = f; return 1; }, cancelAnimationFrame() { o.rafF = null; },
     setTimeout: f => { o.zamanlayicilar.push(f); return o.zamanlayicilar.length; },
@@ -45,6 +45,12 @@ function ortam() {
   sb.AppSaveProgress = p => { Object.assign(sb.AppProgress, p); o.yazim++; };
   sb.AppGold = { add(n) { sb.AppProgress.gold += n; o.goldAdd.push(n); o.yazim++; } };
   sb.window = sb;
+  if (se && se.kalite) {             // sahte js/kalite.js: seviye, DPR tavani, abonelik; degis(s) aboneleri cagirir
+    const KL = { s: se.kalite, fn: [] };
+    sb.Kalite = { seviye: () => KL.s, dprTavan: () => ({ yuksek: 2, orta: 1.5, dusuk: 1 })[KL.s], olc() {},
+      abone(f) { KL.fn.push(f); return () => {}; } };
+    o.kaliteDegis = y => { const e = KL.s; KL.s = y; KL.fn.forEach(f => f(y, e)); };
+  }
   vm.runInNewContext(KAYNAK, sb);
   o.sb = sb; o.O = sb.AtesBocegiOyun; o.el = el;
   o.kare = n => { for (let i = 0; i < n && o.rafF; i++) { o.t += 1000 / 60; const f = o.rafF; o.rafF = null; f(o.t); } };
@@ -872,6 +878,69 @@ dene('salinan orumcek: ust/alt ve azaltilmis harekette cizim hatasiz; ust yanda 
   }));
   const k = KAYNAK.slice(KAYNAK.indexOf('function orumcekCiz'), KAYNAK.indexOf('function engelCiz'));
   assert.ok(/rk\.kenar/.test(k) && /rk\.dolgu/.test(k) && !/#[0-9A-Fa-f]{6}/.test(k), 'orumcek renkleri engel paletinden');
+});
+
+// ---- grafik kalitesi (js/kalite.js sahte): sade yol (cizSade / karanlikSadeCiz), ertelenen yeniden kurulum ----
+// tam ekran ara tuval (kc / ac): ana tuvalle ayni boy; sade kurulumda 1x1
+const tamTuval = o => o.tuvaller.filter(c => c.width === o.el('abTuval').width && c.height === o.el('abTuval').height && c !== o.el('abTuval'));
+const birBir = o => o.tuvaller.filter(c => c.width === 1 && c.height === 1);
+const cizimKaydi = (o, n) => { o.log = []; o.kare(n); const l = o.log; o.log = null; return l; };
+const araTuvalCizimi = (o, l) => l.filter(c => c[0] === 'drawImage' && c[1][0] && (c[1][0].width === 1 && c[1][0].height === 1 ||
+  (c[1][0].width === o.el('abTuval').width && c[1][0].height === o.el('abTuval').height))).length;
+dene('dusuk kalite: sade yol tam ekran ara tuval ayirmaz (kc / ac 1x1), DPR 1; kosu, isik sonmesi ve sonuc karti hatasiz', () => {
+  const o = ortam({ kalite: 'dusuk' }); o.yeni();
+  assert.strictEqual(o.el('abTuval').width, 360, 'DPR 1 degil');
+  assert.strictEqual(tamTuval(o).length, 0, 'tam ekran ara tuval ayrildi');
+  assert.ok(birBir(o).length >= 2, 'kc / ac 1x1 degil');
+  o.durum.dokunulmaz = 100;
+  const l = cizimKaydi(o, 30);
+  assert.ok(l.filter(c => c[0] === 'fillRect').length >= 60, 'sade karanlik dolgusu yok');
+  assert.strictEqual(araTuvalCizimi(o, l), 0, 'sade yol ara tuvali ciziyor');
+  o.durum.dokunulmaz = 0; o.olum(800, 5);
+  const s = cizimKaydi(o, 80);                         // sonme: R kuculur, sonunda tam karanlik (karanlikSadeCiz iki dal)
+  assert.strictEqual(araTuvalCizimi(o, s), 0);
+  assert.ok(o.el('abSonuc').cl.has('show'), 'sonuc karti yok');
+});
+dene('kalite dusukten yuksege (duraklatilmisken): hemen yeniden kurulur, tam yol ve tam ekran kc / ac geri gelir', () => {
+  const o = ortam({ kalite: 'dusuk' }); o.yeni(); o.kare(5);
+  o.el('abDurBtn').click(); assert.ok(o.el('abDuraklat').cl.has('show'), 'duraklamadi');
+  o.kaliteDegis('yuksek');
+  assert.strictEqual(o.el('abTuval').width, 720);
+  assert.strictEqual(tamTuval(o).length, 2, 'kc / ac tam boy kurulmadi');
+  o.el('abDevam').click(); o.durum.dokunulmaz = 100;
+  assert.ok(araTuvalCizimi(o, cizimKaydi(o, 3)) >= 3, 'tam yol ara tuvali cizmiyor');
+});
+dene('kosu surerken kalite dususu: yeniden kurulum ertelenir (sade yol hemen), duraklamada uygulanir; bekleme ekraninda hemen', () => {
+  const o = ortam({ kalite: 'yuksek' }); o.yeni(); o.kare(5); o.durum.dokunulmaz = 100;
+  const n0 = o.tuvaller.length;
+  o.kaliteDegis('dusuk');
+  assert.strictEqual(o.tuvaller.length, n0, 'kosu ortasinda tuval kuruldu');
+  assert.strictEqual(o.el('abTuval').width, 720, 'kosu ortasinda yeniden boyutlandi');
+  const l = cizimKaydi(o, 3);
+  assert.strictEqual(araTuvalCizimi(o, l), 0, 'sade yol hemen acilmadi');
+  assert.ok(l.filter(c => c[0] === 'fillRect').length >= 6);
+  o.el('abDurBtn').click();
+  assert.strictEqual(o.el('abTuval').width, 360, 'duraklamada uygulanmadi');
+  assert.strictEqual(o.tuvaller.slice(n0).filter(c => c.width === 720 && c.height === 1120).length, 0, 'sade kurulum tam ekran tuval ayirdi');
+  o.el('abDevam').click(); assert.strictEqual(araTuvalCizimi(o, cizimKaydi(o, 3)), 0);
+  const b = ortam({ kalite: 'yuksek' }); b.O.start(); b.kare(3);   // bekleme ekrani: dongu calisiyor ama kosu baslamadi
+  b.kaliteDegis('dusuk'); assert.strictEqual(b.el('abTuval').width, 360, 'bekleme ekraninda ertelendi');
+});
+dene('kosu surerken kalite degisimi kosu sonunda (sonuc karti) ya da yeni kosuda uygulanir; tam yol kaynaklari eksik kalmaz', () => {
+  const o = ortam({ kalite: 'yuksek' }); o.yeni(); o.kare(5);
+  o.kaliteDegis('orta');
+  assert.strictEqual(o.el('abTuval').width, 720, 'kosu ortasinda yeniden boyutlandi');
+  o.durum.dokunulmaz = 100; assert.ok(araTuvalCizimi(o, cizimKaydi(o, 2)) >= 2, 'orta: tam yol devam etmeli');
+  o.durum.dokunulmaz = 0; o.olum(800, 5);
+  assert.strictEqual(o.el('abTuval').width, 720, 'sonme sirasinda yeniden boyutlandi');
+  o.zamanlayicilariCalistir();
+  assert.ok(o.el('abSonuc').cl.has('show'));
+  assert.strictEqual(o.el('abTuval').width, 540, 'kosu sonunda uygulanmadi');
+  assert.strictEqual(tamTuval(o).length >= 2, true);
+  const y = ortam({ kalite: 'yuksek' }); y.yeni(); y.kare(5);   // yeni kosu basinda: ertelenen degisim
+  y.kaliteDegis('dusuk'); y.el('abYeniden').click();
+  assert.strictEqual(y.el('abTuval').width, 360, 'yeni kosuda uygulanmadi');
+  y.bas(); y.kare(3); y.durum.dokunulmaz = 100; assert.strictEqual(araTuvalCizimi(y, cizimKaydi(y, 3)), 0);
 });
 
 console.log(gecti + ' deneme gecti');

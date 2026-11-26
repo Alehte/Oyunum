@@ -37,7 +37,7 @@
 // yayinlansa da calisir.
 'use strict';
 
-var SURUM = '25';
+var SURUM = '26';
 var ONBELLEK = 'ait-v' + SURUM;
 
 var CEKIRDEK = [
@@ -45,12 +45,14 @@ var CEKIRDEK = [
   'gizlilik.html',
   'style.css',
   'manifest.json',
+  'js/kalite.js',
   'js/core.js',
   'js/reklamAyar.js',
   'js/reklam.js',
   'js/marketKatalog.js',
   'js/market.js',
   'js/marketEkran.js',
+  'js/fpsGosterge.js',
   'fonts/fredoka-latin.woff2',
   'fonts/fredoka-latin-ext.woff2',
   'img/home-bg.webp',

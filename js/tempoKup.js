@@ -267,13 +267,24 @@
   // patlama ayrı bir katmandaki kopyalar üzerinde oynar. Böylece oyuncu
   // animasyon bitmeden bir sonraki parçayı koyabilir.
   // ---------------------------------------------------------------
+  // Hucre geometrisi hamle basina BIR kez, tek geciste okunur (once butun okumalar, sonra yazmalar). Eskiden her patlama /
+  // isik / parcacik dongude offset* okuyup hemen efekt katmanina eleman ekliyordu: her okuma zorunlu yerlesim (layout thrash).
+  var geoL = new Array(N * N), geoT = new Array(N * N), geoW = new Array(N * N), geoH = new Array(N * N);
+  function hucreGeo() {
+    for (var i = 0; i < N * N; i++) {
+      var h = hucreler[i];
+      geoL[i] = h.offsetLeft; geoT[i] = h.offsetTop; geoW[i] = h.offsetWidth; geoH[i] = h.offsetHeight;
+    }
+  }
+  function kaliteTut(i, taban) { return !window.Kalite || window.Kalite.parcacikTut(i, taban); }
+
   function patlat(idx, renkHex, gecikme) {
-    var h = hucreler[idx], e = document.createElement('i');
+    var e = document.createElement('i');
     e.className = 'tp-blok tp-patla';
-    e.style.left = h.offsetLeft + 'px';
-    e.style.top = h.offsetTop + 'px';
-    e.style.width = h.offsetWidth + 'px';
-    e.style.height = h.offsetHeight + 'px';
+    e.style.left = geoL[idx] + 'px';
+    e.style.top = geoT[idx] + 'px';
+    e.style.width = geoW[idx] + 'px';
+    e.style.height = geoH[idx] + 'px';
     e.style.backgroundColor = renkHex;
     e.style.animationDelay = gecikme + 'ms';
     fxEl.appendChild(e);
@@ -281,10 +292,10 @@
   }
 
   function hatIsigi(yatay, sira) {
-    var e = document.createElement('div'), h = hucreler[yatay ? sira * N : sira];
+    var e = document.createElement('div'), x = yatay ? sira * N : sira;
     e.className = 'tp-isik ' + (yatay ? 'yatay' : 'dikey');
-    if (yatay) { e.style.top = h.offsetTop + 'px'; e.style.height = h.offsetHeight + 'px'; }
-    else { e.style.left = h.offsetLeft + 'px'; e.style.width = h.offsetWidth + 'px'; }
+    if (yatay) { e.style.top = geoT[x] + 'px'; e.style.height = geoH[x] + 'px'; }
+    else { e.style.left = geoL[x] + 'px'; e.style.width = geoW[x] + 'px'; }
     fxEl.appendChild(e);
     setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 520);
   }
@@ -297,11 +308,21 @@
     setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, omur);
   }
 
+  // Sarsma: sinifi kaldir, iki kare sonra yeniden ekle (animasyon bastan baslar; eski "void offsetWidth" zorunlu yerlesim yapiyordu).
+  // Dusuk kalitede (Kalite.efektAcikMi('titreme') false) sarsma yerine efekt katmaninda tek kisa parlama.
+  var sarsNo = 0;
   function sars(guc) {
     if (azHareket()) return;
+    if (window.Kalite && !window.Kalite.efektAcikMi('titreme')) {
+      var f = document.createElement('div');
+      f.className = 'tp-flas';
+      fxEl.appendChild(f);
+      setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 220);
+      return;
+    }
+    var sinif = guc > 1 ? 'tp-sars-guclu' : 'tp-sars', no = ++sarsNo;
     sarmal.classList.remove('tp-sars', 'tp-sars-guclu');
-    void sarmal.offsetWidth;
-    sarmal.classList.add(guc > 1 ? 'tp-sars-guclu' : 'tp-sars');
+    requestAnimationFrame(function () { requestAnimationFrame(function () { if (no === sarsNo) sarmal.classList.add(sinif); }); });
   }
 
   // Hat temizliginde hucrelerden sacilan parcaciklar. Sayi ve mesafe komboyla
@@ -311,19 +332,24 @@
     var E = AYAR.efekt, adetHucre = Math.min(3, 1 + Math.floor(guc / 2));
     var atla = Math.max(1, Math.ceil(idxler.length * adetHucre / E.parcacikTavan));
     var uzak = E.parcacikMesafe[0] + Math.min(1, guc / 6) * (E.parcacikMesafe[1] - E.parcacikMesafe[0]);
+    var toplam = 0, no = 0;
+    idxler.forEach(function (idx, sira) { if (!(sira % atla)) toplam += adetHucre; });
     idxler.forEach(function (idx, sira) {
       if (sira % atla) return;
-      var h = hucreler[idx];
       for (var k = 0; k < adetHucre; k++) {
-        var e = document.createElement('i'), aci = Math.random() * Math.PI * 2, m = uzak * (0.55 + Math.random() * 0.75);
+        // rastgele sayilar her kalitede ayni sayida/sirada cekilir (Math.random parca ureteciyle ortak); kalite yalniz dugumu atlar
+        var aci = Math.random() * Math.PI * 2, m = uzak * (0.55 + Math.random() * 0.75);
+        var boy = (0.7 + Math.min(1, guc / 6) * 0.8 + Math.random() * 0.4).toFixed(2), gecikme = Math.round(60 + Math.random() * 120);
+        if (!kaliteTut(no++, toplam)) continue;
+        var e = document.createElement('i');
         e.className = 'tp-parca';
-        e.style.left = (h.offsetLeft + h.offsetWidth / 2) + 'px';
-        e.style.top = (h.offsetTop + h.offsetHeight / 2) + 'px';
+        e.style.left = (geoL[idx] + geoW[idx] / 2) + 'px';
+        e.style.top = (geoT[idx] + geoH[idx] / 2) + 'px';
         e.style.backgroundColor = renkler[idx];
         e.style.setProperty('--dx', (Math.cos(aci) * m).toFixed(0) + 'px');
         e.style.setProperty('--dy', (Math.sin(aci) * m - 8).toFixed(0) + 'px');
-        e.style.setProperty('--boy', (0.7 + Math.min(1, guc / 6) * 0.8 + Math.random() * 0.4).toFixed(2));
-        e.style.animationDelay = Math.round(60 + Math.random() * 120) + 'ms';
+        e.style.setProperty('--boy', boy);
+        e.style.animationDelay = gecikme + 'ms';
         fxEl.appendChild(e);
         (function (x) { setTimeout(function () { if (x.parentNode) x.parentNode.removeChild(x); }, 900); })(e);
       }
@@ -338,26 +364,32 @@
     ekran.appendChild(kat);
     var gen = ekran.clientWidth, yuk = ekran.clientHeight, adet = AYAR.efekt.kutlamaAdet;
     for (i = 0; i < adet; i++) {
+      // rastgele sayilar once ve her kalitede ayni sirayla cekilir (Math.random parca ureteciyle ortak); kalite yalniz dugumu atlar
+      var patlama = i < adet * 0.4, r1, r2, r3, r4, r5;
+      if (patlama) { r1 = Math.random(); r2 = Math.random(); r3 = Math.random(); }
+      else { r1 = Math.random(); r2 = Math.random(); r3 = Math.random(); r4 = Math.random(); r5 = Math.random(); }
+      var don = Math.round(Math.random() * 900 - 450);
+      if (!kaliteTut(i, adet)) continue;
       e = document.createElement('i');
       e.style.backgroundColor = p[i % p.length];
-      if (i < adet * 0.4) {
+      if (patlama) {
         // tahtanin ortasindan disari patlayan parcalar
-        var aci = Math.random() * Math.PI * 2, m = 120 + Math.random() * gen * 0.6;
+        var aci = r1 * Math.PI * 2, m = 120 + r2 * gen * 0.6;
         e.className = 'tp-konfeti patlama';
         e.style.left = '50%'; e.style.top = '46%';
         e.style.setProperty('--dx', (Math.cos(aci) * m).toFixed(0) + 'px');
         e.style.setProperty('--dy', (Math.sin(aci) * m).toFixed(0) + 'px');
-        e.style.animationDelay = Math.round(Math.random() * 140) + 'ms';
+        e.style.animationDelay = Math.round(r3 * 140) + 'ms';
       } else {
         // yukaridan butun ekrana yagan parcalar
         e.className = 'tp-konfeti yagmur';
-        e.style.left = (Math.random() * 100).toFixed(1) + '%'; e.style.top = '-4%';
-        e.style.setProperty('--dx', Math.round(Math.random() * 120 - 60) + 'px');
-        e.style.setProperty('--dy', Math.round(yuk * (1.02 + Math.random() * 0.1)) + 'px');
-        e.style.animationDelay = Math.round(Math.random() * 700) + 'ms';
-        e.style.animationDuration = (1.5 + Math.random() * 0.9).toFixed(2) + 's';
+        e.style.left = (r1 * 100).toFixed(1) + '%'; e.style.top = '-4%';
+        e.style.setProperty('--dx', Math.round(r2 * 120 - 60) + 'px');
+        e.style.setProperty('--dy', Math.round(yuk * (1.02 + r3 * 0.1)) + 'px');
+        e.style.animationDelay = Math.round(r4 * 700) + 'ms';
+        e.style.animationDuration = (1.5 + r5 * 0.9).toFixed(2) + 's';
       }
-      e.style.setProperty('--don', Math.round(Math.random() * 900 - 450) + 'deg');
+      e.style.setProperty('--don', don + 'deg');
       if (i % 3 === 0) { e.style.width = '6px'; e.style.height = '13px'; }
       kat.appendChild(e);
     }
@@ -365,6 +397,7 @@
   }
 
   var OVGU = AYAR.ovgu;
+  var OTUR_KARE = [{ transform: 'scale(.72)' }, { transform: 'scale(1)' }], OTUR_AYAR = { duration: 200, easing: 'cubic-bezier(.34,1.56,.64,1)' };
 
   // ---------------------------------------------------------------
   // HAMLE
@@ -382,6 +415,7 @@
     }
 
     if (e.hat) {
+      hucreGeo();               // efekt geometrisi: tek okuma gecisi (asagidaki dongulerde offset* okunmaz)
       // dalga: yerleşen parçanın merkezinden dışa doğru sırayla patlar
       var mr = r + (s.h - 1) / 2, mc = c + (s.w - 1) / 2, rr, cc, silinen = {};
       for (rr = 0; rr < N; rr++) for (cc = 0; cc < N; cc++) {
@@ -405,7 +439,9 @@
       konan.forEach(function (x) {
         if (renk[x] < 0) return;
         var h = hucreler[x];
-        h.classList.remove('tp-otur'); void h.offsetWidth; h.classList.add('tp-otur');
+        // Web Animations: sinif cikar/ekle + "void offsetWidth" (hucre basina zorunlu yerlesim) yerine; kareler CSS tpOtur ile ayni
+        if (h.animate) h.animate(OTUR_KARE, OTUR_AYAR);
+        else { h.classList.remove('tp-otur'); void h.offsetWidth; h.classList.add('tp-otur'); }
       });
     }
 
@@ -791,6 +827,7 @@
   window.TempoKup = {
     // Ekrana her girişte çağrılır: yarım oyun varsa kaldığı yerden sürer.
     start: function () {
+      if (window.Kalite) window.Kalite.olc();   // otomatik kalitede oyun ici 3 sn kare olcumu (yalniz dusurur; js/kalite.js)
       if (!oyun) {
         tahtaKur();
         rekor = rekorOku(); rekorBasta = rekor;

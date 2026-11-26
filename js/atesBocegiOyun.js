@@ -106,6 +106,14 @@
   var DAL_TAVAN = 24, DAL_PAY = 0.3, dalAnahtar = [], dalTuval = [], dalSira = [], dalSayac = 0;   // dal sprite onbellegi (sinirli LRU)
   // kare basina ayirma olmasin diye hazir nesneler
   var kc = null, kctx = null, karanlikGrad = null, haloGrad = null, ac = null, actx = null;   // ac: arka plan tuvali (kc ile ayni boy; kare basina bir kez cizilir)
+  // Dusuk kalite (js/kalite.js): dekor sizintisi (karanligin altindan %11 arka plan) cizilmez; boylece ac / kc ara tuvallerine
+  // gerek kalmaz: arka plan dogrudan ana tuvale, karanlik tek radyal gradyan dolgusuyla (ic seffaf -> dis opak karanlik).
+  // Oyun alani, isik yaricapi, nesneler ve hale ayni; kare basina tam ekran gecis 9 -> 5 (ve DPR 1).
+  // kurSade: gorselKur sade yola gore kurdu (kc / ac 1x1; tam ekran ara tuval ayrilmaz). sade: cizim yolu. Degismez kural:
+  // kurSade ise sade de dogru (tam yol kc / ac ister). sade, kurSade olmadan da acik olabilir (kosu ortasinda dusuk kaliteye
+  // inis: kc / ac zaten kurulu, yeniden kurulum ertelenir; kaliteDegisti).
+  // kaliteBekliyor: kosu surerken gelen kalite degisimi; yeniden boyutlama duraklama / kosu sonu / yeni kosuda (boyutla).
+  var sadeGrad = null, sade = false, kurSade = false, kaliteBekliyor = false;
   var katmanlar = [null, null, null, null];   // bolge -> [tuval, tuval, tuval]
   var sprBocek = null, sprToz = null, sprKivilcim = null, sprBomba = null, sprBombaHale = null;
   var paletAnahtar = '', bocekParlak = '#FFFFFF';
@@ -376,9 +384,17 @@
   }
 
   var ARKA_DPR = 1.5;                 // arka plan cozunurlugu (bellek icin cihaz DPR'inden dusuk)
+  // Paralaks katmanlari kare basina 6 kez dosenir. 1,5 cozunurlukten 2'ye olcekli drawImage yazilim canvas'ta karenin en pahali
+  // isiydi (olcum, suzul-b5 4x: katmanlar ~88 / 163 ms). Katman tuvali cihaz cozunurlugunde kurulur ve dosemede x tam cihaz
+  // pikseline yuvarlanirsa kopya olceksiz (1:1) ve hizli olur (kare 163 -> 90 ms); yalniz ikisi birlikte etkili. Bellek: tek
+  // katman ARKA_PIKSEL_TAVAN'i asarsa (genis/tablet), cihaz bellegi < 4 GB ise ya da bilinmiyorsa (navigator.deviceMemory yok:
+  // Safari / Firefox) eskisi gibi ARKA_DPR (12 tuval).
+  var ARKA_PIKSEL_TAVAN = 1.3e6, katmanTam = false;
   function bolgeKur(b) {              // yalniz ilk gerektiginde; bir kez cizilir
     var zemin = karistir(pal.bolgeler[b], pal.isik, ISIK_KARISIM);       // bolge tonu temadan (12.3); kimlik katman sekilleriyle korunur
-    var d = Math.min(dpr, ARKA_DPR), tw = Math.round(olcek * W * d), th = Math.round(olcek * H * d), k, c, x, set = [];
+    var bel = Number((window.navigator || {}).deviceMemory);      // yoksa NaN: muhafazakar (tam cozunurluk yok)
+    katmanTam = (olcek * W * dpr) * (olcek * H * dpr) <= ARKA_PIKSEL_TAVAN && bel >= 4;
+    var d = katmanTam ? dpr : Math.min(dpr, ARKA_DPR), tw = Math.round(olcek * W * d), th = Math.round(olcek * H * d), k, c, x, set = [];
     for (k = 0; k < 3; k++) {
       c = yeniTuval(tw, th); x = c.getContext('2d');
       x.scale(tw / W, th / H);
@@ -439,12 +455,18 @@
     sprBomba = bombaSprite();
     sprBombaHale = bombaHaleSprite();
     bocekParlak = karistir(pal.isik, rk.kanat, 0.55);
-    kc = yeniTuval(GA * S, (H + 2 * BY) * S); kctx = kc.getContext('2d');   // karanlik tum tuvali (yan atmosfer ve ust/alt bantlar dahil) kaplar
+    kurSade = dusukKalite(); sade = kurSade;
+    // karanlik tum tuvali (yan atmosfer ve ust/alt bantlar dahil) kaplar. Sade yol kc / ac'ye cizmez: 1x1 (gradyanlar kctx'ten)
+    kc = kurSade ? yeniTuval(1, 1) : yeniTuval(GA * S, (H + 2 * BY) * S); kctx = kc.getContext('2d');
     ac = yeniTuval(kc.width, kc.height); actx = ac.getContext('2d');
     karanlikGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
     karanlikGrad.addColorStop(0, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1 / AD.KARARTMA, 'rgba(0,0,0,1)');
     karanlikGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    sadeGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);   // dusuk kalite: karanlik = 1 - delik (ayni gecis bandi)
+    sadeGrad.addColorStop(0, rgba(pal.karanlik, 0));
+    sadeGrad.addColorStop(1 / AD.KARARTMA, rgba(pal.karanlik, 0));
+    sadeGrad.addColorStop(1, rgba(pal.karanlik, 1));
     haloGrad = null;                                             // halo halkasi: karanligin gecis bandinda tema halo rengi (yerlesikte yok)
     if (pal.haloHalka > 0) {
       haloGrad = kctx.createRadialGradient(0, 0, 0, 0, 0, AD.KARARTMA);
@@ -460,11 +482,13 @@
     ekran.style.setProperty('--ab-karanlik', pal.karanlik);
   }
 
+  function dusukKalite() { return !!(window.Kalite && window.Kalite.seviye() === 'dusuk'); }
   function boyutla() {
     var r = alan.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
-    var yeniDpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (cssW && r.width === cssW && r.height === cssH && yeniDpr === dpr) return true;   // boyut degismedi: yeniden kurma
+    var yeniDpr = Math.min(window.devicePixelRatio || 1, window.Kalite ? window.Kalite.dprTavan() : 2);   // yuksek 2 (eskisi gibi), orta 1,5, dusuk 1
+    kaliteBekliyor = false;                                       // olculen boyut guncel kaliteyle kurulur (ya da zaten kurulu)
+    if (cssW && r.width === cssW && r.height === cssH && yeniDpr === dpr && dusukKalite() === kurSade) { sade = kurSade; return true; }   // boyut degismedi: yeniden kurma
     dpr = yeniDpr;
     cssW = r.width; cssH = r.height;
     olcek = cssH / H; GA = cssW / olcek; BY = 0;
@@ -948,7 +972,7 @@
 
   // Katman tuvalleri W periyotlu (dikissiz): tuval genisligini (GA, atmosfer dahil) kaplayacak kadar yan yana dosenir.
   function katmanDose(c, set, off) {
-    for (var x = -off; x < GA; x += W) c.drawImage(set, x, 0, W, H);
+    for (var x = -off; x < GA; x += W) c.drawImage(set, katmanTam ? Math.round(x * S) / S : x, 0, W, H);   // tam cozunurlukte cihaz pikseline (1:1 hizli kopya)
   }
   function arkaPlanCiz(c) {
     var b = durum.gorunenBolge, kat, off;
@@ -1076,10 +1100,36 @@
     }
   }
 
+  // Dusuk kalite karanligi dogrudan ana tuvale: sonuc = (1 - a) * dunya + a * karanlik (a: 0 isik icinde, R..1,25R'de 1'e cikar);
+  // ust uste karanlik + hale, ara tuvaldeki surumle ayni (sizinti haric).
+  function karanlikSadeCiz(p) {
+    var f = sonmeCarpan(p), R = AB.isikYaricapi(durum.isik, hizOnbellek, durum.gorunenBolge) * f, ks = S, by = bocekY() + BY;   // kc sade kurulumda 1x1: olcek S
+    var x0 = Math.round(ox * dpr), y0 = Math.round((oy - BY * olcek) * dpr), u;
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    if (R > 0.01) {
+      ctx.setTransform(R * ks, 0, 0, R * ks, x0 + XB * ks, y0 + by * ks);
+      u = (tuval.width + tuval.height) / (R * ks) + 2 * AD.KARARTMA;     // tuvalin tamami (gradyan disi son durakla opak)
+      ctx.fillStyle = sadeGrad;
+      ctx.fillRect(-u, -u, 2 * u, 2 * u);
+      if (haloGrad) {
+        ctx.globalAlpha = f; ctx.fillStyle = haloGrad;
+        ctx.fillRect(-AD.KARARTMA, -AD.KARARTMA, 2 * AD.KARARTMA, 2 * AD.KARARTMA);
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = pal.karanlik; ctx.fillRect(0, 0, tuval.width, tuval.height);
+    }
+  }
+
   function ciz(dt) {
+    if (sade) { cizSade(dt); return; }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = pal.karanlik;
-    ctx.fillRect(0, 0, tuval.width, tuval.height);
+    // ac tuvalin tamamini opak kapliyorsa (normalde ayni boy, konum 0,0) alttaki tam ekran dolgu gereksiz: kare basina bir tam ekran gecis
+    if (kc.width < tuval.width || kc.height < tuval.height || Math.round(ox * dpr) !== 0 || Math.round((oy - BY * olcek) * dpr) !== 0) {
+      ctx.fillStyle = pal.karanlik;
+      ctx.fillRect(0, 0, tuval.width, tuval.height);
+    }
     // Arka plan ac'ye bir kez cizilir (yan atmosfer ve ust/alt bantlar dahil); ana tuvale tam, kc'ye %DEKOR_SIZINTI basilir.
     actx.setTransform(1, 0, 0, 1, 0, 0);
     actx.fillStyle = pal.karanlik; actx.fillRect(0, 0, ac.width, ac.height);
@@ -1097,6 +1147,30 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(kc, Math.round(ox * dpr), Math.round((oy - BY * olcek) * dpr));
     ctx.save();                                    // kendi isigiyla gorunenler karanligin ustunde
+    ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
+    ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip();
+    ozIsikCiz(ctx, p);
+    ctx.restore();
+    hudYaz();
+  }
+  function cizSade(dt) {
+    var x0 = Math.round(ox * dpr), y0 = Math.round((oy - BY * olcek) * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.fillStyle = pal.karanlik;
+    ctx.fillRect(0, 0, tuval.width, tuval.height);
+    ctx.setTransform(S, 0, 0, S, x0, y0 + BY * S);              // ac'ye cizilen arka planin aynisi, dogrudan ana tuvale
+    arkaPlanCiz(ctx);
+    if (BY > 0) bantCiz(ctx);
+    ctx.save();
+    ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
+    var p = sonmeIlerleme();
+    if (GW < GA || BY > 0) { ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip(); }
+    dunyaCiz(ctx, dt, p);
+    ctx.restore();
+    karanlikSadeCiz(p);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
     ctx.setTransform(S, 0, 0, S, ox * dpr, oy * dpr);
     ctx.beginPath(); ctx.rect(0, 0, GW, H); ctx.clip();
     ozIsikCiz(ctx, p);
@@ -1304,8 +1378,8 @@
       if (sonme >= sure) {
         sonme = -1;
         ciz(0);                                      // tam karanlik kare
-        if (odemeBekliyor) { rafDurdur(); teklifAc(); return; }   // dongu teklif ve reklam boyunca durur
-        sonucGoster(); rafDurdur();
+        if (odemeBekliyor) { rafDurdur(); kaliteBekleyeniUygula(); teklifAc(); return; }   // dongu teklif ve reklam boyunca durur
+        sonucGoster(); rafDurdur(); kaliteBekleyeniUygula();
         return;
       }
     }
@@ -1399,6 +1473,7 @@
     sonEl.classList.remove('show'); durEl.classList.remove('show');
     ipucuEl.classList.remove('show'); void ipucuEl.offsetWidth; ipucuEl.classList.add('show');     // belirme animasyonu her kosuda yeniden
     hudSifirla();
+    if (kaliteBekliyor && cssW) boyutla();     // onceki kosuda ertelenen kalite degisimi (boyutla gorselKur'u guncel paletle yapar)
     if (cssW && JSON.stringify(pal) !== paletAnahtar) gorselKur();
     calisiyor = true;
     rafId = requestAnimationFrame(dongu);
@@ -1413,6 +1488,7 @@
       duraklatildi = true;
       durEl.classList.add('show');
     }
+    kaliteBekleyeniUygula();          // kosu surerken ertelenen kalite degisimi: dongu durdu, yeniden kurulum simdi
   }
   function devam() {
     if (!calisiyor || !duraklatildi) return;
@@ -1436,6 +1512,7 @@
   function basla() {
     if (!bekle) return;
     bekle = false; ipucuEl.classList.remove('show'); sonZaman = 0;
+    if (window.Kalite) window.Kalite.olc();     // otomatik kalitede oyun ici 3 sn kare olcumu (yalniz dusurur; js/kalite.js)
     if (!rafId && calisiyor && !duraklatildi) rafId = requestAnimationFrame(dongu);
   }
   function aktifMi() { return calisiyor && !duraklatildi && durum && !durum.bitti && !ekran.classList.contains('offstage'); }
@@ -1476,6 +1553,20 @@
   }
   if (window.ResizeObserver) new ResizeObserver(olcuDegisti).observe(alan);
   else window.addEventListener('resize', olcuDegisti);
+  // Grafik kalitesi degisince (DPR tavani, sade yol) tuval yeniden boyutlanir; kosu ve oyun durumu aynen surer. Dongu calisirken
+  // (kosu ya da sonme; bekleme ekrani haric) senkron yeniden kurulum (boyutla + gorselKur, 100-300 ms) donma yapar: ertelenir,
+  // duraklama / kosu sonu / yeni kosuda uygulanir. Yalniz ucuz sade bayragi hemen izler (tam yolun kc / ac'si kuruluyken).
+  function kaliteDegisti() {
+    if (!calisiyor || ekran.classList.contains('offstage')) return;   // start() olcuyu sifirlar, guncel kaliteyle kurar
+    if (rafId && !bekle) {
+      kaliteBekliyor = true;
+      sade = kurSade || dusukKalite();
+      return;
+    }
+    olcuDegisti();
+  }
+  function kaliteBekleyeniUygula() { if (kaliteBekliyor) olcuDegisti(); }
+  if (window.Kalite) window.Kalite.abone(kaliteDegisti);
 
   eskiOdemeyiTamamla();
 
@@ -1494,6 +1585,9 @@
     // market.js temayiYay: palet yeniden okunur, onbellekli katmanlar yeniden kurulur
     temaDegisti: function () {
       pal = paletOku();
+      // ekran sahne disindaysa katmanlar simdi kurulmaz (market'te her tema seciminde 12 katman tuvali bosuna ciziliyordu):
+      // start() olcuyu sifirlar, ilk karede boyutla -> gorselKur yeni paletle kurar
+      if (ekran.classList.contains('offstage')) { cssW = 0; return; }
       if (cssW && JSON.stringify(pal) !== paletAnahtar) gorselKur();
       if (calisiyor && durum && !rafId && cssW) ciz(0);
     },

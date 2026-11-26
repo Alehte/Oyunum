@@ -916,9 +916,12 @@
         // Kafa dışındaki div'ler gizlenir; kafa gözler için görünür kalır.
         const head = els[L-1];
         els.forEach((el, i) => { el.classList.add('kc-glide'); if(i !== L-1) el.style.display = 'none'; });
+        head.classList.remove('bump-up', 'bump-down', 'bump-left', 'bump-right');   // transform animasyonu suzulmeyi ezmesin
         head.style.width  = (stepX - KC_GAP) + 'px';
         head.style.height = (stepY - KC_GAP) + 'px';
         head.style.zIndex = '9';
+        // kafa her karede transform ile tasinir (left/top yazmak her karede yerlesim tetikliyordu)
+        head.style.left = '0px'; head.style.top = '0px';
         positionEyes(head, snake.dir, stepX - KC_GAP, stepY - KC_GAP);
 
         let dur = Math.max(360, (maxProgress / KC_GLIDE_SPEED) * 1000);
@@ -949,8 +952,7 @@
             pts.push(hp);
             const noktalar = pts.map(([r,c]) => cx(c).toFixed(1)+','+cy(r).toFixed(1)).join(' ');
             for(let q=0;q<cizgiler.length;q++) cizgiler[q].setAttribute('points', noktalar);
-            head.style.left = (hp[1] * stepX) + 'px';
-            head.style.top  = (hp[0] * stepY) + 'px';
+            head.style.transform = 'translate(' + (hp[1] * stepX) + 'px,' + (hp[0] * stepY) + 'px)';
             if(t < 1){ requestAnimationFrame(frame); return; }
           }catch(err){ console.error('kc glide hatasi:', err); }
           clearTimeout(watchdog); endOnce();
@@ -1495,7 +1497,8 @@
     buildJungleDecor('kcModeJungle','kcModeRain');
     buildJungleDecor('kcOzelJungle','kcOzelRain');
     renderModeScreen();
-    renderOzelGrid();
+    // Ozel bolum izgarasi (20 kart, ~3400 oge) acilista KURULMAZ: ozel harita her acilista (kcOpenMap) ve oraya her
+    // donuste (core.js EKRAN_YENILE -> Kacis.haritaYenile) zaten yeniden kurulur.
     renderLevelNodes();
     loadLevel(1);
   })();
